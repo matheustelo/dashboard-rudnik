@@ -1,9 +1,10 @@
 import { defineStore } from "pinia"
 import axios from "axios"
+import api from "../services/api"
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
-    user: null,
+    user: JSON.parse(localStorage.getItem("user")) || null,
     token: localStorage.getItem("token") || null,
   }),
 
@@ -21,7 +22,9 @@ export const useAuthStore = defineStore("auth", {
         this.user = response.data.user
 
         localStorage.setItem("token", this.token)
+        localStorage.setItem("user", JSON.stringify(this.user))
         axios.defaults.headers.common["Authorization"] = `Bearer ${this.token}`
+        api.defaults.headers.common["Authorization"] = `Bearer ${this.token}`
 
         return response.data
       } catch (error) {
@@ -33,12 +36,22 @@ export const useAuthStore = defineStore("auth", {
       this.user = null
       this.token = null
       localStorage.removeItem("token")
+      localStorage.removeItem("user")
       delete axios.defaults.headers.common["Authorization"]
+      delete api.defaults.headers.common["Authorization"]
     },
 
     initializeAuth() {
       if (this.token) {
         axios.defaults.headers.common["Authorization"] = `Bearer ${this.token}`
+        api.defaults.headers.common["Authorization"] = `Bearer ${this.token}`
+
+        if (!this.user) {
+          const storedUser = localStorage.getItem("user")
+          if (storedUser) {
+            this.user = JSON.parse(storedUser)
+          }
+        }
       }
     },
   },
