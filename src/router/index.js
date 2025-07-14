@@ -3,7 +3,8 @@ import { useAuthStore } from "../stores/auth"
 import Login from "../views/Login.vue"
 import DashboardVendedor from "../views/DashboardVendedor.vue"
 import DashboardSupervisor from "../views/DashboardSupervisor.vue"
-import DashboardGestor from "../views/DashboardGestor.vue"
+import DashboardGerenteComercial from "../views/DashboardGerenteComercial.vue"
+import DashboardRepresentante from "../views/DashboardRepresentante.vue"
 
 const routes = [
   {
@@ -22,16 +23,22 @@ const routes = [
     meta: { requiresAuth: true, role: "vendedor" },
   },
   {
+    path: "/dashboard/representante",
+    name: "DashboardRepresentante",
+    component: DashboardRepresentante,
+    meta: { requiresAuth: true, role: "representante" },
+  },
+  {
     path: "/dashboard/supervisor",
     name: "DashboardSupervisor",
     component: DashboardSupervisor,
     meta: { requiresAuth: true, role: "supervisor" },
   },
   {
-    path: "/dashboard/gestor",
-    name: "DashboardGestor",
-    component: DashboardGestor,
-    meta: { requiresAuth: true, role: "gestor" },
+    path: "/dashboard/gerente_comercial",
+    name: "DashboardGerenteComercial",
+    component: DashboardGerenteComercial,
+    meta: { requiresAuth: true, role: "gerente_comercial" },
   },
 ]
 
@@ -46,7 +53,7 @@ router.beforeEach((to, from, next) => {
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next("/login")
   } else if (to.meta.role && authStore.user?.role !== to.meta.role) {
-    // Redireciona para o painel apropriado com base na função
+    // Redirect to appropriate dashboard based on role
     const role = authStore.user?.role
     if (role) {
       next(`/dashboard/${role}`)

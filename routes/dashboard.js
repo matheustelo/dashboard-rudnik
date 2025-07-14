@@ -240,7 +240,7 @@ router.get(
 )
 
 // Gestor dashboard
-router.get("/gestor", authenticateToken, periodValidation, async (req, res, next) => {
+router.get("/admin", authenticateToken, periodValidation, async (req, res, next) => {
   try {
     const { period, start_date, end_date } = req.query
     const { startDate, endDate } = getDateRange(period, start_date, end_date)

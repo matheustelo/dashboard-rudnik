@@ -157,6 +157,77 @@ app.get("/api/dashboard/vendedor/:id", authenticateToken, async (req, res) => {
   }
 })
 
+app.get("/api/dashboard/representante/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { period } = req.query
+
+    const startDate = period ? `${period}-01` : "2025-01-01"
+    const endDate = period ? `${period.substring(0, 7)}-31` : "2025-12-31"
+
+    // Propostas
+    const propostas = await pool.query(
+      `
+      SELECT COUNT(*) as total, 
+             COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas
+      FROM clone_propostas_apprudnik 
+      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+    `,
+      [id, startDate, endDate],
+    )
+
+    // Faturamento
+    const faturamento = await pool.query(
+      `
+      SELECT COALESCE(SUM(total_price), 0) as total
+      FROM clone_propostas_apprudnik 
+      WHERE seller = $1 AND has_generated_sale = true 
+      AND created_at >= $2 AND created_at <= $3
+    `,
+      [id, startDate, endDate],
+    )
+
+    // Vendas por mês
+    const vendasMensais = await pool.query(
+      `
+      SELECT DATE_TRUNC('month', created_at) as mes,
+             COUNT(*) as vendas,
+             COALESCE(SUM(total_price), 0) as faturamento
+      FROM clone_propostas_apprudnik 
+      WHERE seller = $1 AND has_generated_sale = true
+      AND created_at >= $2 AND created_at <= $3
+      GROUP BY DATE_TRUNC('month', created_at)
+      ORDER BY mes
+    `,
+      [id, startDate, endDate],
+    )
+
+    const totalPropostas = Number.parseInt(propostas.rows[0].total)
+    const propostasConvertidas = Number.parseInt(propostas.rows[0].convertidas)
+    const taxaConversao = totalPropostas > 0 ? ((propostasConvertidas / totalPropostas) * 100).toFixed(2) : 0
+    const ticketMedio =
+      propostasConvertidas > 0 ? (Number.parseFloat(faturamento.rows[0].total) / propostasConvertidas).toFixed(2) : 0
+
+    res.json({
+      resumo: {
+        totalPropostas,
+        propostasConvertidas,
+        faturamentoTotal: Number.parseFloat(faturamento.rows[0].total),
+        taxaConversao: Number.parseFloat(taxaConversao),
+        ticketMedio: Number.parseFloat(ticketMedio),
+      },
+      vendasMensais: vendasMensais.rows.map((row) => ({
+        mes: row.mes,
+        vendas: Number.parseInt(row.vendas),
+        faturamento: Number.parseFloat(row.faturamento),
+      })),
+    })
+  } catch (error) {
+    console.error("Dashboard vendedor error:", error)
+    res.status(500).json({ message: "Erro ao carregar dashboard" })
+  }
+})
+
 app.get("/api/dashboard/supervisor/:id", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
@@ -233,7 +304,7 @@ app.get("/api/dashboard/supervisor/:id", authenticateToken, async (req, res) => 
   }
 })
 
-app.get("/api/dashboard/gestor", authenticateToken, async (req, res) => {
+app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) => {
   try {
     const { period } = req.query
 

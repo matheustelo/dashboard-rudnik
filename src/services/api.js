@@ -9,12 +9,18 @@ export const dashboardService = {
     return api.get(`/dashboard/vendedor/${id}`, { params: { period } })
   },
 
+  // Novo método para representante (usa o mesmo endpoint do vendedor)
+  getRepresentanteDashboard(id, period) {
+    return api.get(`/dashboard/representante/${id}`, { params: { period } })
+  },
+
   getSupervisorDashboard(id, period) {
     return api.get(`/dashboard/supervisor/${id}`, { params: { period } })
   },
 
-  getGestorDashboard(period) {
-    return api.get("/dashboard/gestor", { params: { period } })
+  // Trocar método do gestor para gerente comercial
+  getGerenteComercialDashboard(period) {
+    return api.get("/dashboard/gerente_comercial", { params: { period } })
   },
 }
 
