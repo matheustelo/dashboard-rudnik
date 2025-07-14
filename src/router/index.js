@@ -42,8 +42,8 @@ const routes = [
     meta: { requiresAuth: true, role: "gerente_comercial" },
   },
   {
-    path: "/painel-metas",
-    name: "PainelMetas",
+    path: "/painel-metas/gerente_comercial",
+    name: "PainelMetasGerenteComercial",
     component: PainelMetas,
     meta: { requiresAuth: true, roles: ["admin", "gerente_comercial"] },
   },

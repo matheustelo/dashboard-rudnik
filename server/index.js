@@ -3,6 +3,7 @@ const cors = require("cors")
 const jwt = require("jsonwebtoken")
 const bcrypt = require("bcryptjs")
 const { Pool } = require("pg")
+const goalsRoutes = require("../routes/goals")
 require("dotenv").config()
 
 const app = express()
@@ -486,6 +487,9 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
     })
   }
 })
+
+// Goals management endpoints
+app.use("/api/goals", goalsRoutes)
 
 // Error handling middleware
 app.use((error, req, res, next) => {

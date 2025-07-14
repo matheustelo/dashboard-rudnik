@@ -86,13 +86,15 @@ Exemplos de usuários criados pelo script:
 ### Dashboards
 - `GET /api/dashboard/vendedor/:id?period=YYYY-MM` - Dashboard do vendedor
 - `GET /api/dashboard/supervisor/:id?period=YYYY-MM` - Dashboard do supervisor
-- `GET /api/dashboard/gestor?period=YYYY-MM` - Dashboard do gestor
+ - `GET /api/dashboard/gerente_comercial?period=YYYY-MM` - Dashboard do gerente comercial
 
 ### Metas
 - `GET /api/goals?period=YYYY-MM` - Metas gerais e individuais
 - `GET /api/goals/general?period=YYYY-MM` - Apenas meta geral e progresso
 - `POST /api/goals/general` - Definir meta geral
 - `POST /api/goals/individual` - Definir meta individual
+
+O Painel de Metas pode ser acessado por usuários dos tipos `admin`, `gerente_comercial` ou `gestor`.
 
 ## 📈 Gráficos Disponíveis
 
