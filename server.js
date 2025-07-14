@@ -13,6 +13,7 @@ const userRoutes = require("./routes/users")
 const proposalRoutes = require("./routes/proposals")
 const salesRoutes = require("./routes/sales")
 const reportRoutes = require("./routes/reports")
+const goalsRoutes = require("./routes/goals")
 
 // Import middleware
 const errorHandler = require("./middleware/errorHandler")
@@ -68,6 +69,7 @@ app.use("/api/users", userRoutes)
 app.use("/api/proposals", proposalRoutes)
 app.use("/api/sales", salesRoutes)
 app.use("/api/reports", reportRoutes)
+app.use("/api/goals", goalsRoutes)
 
 // 404 handler
 app.use("*", (req, res) => {

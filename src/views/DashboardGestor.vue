@@ -97,10 +97,10 @@
                 <div class="ml-5 w-0 flex-1">
                   <dl>
                     <dt class="text-sm font-medium text-gray-500 truncate">
-                      Faturamento Total
+                      Taxa de Conversão
                     </dt>
                     <dd class="text-lg font-medium text-gray-900">
-                      R$ {{ formatCurrency(dashboardData.indicadores.faturamentoTotal) }}
+                      {{ dashboardData.indicadores.taxaConversao }}%
                     </dd>
                   </dl>
                 </div>

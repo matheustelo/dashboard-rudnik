@@ -5,6 +5,7 @@ import DashboardVendedor from "../views/DashboardVendedor.vue"
 import DashboardSupervisor from "../views/DashboardSupervisor.vue"
 import DashboardGerenteComercial from "../views/DashboardGerenteComercial.vue"
 import DashboardRepresentante from "../views/DashboardRepresentante.vue"
+import PainelMetas from "../views/PainelMetas.vue"
 
 const routes = [
   {
@@ -40,6 +41,12 @@ const routes = [
     component: DashboardGerenteComercial,
     meta: { requiresAuth: true, role: "gerente_comercial" },
   },
+  {
+    path: "/painel-metas",
+    name: "PainelMetas",
+    component: PainelMetas,
+    meta: { requiresAuth: true, roles: ["admin", "gerente_comercial"] },
+  },
 ]
 
 const router = createRouter({
@@ -52,6 +59,13 @@ router.beforeEach((to, from, next) => {
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next("/login")
+  } else if (to.meta.roles && !to.meta.roles.includes(authStore.user?.role)) {
+    const role = authStore.user?.role
+    if (role) {
+      next(`/dashboard/${role}`)
+    } else {
+      next("/login")
+    }
   } else if (to.meta.role && authStore.user?.role !== to.meta.role) {
     // Redirect to appropriate dashboard based on role
     const role = authStore.user?.role

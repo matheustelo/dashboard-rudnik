@@ -419,6 +419,12 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
 
     const indicadores = await pool.query(globalQuery, [startDate, endDate])
 
+    const totalPropostas = Number.parseInt(indicadores.rows[0].total_propostas)
+    const totalVendas = Number.parseInt(indicadores.rows[0].vendas)
+    const faturamentoTotal = Number.parseFloat(indicadores.rows[0].faturamento_total)
+    const taxaConversao =
+      totalPropostas > 0 ? ((totalVendas / totalPropostas) * 100).toFixed(2) : 0
+
     // Monthly revenue
     const monthlyRevenueQuery = `
       SELECT 
@@ -453,9 +459,10 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
 
     const response = {
       indicadores: {
-        totalPropostas: Number.parseInt(indicadores.rows[0].total_propostas),
-        totalVendas: Number.parseInt(indicadores.rows[0].vendas),
-        faturamentoTotal: Number.parseFloat(indicadores.rows[0].faturamento_total),
+        totalPropostas,
+        totalVendas,
+        faturamentoTotal,
+        taxaConversao: Number.parseFloat(taxaConversao),
       },
       faturamentoMensal: faturamentoMensal.rows.map((row) => ({
         mes: row.mes,

@@ -88,6 +88,12 @@ Exemplos de usuários criados pelo script:
 - `GET /api/dashboard/supervisor/:id?period=YYYY-MM` - Dashboard do supervisor
 - `GET /api/dashboard/gestor?period=YYYY-MM` - Dashboard do gestor
 
+### Metas
+- `GET /api/goals?period=YYYY-MM` - Metas gerais e individuais
+- `GET /api/goals/general?period=YYYY-MM` - Apenas meta geral e progresso
+- `POST /api/goals/general` - Definir meta geral
+- `POST /api/goals/individual` - Definir meta individual
+
 ## 📈 Gráficos Disponíveis
 
 - **Linha**: Faturamento ao longo do tempo

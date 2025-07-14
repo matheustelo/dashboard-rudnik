@@ -24,4 +24,16 @@ export const dashboardService = {
   },
 }
 
+export const goalsService = {
+  getGoals(period) {
+    return api.get("/goals", { params: { period } })
+  },
+  saveGeneralGoal(data) {
+    return api.post("/goals/general", data)
+  },
+  saveIndividualGoal(data) {
+    return api.post("/goals/individual", data)
+  },
+}
+
 export default api

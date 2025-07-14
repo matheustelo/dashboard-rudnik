@@ -258,6 +258,13 @@ router.get("/admin", authenticateToken, periodValidation, async (req, res, next)
 
     const globalMetrics = await query(globalQuery, [startDate, endDate])
 
+    const totalPropostas = Number.parseInt(globalMetrics.rows[0].total_propostas)
+    const totalVendas = Number.parseInt(globalMetrics.rows[0].total_vendas)
+    const faturamentoTotal = Number.parseFloat(globalMetrics.rows[0].faturamento_total)
+    const ticketMedioGlobal = Number.parseFloat(globalMetrics.rows[0].ticket_medio_global)
+    const taxaConversao =
+      totalPropostas > 0 ? (totalVendas / totalPropostas) * 100 : 0
+
     // Monthly revenue
     const monthlyRevenueQuery = `
       SELECT 
@@ -333,10 +340,11 @@ router.get("/admin", authenticateToken, periodValidation, async (req, res, next)
       success: true,
       data: {
         indicadores: {
-          totalPropostas: Number.parseInt(globalMetrics.rows[0].total_propostas),
-          totalVendas: Number.parseInt(globalMetrics.rows[0].total_vendas),
-          faturamentoTotal: Number.parseFloat(globalMetrics.rows[0].faturamento_total),
-          ticketMedioGlobal: Number.parseFloat(globalMetrics.rows[0].ticket_medio_global),
+          totalPropostas,
+          totalVendas,
+          faturamentoTotal,
+          ticketMedioGlobal,
+          taxaConversao: Number.parseFloat(taxaConversao.toFixed(2)),
         },
         faturamentoMensal: monthlyRevenue.rows.map((row) => ({
           mes: row.mes,
