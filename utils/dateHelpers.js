@@ -29,10 +29,12 @@ const getDateRange = (period, startDate, endDate) => {
   }
 
   // Default to current month if no parameters provided
-  const now = moment()
+  const now = new Date()
+  const startDateDefault = new Date(now.getFullYear(), now.getMonth(), 1)
+  const endDateDefault = new Date(now.getFullYear(), now.getMonth() + 1, 0)
   return {
-    startDate: now.clone().startOf("month").format("YYYY-MM-DD"),
-    endDate: now.clone().endOf("month").format("YYYY-MM-DD"),
+    startDate: startDateDefault.toISOString().split("T")[0],
+    endDate: endDateDefault.toISOString().split("T")[0],
   }
 }
 

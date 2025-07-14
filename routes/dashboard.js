@@ -1,44 +1,57 @@
 const express = require("express")
 const { query } = require("../config/database")
 const { authenticateToken, checkSupervisorAccess } = require("../middleware/auth")
-const { periodValidation, idValidation } = require("../middleware/validation")
 const { getDateRange } = require("../utils/dateHelpers")
-const logger = {
-  info: (message) => console.log(`ℹ️  ${message}`),
-  error: (message, meta) => console.error(`❌ ${message}`, meta || ""),
-}
 
 const router = express.Router()
 
-// Vendedor dashboard
-router.get(
-  "/vendedor/:id",
-  authenticateToken,
-  checkSupervisorAccess,
-  idValidation,
-  periodValidation,
-  async (req, res, next) => {
-    try {
-      const { id } = req.params
-      const { period, start_date, end_date } = req.query
+// Helper function to get date range
+function getDateRangeLocal(period) {
+  if (!period) {
+    // Default to current month
+    const now = new Date()
+    const startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    return {
+      startDate: startDate.toISOString().split("T")[0],
+      endDate: endDate.toISOString().split("T")[0],
+    }
+  }
 
-      const { startDate, endDate } = getDateRange(period, start_date, end_date)
+  // Period format: YYYY-MM
+  const [year, month] = period.split("-")
+  const startDate = `${year}-${month}-01`
+  const endDate = `${year}-${month}-31`
 
-      // Get basic metrics
-      const metricsQuery = `
+  return { startDate, endDate }
+}
+
+// Dashboard endpoints
+router.get("/vendedor/:id", authenticateToken, checkSupervisorAccess, async (req, res) => {
+  try {
+    console.log("📊 Vendedor dashboard request:", { id: req.params.id, period: req.query.period })
+    const { id } = req.params
+    const { period } = req.query
+
+    const { startDate, endDate } = getDateRangeLocal(period)
+    console.log("📅 Date range:", { startDate, endDate })
+
+    // Get proposals data
+    const proposalsQuery = `
       SELECT 
-        COUNT(*) as total_propostas,
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as propostas_convertidas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento_total,
-        COALESCE(AVG(CASE WHEN has_generated_sale = true THEN total_price END), 0) as ticket_medio
+        COUNT(*) as total, 
+        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas,
+        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento_total
       FROM clone_propostas_apprudnik 
       WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
     `
 
-      const metrics = await query(metricsQuery, [id, startDate, endDate])
+    console.log("🔍 Executing proposals query...")
+    const propostas = await query(proposalsQuery, [id, startDate, endDate])
+    console.log("✅ Proposals data:", propostas.rows[0])
 
-      // Get monthly sales data
-      const monthlySalesQuery = `
+    // Get monthly sales data
+    const monthlySalesQuery = `
       SELECT 
         DATE_TRUNC('month', created_at) as mes,
         COUNT(*) as total_propostas,
@@ -50,338 +63,269 @@ router.get(
       ORDER BY mes
     `
 
-      const monthlySales = await query(monthlySalesQuery, [id, startDate, endDate])
+    console.log("🔍 Executing monthly sales query...")
+    const vendasMensais = await query(monthlySalesQuery, [id, startDate, endDate])
+    console.log("✅ Monthly sales data:", vendasMensais.rows.length, "rows")
 
-      // Get conversion funnel
-      const funnelQuery = `
+    const totalPropostas = Number.parseInt(propostas.rows[0].total)
+    const propostasConvertidas = Number.parseInt(propostas.rows[0].convertidas)
+    const faturamentoTotal = Number.parseFloat(propostas.rows[0].faturamento_total)
+    const taxaConversao = totalPropostas > 0 ? ((propostasConvertidas / totalPropostas) * 100).toFixed(2) : 0
+    const ticketMedio = propostasConvertidas > 0 ? (faturamentoTotal / propostasConvertidas).toFixed(2) : 0
+
+    const response = {
+      resumo: {
+        totalPropostas,
+        propostasConvertidas,
+        faturamentoTotal,
+        taxaConversao: Number.parseFloat(taxaConversao),
+        ticketMedio: Number.parseFloat(ticketMedio),
+      },
+      vendasMensais: vendasMensais.rows.map((row) => ({
+        mes: row.mes,
+        totalPropostas: Number.parseInt(row.total_propostas),
+        vendas: Number.parseInt(row.vendas),
+        faturamento: Number.parseFloat(row.faturamento),
+      })),
+    }
+
+    console.log("✅ Sending response:", response)
+    res.json(response)
+  } catch (error) {
+    console.error("❌ Dashboard vendedor error:", error)
+    res.status(500).json({
+      message: "Erro ao carregar dashboard",
+      error: error.message,
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+    })
+  }
+})
+
+// Representante dashboard (same as vendedor)
+router.get("/representante/:id", authenticateToken, checkSupervisorAccess, async (req, res) => {
+  try {
+    console.log("📊 Representante dashboard request:", { id: req.params.id, period: req.query.period })
+    const { id } = req.params
+    const { period } = req.query
+
+    const { startDate, endDate } = getDateRangeLocal(period)
+
+    // Same logic as vendedor
+    const proposalsQuery = `
       SELECT 
-        'Propostas' as stage,
-        COUNT(*) as count,
-        1 as order_stage
+        COUNT(*) as total, 
+        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas,
+        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento_total
       FROM clone_propostas_apprudnik 
       WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-      
-      UNION ALL
-      
-      SELECT 
-        'Aprovadas' as stage,
-        COUNT(*) as count,
-        2 as order_stage
-      FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3 AND status = 'aprovada'
-      
-      UNION ALL
-      
-      SELECT 
-        'Vendas' as stage,
-        COUNT(*) as count,
-        3 as order_stage
-      FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3 AND has_generated_sale = true
-      
-      ORDER BY order_stage
     `
 
-      const funnel = await query(funnelQuery, [id, startDate, endDate])
+    const propostas = await query(proposalsQuery, [id, startDate, endDate])
 
-      // Calculate conversion rate
-      const totalPropostas = Number.parseInt(metrics.rows[0].total_propostas)
-      const propostasConvertidas = Number.parseInt(metrics.rows[0].propostas_convertidas)
-      const taxaConversao = totalPropostas > 0 ? (propostasConvertidas / totalPropostas) * 100 : 0
+    const monthlySalesQuery = `
+      SELECT 
+        DATE_TRUNC('month', created_at) as mes,
+        COUNT(*) as total_propostas,
+        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
+        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento
+      FROM clone_propostas_apprudnik 
+      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      GROUP BY DATE_TRUNC('month', created_at)
+      ORDER BY mes
+    `
 
-      const response = {
-        success: true,
-        data: {
-          resumo: {
-            totalPropostas,
-            propostasConvertidas,
-            faturamentoTotal: Number.parseFloat(metrics.rows[0].faturamento_total),
-            ticketMedio: Number.parseFloat(metrics.rows[0].ticket_medio),
-            taxaConversao: Number.parseFloat(taxaConversao.toFixed(2)),
-          },
-          vendasMensais: monthlySales.rows.map((row) => ({
-            mes: row.mes,
-            totalPropostas: Number.parseInt(row.total_propostas),
-            vendas: Number.parseInt(row.vendas),
-            faturamento: Number.parseFloat(row.faturamento),
-          })),
-          funil: funnel.rows.map((row) => ({
-            stage: row.stage,
-            count: Number.parseInt(row.count),
-          })),
-          periodo: { startDate, endDate },
-        },
-      }
+    const vendasMensais = await query(monthlySalesQuery, [id, startDate, endDate])
 
-      logger.info(`Dashboard vendedor ${id} accessed by user ${req.user.id}`)
-      res.json(response)
-    } catch (error) {
-      next(error)
+    const totalPropostas = Number.parseInt(propostas.rows[0].total)
+    const propostasConvertidas = Number.parseInt(propostas.rows[0].convertidas)
+    const faturamentoTotal = Number.parseFloat(propostas.rows[0].faturamento_total)
+    const taxaConversao = totalPropostas > 0 ? ((propostasConvertidas / totalPropostas) * 100).toFixed(2) : 0
+    const ticketMedio = propostasConvertidas > 0 ? (faturamentoTotal / propostasConvertidas).toFixed(2) : 0
+
+    const response = {
+      resumo: {
+        totalPropostas,
+        propostasConvertidas,
+        faturamentoTotal,
+        taxaConversao: Number.parseFloat(taxaConversao),
+        ticketMedio: Number.parseFloat(ticketMedio),
+      },
+      vendasMensais: vendasMensais.rows.map((row) => ({
+        mes: row.mes,
+        totalPropostas: Number.parseInt(row.total_propostas),
+        vendas: Number.parseInt(row.vendas),
+        faturamento: Number.parseFloat(row.faturamento),
+      })),
     }
-  },
-)
+
+    res.json(response)
+  } catch (error) {
+    console.error("❌ Dashboard representante error:", error)
+    res.status(500).json({
+      message: "Erro ao carregar dashboard",
+      error: error.message,
+    })
+  }
+})
 
 // Supervisor dashboard
-router.get(
-  "/supervisor/:id",
-  authenticateToken,
-  checkSupervisorAccess,
-  idValidation,
-  periodValidation,
-  async (req, res, next) => {
-    try {
-      const { id } = req.params
-      const { period, start_date, end_date } = req.query
+router.get("/supervisor/:id", authenticateToken, checkSupervisorAccess, async (req, res) => {
+  try {
+    console.log("📊 Supervisor dashboard request:", { id: req.params.id, period: req.query.period })
+    const { id } = req.params
+    const { period } = req.query
 
-      const { startDate, endDate } = getDateRange(period, start_date, end_date)
+    const { startDate, endDate } = getDateRangeLocal(period)
 
-      // Get supervised users
-      const teamQuery = `
-      SELECT id, name, email 
-      FROM clone_users_apprudnik 
+    // Get supervised users
+    const teamQuery = `
+      SELECT id, name FROM clone_users_apprudnik 
       WHERE supervisor = $1 AND is_active = true
     `
-      const team = await query(teamQuery, [id])
-      const teamIds = team.rows.map((user) => user.id)
+    const vendedores = await query(teamQuery, [id])
+    const vendedorIds = vendedores.rows.map((v) => v.id)
 
-      if (teamIds.length === 0) {
-        return res.json({
-          success: true,
-          data: {
-            resumo: { totalPropostas: 0, propostasConvertidas: 0, faturamentoTotal: 0 },
-            rankingVendedores: [],
-            equipe: [],
-            periodo: { startDate, endDate },
-          },
-        })
-      }
+    console.log("👥 Team members:", vendedorIds)
 
-      // Team summary
-      const teamSummaryQuery = `
+    if (vendedorIds.length === 0) {
+      return res.json({
+        resumo: { totalPropostas: 0, propostasConvertidas: 0, faturamentoTotal: 0 },
+        rankingVendedores: [],
+      })
+    }
+
+    // Team summary
+    const teamSummaryQuery = `
       SELECT 
         COUNT(*) as total_propostas,
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as propostas_convertidas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento_total
+        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas,
+        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento
       FROM clone_propostas_apprudnik 
       WHERE seller = ANY($1) AND created_at >= $2 AND created_at <= $3
     `
 
-      const teamSummary = await query(teamSummaryQuery, [teamIds, startDate, endDate])
+    const resumoEquipe = await query(teamSummaryQuery, [vendedorIds, startDate, endDate])
 
-      // Individual performance ranking
-      const rankingQuery = `
+    // Individual performance ranking
+    const rankingQuery = `
       SELECT 
-        u.id,
-        u.name,
-        u.email,
-        COUNT(p.*) as total_propostas,
+        u.name, u.id,
+        COUNT(p.*) as propostas,
         COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) as vendas,
-        COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN p.total_price END), 0) as faturamento,
-        COALESCE(AVG(CASE WHEN p.has_generated_sale = true THEN p.total_price END), 0) as ticket_medio
+        COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN p.total_price END), 0) as faturamento
       FROM clone_users_apprudnik u
       LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
         AND p.created_at >= $2 AND p.created_at <= $3
       WHERE u.id = ANY($1)
-      GROUP BY u.id, u.name, u.email
-      ORDER BY faturamento DESC, vendas DESC
+      GROUP BY u.id, u.name
+      ORDER BY faturamento DESC
     `
 
-      const ranking = await query(rankingQuery, [teamIds, startDate, endDate])
+    const ranking = await query(rankingQuery, [vendedorIds, startDate, endDate])
 
-      // Team performance over time
-      const teamPerformanceQuery = `
-      SELECT 
-        DATE_TRUNC('month', created_at) as mes,
-        COUNT(*) as propostas,
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento
-      FROM clone_propostas_apprudnik 
-      WHERE seller = ANY($1) AND created_at >= $2 AND created_at <= $3
-      GROUP BY DATE_TRUNC('month', created_at)
-      ORDER BY mes
-    `
-
-      const teamPerformance = await query(teamPerformanceQuery, [teamIds, startDate, endDate])
-
-      const response = {
-        success: true,
-        data: {
-          resumo: {
-            totalPropostas: Number.parseInt(teamSummary.rows[0].total_propostas),
-            propostasConvertidas: Number.parseInt(teamSummary.rows[0].propostas_convertidas),
-            faturamentoTotal: Number.parseFloat(teamSummary.rows[0].faturamento_total),
-          },
-          rankingVendedores: ranking.rows.map((row) => ({
-            id: row.id,
-            name: row.name,
-            email: row.email,
-            totalPropostas: Number.parseInt(row.total_propostas),
-            vendas: Number.parseInt(row.vendas),
-            faturamento: Number.parseFloat(row.faturamento),
-            ticketMedio: Number.parseFloat(row.ticket_medio),
-          })),
-          equipe: team.rows,
-          performanceEquipe: teamPerformance.rows.map((row) => ({
-            mes: row.mes,
-            propostas: Number.parseInt(row.propostas),
-            vendas: Number.parseInt(row.vendas),
-            faturamento: Number.parseFloat(row.faturamento),
-          })),
-          periodo: { startDate, endDate },
-        },
-      }
-
-      logger.info(`Dashboard supervisor ${id} accessed by user ${req.user.id}`)
-      res.json(response)
-    } catch (error) {
-      next(error)
+    const response = {
+      resumo: {
+        totalPropostas: Number.parseInt(resumoEquipe.rows[0].total_propostas),
+        propostasConvertidas: Number.parseInt(resumoEquipe.rows[0].convertidas),
+        faturamentoTotal: Number.parseFloat(resumoEquipe.rows[0].faturamento),
+      },
+      rankingVendedores: ranking.rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        propostas: Number.parseInt(row.propostas),
+        vendas: Number.parseInt(row.vendas),
+        faturamento: Number.parseFloat(row.faturamento),
+      })),
     }
-  },
-)
 
-// Gestor dashboard
-router.get("/admin", authenticateToken, periodValidation, async (req, res, next) => {
+    res.json(response)
+  } catch (error) {
+    console.error("❌ Dashboard supervisor error:", error)
+    res.status(500).json({
+      message: "Erro ao carregar dashboard",
+      error: error.message,
+    })
+  }
+})
+
+// Gerente Comercial dashboard
+router.get("/gerente_comercial", authenticateToken, async (req, res) => {
   try {
-    const { period, start_date, end_date } = req.query
-    const { startDate, endDate } = getDateRange(period, start_date, end_date)
+    console.log("📊 Gerente Comercial dashboard request:", { period: req.query.period })
+    const { period } = req.query
+
+    const { startDate, endDate } = getDateRangeLocal(period)
 
     // Global indicators
     const globalQuery = `
       SELECT 
         COUNT(*) as total_propostas,
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as total_vendas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento_total,
-        COALESCE(AVG(CASE WHEN has_generated_sale = true THEN total_price END), 0) as ticket_medio_global
+        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
+        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento_total
       FROM clone_propostas_apprudnik 
       WHERE created_at >= $1 AND created_at <= $2
     `
 
-    const globalMetrics = await query(globalQuery, [startDate, endDate])
-
-    const totalPropostas = Number.parseInt(globalMetrics.rows[0].total_propostas)
-    const totalVendas = Number.parseInt(globalMetrics.rows[0].total_vendas)
-    const faturamentoTotal = Number.parseFloat(globalMetrics.rows[0].faturamento_total)
-    const ticketMedioGlobal = Number.parseFloat(globalMetrics.rows[0].ticket_medio_global)
-    const taxaConversao =
-      totalPropostas > 0 ? (totalVendas / totalPropostas) * 100 : 0
+    const indicadores = await query(globalQuery, [startDate, endDate])
 
     // Monthly revenue
     const monthlyRevenueQuery = `
       SELECT 
         DATE_TRUNC('month', created_at) as mes,
-        COUNT(*) as propostas,
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento
+        COALESCE(SUM(total_price), 0) as faturamento,
+        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas
       FROM clone_propostas_apprudnik 
       WHERE has_generated_sale = true AND created_at >= $1 AND created_at <= $2
       GROUP BY DATE_TRUNC('month', created_at)
       ORDER BY mes
     `
 
-    const monthlyRevenue = await query(monthlyRevenueQuery, [startDate, endDate])
+    const faturamentoMensal = await query(monthlyRevenueQuery, [startDate, endDate])
 
     // Top performers
     const topPerformersQuery = `
       SELECT 
-        u.id,
         u.name,
         u.role,
-        COUNT(p.*) as total_propostas,
-        COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) as vendas,
         COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN p.total_price END), 0) as faturamento,
-        COALESCE(AVG(CASE WHEN p.has_generated_sale = true THEN p.total_price END), 0) as ticket_medio
+        COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) as vendas
       FROM clone_users_apprudnik u
       LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
         AND p.created_at >= $1 AND p.created_at <= $2
-      WHERE u.role = 'vendedor' AND u.is_active = true
+      WHERE u.role IN ('vendedor', 'representante') AND u.is_active = true
       GROUP BY u.id, u.name, u.role
-      HAVING COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) > 0
       ORDER BY faturamento DESC
       LIMIT 10
     `
 
-    const topPerformers = await query(topPerformersQuery, [startDate, endDate])
-
-    // Sales by status
-    const salesByStatusQuery = `
-      SELECT 
-        status,
-        COUNT(*) as count,
-        COALESCE(SUM(total_price), 0) as total_value
-      FROM clone_propostas_apprudnik 
-      WHERE created_at >= $1 AND created_at <= $2
-      GROUP BY status
-      ORDER BY count DESC
-    `
-
-    const salesByStatus = await query(salesByStatusQuery, [startDate, endDate])
-
-    // Regional performance (if you have region data)
-    const supervisorPerformanceQuery = `
-      SELECT 
-        s.id as supervisor_id,
-        s.name as supervisor_name,
-        COUNT(p.*) as total_propostas,
-        COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) as vendas,
-        COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN p.total_price END), 0) as faturamento,
-        COUNT(DISTINCT v.id) as vendedores_ativos
-      FROM clone_users_apprudnik s
-      LEFT JOIN clone_users_apprudnik v ON s.id = v.supervisor
-      LEFT JOIN clone_propostas_apprudnik p ON v.id = p.seller 
-        AND p.created_at >= $1 AND p.created_at <= $2
-      WHERE s.role = 'supervisor' AND s.is_active = true
-      GROUP BY s.id, s.name
-      ORDER BY faturamento DESC
-    `
-
-    const supervisorPerformance = await query(supervisorPerformanceQuery, [startDate, endDate])
+    const topVendedores = await query(topPerformersQuery, [startDate, endDate])
 
     const response = {
-      success: true,
-      data: {
-        indicadores: {
-          totalPropostas,
-          totalVendas,
-          faturamentoTotal,
-          ticketMedioGlobal,
-          taxaConversao: Number.parseFloat(taxaConversao.toFixed(2)),
-        },
-        faturamentoMensal: monthlyRevenue.rows.map((row) => ({
-          mes: row.mes,
-          propostas: Number.parseInt(row.propostas),
-          vendas: Number.parseInt(row.vendas),
-          faturamento: Number.parseFloat(row.faturamento),
-        })),
-        topVendedores: topPerformers.rows.map((row) => ({
-          id: row.id,
-          name: row.name,
-          role: row.role,
-          totalPropostas: Number.parseInt(row.total_propostas),
-          vendas: Number.parseInt(row.vendas),
-          faturamento: Number.parseFloat(row.faturamento),
-          ticketMedio: Number.parseFloat(row.ticket_medio),
-        })),
-        vendasPorStatus: salesByStatus.rows.map((row) => ({
-          status: row.status,
-          count: Number.parseInt(row.count),
-          totalValue: Number.parseFloat(row.total_value),
-        })),
-        performanceSupervisores: supervisorPerformance.rows.map((row) => ({
-          supervisorId: row.supervisor_id,
-          supervisorName: row.supervisor_name,
-          totalPropostas: Number.parseInt(row.total_propostas),
-          vendas: Number.parseInt(row.vendas),
-          faturamento: Number.parseFloat(row.faturamento),
-          vendedoresAtivos: Number.parseInt(row.vendedores_ativos),
-        })),
-        periodo: { startDate, endDate },
+      indicadores: {
+        totalPropostas: Number.parseInt(indicadores.rows[0].total_propostas),
+        totalVendas: Number.parseInt(indicadores.rows[0].vendas),
+        faturamentoTotal: Number.parseFloat(indicadores.rows[0].faturamento_total),
       },
+      faturamentoMensal: faturamentoMensal.rows.map((row) => ({
+        mes: row.mes,
+        faturamento: Number.parseFloat(row.faturamento),
+        vendas: Number.parseInt(row.vendas),
+      })),
+      topVendedores: topVendedores.rows.map((row) => ({
+        name: row.name,
+        role: row.role,
+        faturamento: Number.parseFloat(row.faturamento),
+        vendas: Number.parseInt(row.vendas),
+      })),
     }
 
-    logger.info(`Dashboard gestor accessed by user ${req.user.id}`)
     res.json(response)
   } catch (error) {
-    next(error)
+    console.error("❌ Dashboard gerente comercial error:", error)
+    res.status(500).json({
+      message: "Erro ao carregar dashboard",
+      error: error.message,
+    })
   }
 })
 

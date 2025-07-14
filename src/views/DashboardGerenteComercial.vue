@@ -45,9 +45,124 @@
         <div class="text-lg">Carregando dashboard...</div>
       </div>
 
-      <div v-else-if="dashboardData" class="space-y-6">
-        <!-- KPIs Globais -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div v-else class="space-y-6">
+        <!-- Team Overview KPIs -->
+        <div v-if="teamPerformance" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                    <span class="text-white text-sm font-bold">👥</span>
+                  </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">
+                      Membros da Equipe
+                    </dt>
+                    <dd class="text-lg font-medium text-gray-900">
+                      {{ teamPerformance.teamStats.totalMembers }}
+                    </dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <div class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                    <span class="text-white text-sm font-bold">📈</span>
+                  </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">
+                      Taxa Conversão Média
+                    </dt>
+                    <dd class="text-lg font-medium text-gray-900">
+                      {{ teamPerformance.teamStats.teamConversionRate }}%
+                    </dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <div class="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
+                    <span class="text-white text-sm font-bold">🎯</span>
+                  </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">
+                      Taxa Atingimento Metas
+                    </dt>
+                    <dd class="text-lg font-medium text-gray-900">
+                      {{ teamPerformance.teamStats.goalAchievementRate }}%
+                    </dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
+                    <span class="text-white text-sm font-bold">💰</span>
+                  </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">
+                      Faturamento Total
+                    </dt>
+                    <dd class="text-lg font-medium text-gray-900">
+                      R$ {{ formatCurrency(teamPerformance.teamStats.totalFaturamento) }}
+                    </dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Performance Charts -->
+        <div v-if="teamPerformance" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <TeamPerformanceChart
+            :data="conversionRateChartData"
+            title="Taxa de Conversão por Representante"
+            type="bar"
+            :options="chartOptions.conversionRate"
+          />
+
+          <TeamPerformanceChart
+            :data="goalAchievementChartData"
+            title="Atingimento de Metas por Representante"
+            type="bar"
+            :options="chartOptions.goalAchievement"
+          />
+        </div>
+
+        <!-- Detailed Performance Table -->
+        <PerformanceTable
+          v-if="teamPerformance"
+          :team-members="teamPerformance.teamMembers"
+          title="Performance Detalhada da Equipe"
+        />
+
+        <!-- Original KPIs (for backward compatibility) -->
+        <div v-if="dashboardData" class="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div class="bg-white overflow-hidden shadow rounded-lg">
             <div class="p-5">
               <div class="flex items-center">
@@ -115,29 +230,18 @@
           </div>
         </div>
 
-        <!-- Charts -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div class="bg-white p-6 rounded-lg shadow">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Faturamento Mensal</h3>
-            <LineChart
-              v-if="chartData.faturamentoMensal"
-              :data="chartData.faturamentoMensal"
-              :options="chartOptions.line"
-            />
-          </div>
-
-          <div class="bg-white p-6 rounded-lg shadow">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Top Vendedores</h3>
-            <BarChart
-              v-if="chartData.topVendedores"
-              :data="chartData.topVendedores"
-              :options="chartOptions.bar"
-            />
-          </div>
+        <!-- Top Performers Chart -->
+        <div v-if="dashboardData" class="bg-white p-6 rounded-lg shadow">
+          <h3 class="text-lg font-medium text-gray-900 mb-4">Top Vendedores</h3>
+          <BarChart
+            v-if="chartData.topVendedores"
+            :data="chartData.topVendedores"
+            :options="chartOptions.bar"
+          />
         </div>
 
         <!-- Top Vendedores Table -->
-        <div class="bg-white shadow rounded-lg">
+        <div v-if="dashboardData" class="bg-white shadow rounded-lg">
           <div class="px-4 py-5 sm:p-6">
             <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
               Top 10 Vendedores e Representantes
@@ -222,35 +326,23 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { dashboardService } from '../services/api'
-import LineChart from '../components/LineChart.vue'
+import { dashboardService, performanceService } from '../services/api'
 import BarChart from '../components/BarChart.vue'
+import TeamPerformanceChart from '../components/TeamPerformanceChart.vue'
+import PerformanceTable from '../components/PerformanceTable.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
 const loading = ref(true)
 const dashboardData = ref(null)
+const teamPerformance = ref(null)
 const selectedPeriod = ref('2025-07')
 
 const chartData = computed(() => {
   if (!dashboardData.value) return {}
 
-  const faturamentoLabels = dashboardData.value.faturamentoMensal?.map(item => 
-    new Date(item.mes).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
-  ) || []
-
   return {
-    faturamentoMensal: {
-      labels: faturamentoLabels,
-      datasets: [{
-        label: 'Faturamento (R$)',
-        data: dashboardData.value.faturamentoMensal?.map(item => item.faturamento) || [],
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        tension: 0.4
-      }]
-    },
     topVendedores: {
       labels: dashboardData.value.topVendedores?.slice(0, 5).map(v => v.name) || [],
       datasets: [{
@@ -268,8 +360,43 @@ const chartData = computed(() => {
   }
 })
 
+const conversionRateChartData = computed(() => {
+  if (!teamPerformance.value) return {}
+
+  return {
+    labels: teamPerformance.value.teamMembers.map(member => member.name),
+    datasets: [{
+      label: 'Taxa de Conversão (%)',
+      data: teamPerformance.value.teamMembers.map(member => member.performance.conversionRate),
+      backgroundColor: teamPerformance.value.teamMembers.map(member => {
+        const rate = member.performance.conversionRate
+        if (rate >= 20) return 'rgba(34, 197, 94, 0.8)'
+        if (rate >= 15) return 'rgba(234, 179, 8, 0.8)'
+        return 'rgba(239, 68, 68, 0.8)'
+      })
+    }]
+  }
+})
+
+const goalAchievementChartData = computed(() => {
+  if (!teamPerformance.value) return {}
+
+  return {
+    labels: teamPerformance.value.teamMembers.map(member => member.name),
+    datasets: [{
+      label: 'Metas Atingidas',
+      data: teamPerformance.value.teamMembers.map(member => member.goals.achievedGoals),
+      backgroundColor: 'rgba(34, 197, 94, 0.8)'
+    }, {
+      label: 'Total de Metas',
+      data: teamPerformance.value.teamMembers.map(member => member.goals.totalGoals),
+      backgroundColor: 'rgba(156, 163, 175, 0.8)'
+    }]
+  }
+})
+
 const chartOptions = {
-  line: {
+  bar: {
     responsive: true,
     plugins: {
       legend: {
@@ -282,7 +409,33 @@ const chartOptions = {
       }
     }
   },
-  bar: {
+  conversionRate: {
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'top'
+      },
+      tooltip: {
+        callbacks: {
+          label: function(context) {
+            return context.dataset.label + ': ' + context.parsed.y + '%'
+          }
+        }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        max: 100,
+        ticks: {
+          callback: function(value) {
+            return value + '%'
+          }
+        }
+      }
+    }
+  },
+  goalAchievement: {
     responsive: true,
     plugins: {
       legend: {
@@ -300,8 +453,16 @@ const chartOptions = {
 const loadDashboard = async () => {
   loading.value = true
   try {
-    const response = await dashboardService.getGerenteComercialDashboard(selectedPeriod.value)
-    dashboardData.value = response.data
+    // Load both original dashboard data and team performance
+    const [dashboardResponse, performanceResponse] = await Promise.all([
+      dashboardService.getGerenteComercialDashboard(selectedPeriod.value),
+      performanceService.getTeamPerformance(selectedPeriod.value)
+    ])
+    
+    dashboardData.value = dashboardResponse.data
+    teamPerformance.value = performanceResponse.data
+    
+    console.log('Team Performance Data:', teamPerformance.value)
   } catch (error) {
     console.error('Erro ao carregar dashboard:', error)
   } finally {

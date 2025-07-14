@@ -10,65 +10,53 @@ const logger = {
 
 const router = express.Router()
 
-// Get all users (gestor only)
-router.get("/", authenticateToken, authorize("gestor"), async (req, res, next) => {
+// GET /api/users - Fetch all users (for admin and gerente_comercial)
+router.get("/", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
   try {
-    const { page = 1, limit = 10, role, active = "true" } = req.query
-
-    let whereClause = "WHERE 1=1"
-    const params = []
-
-    if (role) {
-      whereClause += ` AND role = $${params.length + 1}`
-      params.push(role)
-    }
-
-    if (active !== "all") {
-      whereClause += ` AND is_active = $${params.length + 1}`
-      params.push(active === "true")
-    }
-
-    const offset = (page - 1) * limit
+    console.log("👥 Users API: Fetching all users")
 
     const usersQuery = `
-      SELECT 
-        u.id,
-        u.name,
-        u.email,
-        u.role,
-        u.is_active,
-        u.created_at,
-        u.last_login,
-        s.name as supervisor_name
-      FROM clone_users_apprudnik u
-      LEFT JOIN clone_users_apprudnik s ON u.supervisor = s.id
-      ${whereClause}
-      ORDER BY u.created_at DESC
-      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+      SELECT id, name, email, role, supervisor, is_active, created_at
+      FROM clone_users_apprudnik 
+      WHERE is_active = true
+      ORDER BY name
     `
 
-    const countQuery = `
-      SELECT COUNT(*) as total
-      FROM clone_users_apprudnik u
-      ${whereClause}
-    `
+    const result = await query(usersQuery)
+    console.log("✅ Users API: Fetched", result.rows.length, "users")
 
-    const [users, count] = await Promise.all([query(usersQuery, [...params, limit, offset]), query(countQuery, params)])
-
-    res.json({
-      success: true,
-      data: {
-        users: users.rows,
-        pagination: {
-          page: Number.parseInt(page),
-          limit: Number.parseInt(limit),
-          total: Number.parseInt(count.rows[0].total),
-          pages: Math.ceil(count.rows[0].total / limit),
-        },
-      },
-    })
+    res.json(result.rows)
   } catch (error) {
-    next(error)
+    console.error("❌ Users API: Error fetching users:", error.message)
+    res.status(500).json({
+      message: "Erro ao buscar usuários",
+      error: error.message,
+    })
+  }
+})
+
+// GET /api/users/sellers - Fetch only sellers and representatives
+router.get("/sellers", authenticateToken, authorize("admin", "gerente_comercial", "supervisor"), async (req, res) => {
+  try {
+    console.log("👥 Users API: Fetching sellers and representatives")
+
+    const sellersQuery = `
+      SELECT id, name, email, role, supervisor, is_active
+      FROM clone_users_apprudnik 
+      WHERE role IN ('vendedor', 'representante') AND is_active = true
+      ORDER BY name
+    `
+
+    const result = await query(sellersQuery)
+    console.log("✅ Users API: Fetched", result.rows.length, "sellers/representatives")
+
+    res.json(result.rows)
+  } catch (error) {
+    console.error("❌ Users API: Error fetching sellers:", error.message)
+    res.status(500).json({
+      message: "Erro ao buscar vendedores",
+      error: error.message,
+    })
   }
 })
 
