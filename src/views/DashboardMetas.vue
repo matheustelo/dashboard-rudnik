@@ -176,6 +176,7 @@
 <script setup>
 import { ref, onMounted, reactive } from "vue"
 import { goalsService, userService } from "../services/api"
+import { useAuthStore } from "../stores/auth"
 
 const loading = ref(true)
 const activeTab = ref("general")
@@ -184,6 +185,7 @@ const users = ref([])
 const showModal = ref(false)
 const modal = reactive({ title: "", type: "" })
 const currentGoal = ref({})
+const authStore = useAuthStore()
 
 const fetchGoals = async () => {
   loading.value = true
@@ -259,6 +261,7 @@ const formatCurrency = (value) => {
 }
 
 onMounted(() => {
+  authStore.initializeAuth()
   fetchGoals()
   fetchUsers()
 })
