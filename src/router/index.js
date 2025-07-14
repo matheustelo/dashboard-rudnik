@@ -5,7 +5,7 @@ import DashboardVendedor from "../views/DashboardVendedor.vue"
 import DashboardSupervisor from "../views/DashboardSupervisor.vue"
 import DashboardGerenteComercial from "../views/DashboardGerenteComercial.vue"
 import DashboardRepresentante from "../views/DashboardRepresentante.vue"
-import PainelMetas from "../views/PainelMetas.vue"
+import DashboardMetas from "../views/DashboardMetas.vue" // New
 
 const routes = [
   {
@@ -42,10 +42,10 @@ const routes = [
     meta: { requiresAuth: true, role: "gerente_comercial" },
   },
   {
-    path: "/painel-metas/gerente_comercial",
-    name: "PainelMetasGerenteComercial",
-    component: PainelMetas,
-    meta: { requiresAuth: true, roles: ["admin", "gerente_comercial"] },
+    path: "/dashboard/metas",
+    name: "DashboardMetas",
+    component: DashboardMetas,
+    meta: { requiresAuth: true, roles: ["admin", "gerente_comercial"] }, // New
   },
 ]
 
@@ -56,27 +56,23 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
+  authStore.initializeAuth() // Ensure auth state is loaded
+  const userRole = authStore.user?.role
 
-  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next("/login")
-  } else if (to.meta.roles && !to.meta.roles.includes(authStore.user?.role)) {
-    const role = authStore.user?.role
-    if (role) {
-      next(`/dashboard/${role}`)
-    } else {
-      next("/login")
+  if (to.meta.requiresAuth) {
+    if (!authStore.isAuthenticated) {
+      return next({ name: "Login" })
     }
-  } else if (to.meta.role && authStore.user?.role !== to.meta.role) {
-    // Redirect to appropriate dashboard based on role
-    const role = authStore.user?.role
-    if (role) {
-      next(`/dashboard/${role}`)
-    } else {
-      next("/login")
+
+    const requiredRoles = to.meta.roles || (to.meta.role ? [to.meta.role] : [])
+
+    if (requiredRoles.length > 0 && !requiredRoles.includes(userRole)) {
+      // If user has a role, redirect to their dashboard, otherwise to login
+      return userRole ? next(`/dashboard/${userRole}`) : next({ name: "Login" })
     }
-  } else {
-    next()
   }
+
+  next()
 })
 
 export default router

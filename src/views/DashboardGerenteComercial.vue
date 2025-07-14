@@ -9,6 +9,12 @@
             <p class="text-gray-600">Bem-vindo, {{ authStore.user?.name }}</p>
           </div>
           <div class="flex items-center space-x-4">
+            <router-link
+              to="/dashboard/metas"
+              class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 text-sm font-medium"
+            >
+              Gerenciar Metas
+            </router-link>
             <select
               v-model="selectedPeriod"
               @change="loadDashboard"
@@ -97,10 +103,10 @@
                 <div class="ml-5 w-0 flex-1">
                   <dl>
                     <dt class="text-sm font-medium text-gray-500 truncate">
-                      Taxa de Conversão
+                      Faturamento Total
                     </dt>
                     <dd class="text-lg font-medium text-gray-900">
-                      {{ dashboardData.indicadores.taxaConversao }}%
+                      R$ {{ formatCurrency(dashboardData.indicadores.faturamentoTotal) }}
                     </dd>
                   </dl>
                 </div>

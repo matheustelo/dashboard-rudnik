@@ -9,6 +9,7 @@
             <p class="text-gray-600">Bem-vindo, {{ authStore.user?.name }}</p>
           </div>
           <div class="flex items-center space-x-4">
+            <Navbar />
             <select
               v-model="selectedPeriod"
               @change="loadDashboard"
@@ -202,6 +203,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { dashboardService } from '../services/api'
 import BarChart from '../components/BarChart.vue'
+import Navbar from '../components/Navbar.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()

@@ -2,138 +2,168 @@ const express = require("express")
 const { query } = require("../config/database")
 const { authenticateToken, authorize } = require("../middleware/auth")
 const { getDateRange } = require("../utils/dateHelpers")
+
 const router = express.Router()
 
-// Get goals and progress for a period
+// GET /api/goals - Fetch all goals for the management view
 router.get("/", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res, next) => {
   try {
+    console.log("📊 Goals API: Fetching all goals for management.")
     const { period } = req.query
     const { startDate, endDate } = getDateRange(period)
+    console.log("📅 Goals API: Date range for goals:", { startDate, endDate })
 
-    const generalGoalQuery = "SELECT target_proposals, target_sales FROM sales_goals WHERE user_id IS NULL AND period = $1"
-    const generalGoal = await query(generalGoalQuery, [period])
+    const generalGoalsQuery = `
+      SELECT * FROM metas_gerais 
+      WHERE data_inicio <= $2 AND data_fim >= $1
+      ORDER BY data_inicio DESC
+    `
+    const generalGoals = await query(generalGoalsQuery, [startDate, endDate])
+    console.log("✅ Goals API: Fetched general goals:", generalGoals.rows.length, "rows.")
 
     const individualGoalsQuery = `
-      SELECT g.id, g.user_id, u.name, g.target_proposals, g.target_sales
-      FROM sales_goals g
-      JOIN clone_users_apprudnik u ON g.user_id = u.id
-      WHERE g.period = $1 AND g.user_id IS NOT NULL
+      SELECT m.*, u.name as user_name, u.email as user_email 
+      FROM metas_individuais m
+      JOIN clone_users_apprudnik u ON m.usuario_id = u.id
+      WHERE m.data_inicio <= $2 AND m.data_fim >= $1
+      ORDER BY u.name, m.data_inicio DESC
     `
-    const individualGoals = await query(individualGoalsQuery, [period])
-
-    const progressGeneralQuery = `
-      SELECT COUNT(*) as proposals,
-             COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as sales
-      FROM clone_propostas_apprudnik
-      WHERE created_at >= $1 AND created_at <= $2
-    `
-    const progressGeneral = await query(progressGeneralQuery, [startDate, endDate])
-
-    const progressIndividualQuery = `
-      SELECT seller as user_id,
-             COUNT(*) as proposals,
-             COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as sales
-      FROM clone_propostas_apprudnik
-      WHERE created_at >= $1 AND created_at <= $2
-      GROUP BY seller
-    `
-    const progressIndividual = await query(progressIndividualQuery, [startDate, endDate])
-
-    const progressMap = {}
-    progressIndividual.rows.forEach((row) => {
-      progressMap[row.user_id] = row
-    })
-
-    const individuals = individualGoals.rows.map((goal) => ({
-      id: goal.id,
-      userId: goal.user_id,
-      name: goal.name,
-      proposalsTarget: Number.parseInt(goal.target_proposals),
-      salesTarget: Number.parseInt(goal.target_sales),
-      proposalsAchieved: Number.parseInt(progressMap[goal.user_id]?.proposals || 0),
-      salesAchieved: Number.parseInt(progressMap[goal.user_id]?.sales || 0),
-    }))
+    const individualGoals = await query(individualGoalsQuery, [startDate, endDate])
+    console.log("✅ Goals API: Fetched individual goals:", individualGoals.rows.length, "rows.")
 
     res.json({
-      success: true,
-      data: {
-        general: {
-          proposalsTarget: Number.parseInt(generalGoal.rows[0]?.target_proposals || 0),
-          salesTarget: Number.parseInt(generalGoal.rows[0]?.target_sales || 0),
-          proposalsAchieved: Number.parseInt(progressGeneral.rows[0].proposals),
-          salesAchieved: Number.parseInt(progressGeneral.rows[0].sales),
-        },
-        individuals,
-      },
+      generalGoals: generalGoals.rows,
+      individualGoals: individualGoals.rows,
     })
   } catch (error) {
+    console.error("❌ Goals API: Error fetching goals:", error.message)
     next(error)
   }
 })
 
-// Get only general goal and progress
-router.get("/general", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res, next) => {
+// POST /api/goals - Create or update a goal
+router.post("/", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res, next) => {
   try {
+    console.log("📊 Goals API: Creating/Updating a goal.")
+    const { type, goalData } = req.body
+    const { id, tipo_meta, valor_meta, data_inicio, data_fim, usuario_id } = goalData
+    const created_by = req.user.id
+
+    let result
+    if (type === "general") {
+      if (id) {
+        console.log("🔄 Goals API: Updating general goal ID:", id)
+        result = await query(
+          `UPDATE metas_gerais SET tipo_meta = $1, valor_meta = $2, data_inicio = $3, data_fim = $4, atualizado_em = NOW()
+           WHERE id = $5 RETURNING *`,
+          [tipo_meta, valor_meta, data_inicio, data_fim, id],
+        )
+      } else {
+        console.log("➕ Goals API: Creating new general goal.")
+        result = await query(
+          `INSERT INTO metas_gerais (tipo_meta, valor_meta, data_inicio, data_fim, criado_por)
+           VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+          [tipo_meta, valor_meta, data_inicio, data_fim, created_by],
+        )
+      }
+    } else if (type === "individual") {
+      if (id) {
+        console.log("🔄 Goals API: Updating individual goal ID:", id, "for user:", usuario_id)
+        result = await query(
+          `UPDATE metas_individuais SET tipo_meta = $1, valor_meta = $2, data_inicio = $3, data_fim = $4, usuario_id = $5, atualizado_em = NOW()
+           WHERE id = $6 RETURNING *`,
+          [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, id],
+        )
+      } else {
+        console.log("➕ Goals API: Creating new individual goal for user:", usuario_id)
+        result = await query(
+          `INSERT INTO metas_individuais (tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, criado_por)
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+          [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, created_by],
+        )
+      }
+    } else {
+      console.log("❌ Goals API: Invalid goal type received:", type)
+      return res.status(400).json({ message: "Invalid goal type" })
+    }
+
+    console.log("✅ Goals API: Goal operation successful. Result:", result.rows[0])
+    res.status(201).json(result.rows[0])
+  } catch (error) {
+    console.error("❌ Goals API: Error creating/updating goal:", error.message)
+    next(error)
+  }
+})
+
+// DELETE /api/goals/:type/:id - Delete a goal
+router.delete("/:type/:id", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res, next) => {
+  try {
+    console.log("📊 Goals API: Deleting goal:", req.params.type, "ID:", req.params.id)
+    const { type, id } = req.params
+    if (type === "general") {
+      await query("DELETE FROM metas_gerais WHERE id = $1", [id])
+    } else if (type === "individual") {
+      await query("DELETE FROM metas_individuais WHERE id = $1", [id])
+    } else {
+      console.log("❌ Goals API: Invalid goal type for deletion:", type)
+      return res.status(400).json({ message: "Invalid goal type" })
+    }
+    console.log("✅ Goals API: Goal deleted successfully.")
+    res.status(204).send()
+  } catch (error) {
+    console.error("❌ Goals API: Error deleting goal:", error.message)
+    next(error)
+  }
+})
+
+// GET /api/goals/tracking/seller/:id - Get goal tracking for a seller
+router.get("/tracking/seller/:id", authenticateToken, async (req, res, next) => {
+  try {
+    console.log("📊 Goals API: Fetching goal tracking for seller ID:", req.params.id, "Period:", req.query.period)
+    const { id } = req.params
     const { period } = req.query
     const { startDate, endDate } = getDateRange(period)
+    console.log("📅 Goals API: Tracking date range:", { startDate, endDate })
 
-    const goalQuery = "SELECT target_proposals, target_sales FROM sales_goals WHERE user_id IS NULL AND period = $1"
-    const goal = await query(goalQuery, [period])
+    // Ensure the user can only track their own goals or if they are a supervisor/manager
+    if (req.user.id !== Number.parseInt(id) && !["supervisor", "gerente_comercial", "admin"].includes(req.user.role)) {
+      console.log("❌ Goals API: Access denied for tracking goals of user ID:", id, "by user role:", req.user.role)
+      return res.status(403).json({ message: "Access denied to track this user's goals" })
+    }
 
-    const progressQuery = `
-      SELECT COUNT(*) as proposals,
-             COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as sales
-      FROM clone_propostas_apprudnik
-      WHERE created_at >= $1 AND created_at <= $2
+    const goalsQuery = `
+      SELECT * FROM metas_individuais
+      WHERE usuario_id = $1 AND data_inicio <= $3 AND data_fim >= $2
     `
-    const progress = await query(progressQuery, [startDate, endDate])
+    const goalsResult = await query(goalsQuery, [id, startDate, endDate])
+    const goals = goalsResult.rows
+    console.log("✅ Goals API: Found", goals.length, "individual goals for seller.")
 
-    res.json({
-      success: true,
-      data: {
-        proposalsTarget: Number.parseInt(goal.rows[0]?.target_proposals || 0),
-        salesTarget: Number.parseInt(goal.rows[0]?.target_sales || 0),
-        proposalsAchieved: Number.parseInt(progress.rows[0].proposals),
-        salesAchieved: Number.parseInt(progress.rows[0].sales),
-      },
+    const performanceQuery = `
+      SELECT 
+        COUNT(*) as propostas_realizadas,
+        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento_realizado
+      FROM clone_propostas_apprudnik
+      WHERE seller = $1 AND created_at BETWEEN $2 AND $3
+    `
+    const performanceResult = await query(performanceQuery, [id, startDate, endDate])
+    const performance = performanceResult.rows[0]
+    console.log("✅ Goals API: Seller performance:", performance)
+
+    const trackingData = goals.map((goal) => {
+      const achieved =
+        goal.tipo_meta === "faturamento"
+          ? Number.parseFloat(performance.faturamento_realizado)
+          : Number.parseInt(performance.propostas_realizadas, 10)
+      const target = Number.parseFloat(goal.valor_meta)
+      const progress = target > 0 ? (achieved / target) * 100 : 0
+      return { ...goal, achieved, progress: Math.min(progress, 100) }
     })
-  } catch (error) {
-    next(error)
-  }
-})
 
-// Set or update general goal
-router.post("/general", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res, next) => {
-  try {
-    const { period, target_proposals, target_sales } = req.body
-    await query(
-      `INSERT INTO sales_goals (period, user_id, target_proposals, target_sales)
-       VALUES ($1, NULL, $2, $3)
-       ON CONFLICT (period, user_id) DO UPDATE
-       SET target_proposals = EXCLUDED.target_proposals,
-           target_sales = EXCLUDED.target_sales`,
-      [period, target_proposals, target_sales],
-    )
-    res.json({ success: true, message: "Meta geral salva" })
+    console.log("✅ Goals API: Sending tracking data:", trackingData)
+    res.json(trackingData)
   } catch (error) {
-    next(error)
-  }
-})
-
-// Set or update individual goal
-router.post("/individual", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res, next) => {
-  try {
-    const { user_id, period, target_proposals, target_sales } = req.body
-    await query(
-      `INSERT INTO sales_goals (period, user_id, target_proposals, target_sales)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (period, user_id) DO UPDATE
-       SET target_proposals = EXCLUDED.target_proposals,
-           target_sales = EXCLUDED.target_sales`,
-      [period, user_id, target_proposals, target_sales],
-    )
-    res.json({ success: true, message: "Meta individual salva" })
-  } catch (error) {
+    console.error("❌ Goals API: Error fetching goal tracking:", error.message)
     next(error)
   }
 })

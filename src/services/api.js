@@ -2,7 +2,31 @@ import axios from "axios"
 
 const api = axios.create({
   baseURL: "/api",
+  timeout: 10000,
 })
+
+// Interceptor para debug das requisições
+api.interceptors.request.use(
+  (config) => {
+    console.log("Making request to:", config.baseURL + config.url)
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  },
+)
+
+// Interceptor para debug das respostas
+api.interceptors.response.use(
+  (response) => {
+    console.log("Response received from:", response.config.url)
+    return response
+  },
+  (error) => {
+    console.error("API Error:", error.response?.status, error.response?.data)
+    return Promise.reject(error)
+  },
+)
 
 export const dashboardService = {
   getVendedorDashboard(id, period) {
@@ -25,14 +49,27 @@ export const dashboardService = {
 }
 
 export const goalsService = {
+  // For management dashboard
   getGoals(period) {
     return api.get("/goals", { params: { period } })
   },
-  saveGeneralGoal(data) {
-    return api.post("/goals/general", data)
+  saveGoal(type, goalData) {
+    return api.post("/goals", { type, goalData })
   },
-  saveIndividualGoal(data) {
-    return api.post("/goals/individual", data)
+  deleteGoal(type, id) {
+    return api.delete(`/goals/${type}/${id}`)
+  },
+
+  // For tracking dashboards
+  getSellerTracking(id, period) {
+    return api.get(`/goals/tracking/seller/${id}`, { params: { period } })
+  },
+}
+
+export const userService = {
+  getUsers() {
+    // Assuming the endpoint returns all users, which might need adjustment for security
+    return api.get("/users")
   },
 }
 
