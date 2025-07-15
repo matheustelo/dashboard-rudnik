@@ -121,6 +121,18 @@
           </div>
         </div>
 
+        <!-- Revenue Charts -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="bg-white p-6 rounded-lg shadow">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Faturamento x Meta Mensal</h3>
+            <LineChart v-if="revenueVsTarget" :data="revenueVsTarget" :options="chartOptions.line" />
+          </div>
+          <div class="bg-white p-6 rounded-lg shadow">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Faturamento por Supervisor</h3>
+            <BarChart v-if="revenueBySupervisor" :data="revenueBySupervisor" :options="chartOptions.bar" />
+          </div>
+        </div>
+
         <!-- Original KPIs (for backward compatibility) -->
         <div v-if="dashboardData" class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div class="bg-white overflow-hidden shadow rounded-lg">
@@ -198,6 +210,8 @@ import { useAuthStore } from '../stores/auth'
 import { dashboardService, performanceService, supervisorService } from '../services/api'
 import PerformanceTable from '../components/PerformanceTable.vue'
 import RepresentativeDetailModal from '../components/RepresentativeDetailModal.vue'
+import LineChart from '../components/LineChart.vue'
+import BarChart from '../components/BarChart.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -210,6 +224,21 @@ const showDetailModal = ref(false)
 const selectedRepresentative = ref(null)
 const representativeDetails = ref(null)
 const detailLoading = ref(false)
+const revenueVsTarget = ref(null)
+const revenueBySupervisor = ref(null)
+
+const chartOptions = {
+  line: {
+    responsive: true,
+    plugins: { legend: { position: 'top' } },
+    scales: { y: { beginAtZero: true } }
+  },
+  bar: {
+    responsive: true,
+    plugins: { legend: { position: 'top' } },
+    scales: { y: { beginAtZero: true } }
+  }
+}
 
 const currentFilters = ref({
   period: '2025-07',
@@ -217,6 +246,50 @@ const currentFilters = ref({
   endDate: '',
   supervisor: 'all'
 })
+
+const loadCharts = async (filters) => {
+  try {
+    const [revTargetRes, revBySupRes] = await Promise.all([
+      dashboardService.getRevenueVsTarget(filters),
+      dashboardService.getRevenueBySupervisor(filters)
+    ])
+    const labels = revTargetRes.data.map((d) => {
+      const [y, m] = d.month.split('-')
+      return new Date(y, m - 1).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
+    })
+    revenueVsTarget.value = {
+      labels,
+      datasets: [
+        {
+          label: 'Faturamento',
+          data: revTargetRes.data.map((d) => d.revenue),
+          borderColor: 'rgb(59,130,246)',
+          backgroundColor: 'rgba(59,130,246,0.1)',
+          tension: 0.4
+        },
+        {
+          label: 'Meta',
+          data: revTargetRes.data.map((d) => d.target),
+          borderColor: 'rgb(139,92,246)',
+          backgroundColor: 'rgba(139,92,246,0.1)',
+          tension: 0.4
+        }
+      ]
+    }
+    revenueBySupervisor.value = {
+      labels: revBySupRes.data.map((d) => d.supervisorName),
+      datasets: [
+        {
+          label: 'Faturamento',
+          data: revBySupRes.data.map((d) => d.totalRevenue),
+          backgroundColor: 'rgba(34,197,94,0.8)'
+        }
+      ]
+    }
+  } catch (err) {
+    console.error('Erro ao carregar gráficos:', err)
+  }
+}
 
 const loadDashboard = async () => {
   loading.value = true
@@ -227,6 +300,8 @@ const loadDashboard = async () => {
       performanceService.getTeamPerformance(currentFilters.value),
       supervisorService.getSupervisors()
     ])
+
+    await loadCharts(currentFilters.value)
     
     dashboardData.value = dashboardResponse.data
     teamPerformance.value = performanceResponse.data
@@ -248,6 +323,8 @@ const handleFilterChange = async (filters) => {
   try {
     const performanceResponse = await performanceService.getTeamPerformance(filters)
     teamPerformance.value = performanceResponse.data
+
+    await loadCharts(filters)
     
     // Also update dashboard data if period changed
     if (filters.period) {

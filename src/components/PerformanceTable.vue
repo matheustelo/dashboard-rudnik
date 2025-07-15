@@ -261,6 +261,9 @@ const props = defineProps({
 
 const emit = defineEmits(['filter-change', 'drill-down'])
 
+const filters = ref({ startDate: '', endDate: '', supervisor: 'all' })
+watch(filters, () => emit('filter-change', { ...filters.value }), { deep: true })
+
 const filters = ref({
   startDate: '',
   endDate: '',
