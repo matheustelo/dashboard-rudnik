@@ -14,26 +14,19 @@ const api = axios.create({
 // Add auth token to requests
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token")
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  console.log("Making request to:", config.baseURL + config.url)
+  if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
 
 // Handle auth errors
 api.interceptors.response.use(
-  (response) => {
-    console.log("Response received from:", response.config.url)
-    return response
-  },
+  (response) => response,
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem("token")
       localStorage.removeItem("user")
       window.location.href = "/login"
     }
-    console.error("API Error:", error.response?.status, error.response?.data)
     return Promise.reject(error)
   },
 )
@@ -57,25 +50,18 @@ export const dashboardService = {
   getRevenueBySupervisor: (filters) => api.get("/dashboard/revenue-by-supervisor", { params: filters }),
 }
 
+// Goals service
+export const goalsService = {
+  getGoals: (period) => api.get("/goals", { params: { period } }),
+  saveGoal: (type, goalData) => api.post("/goals", { type, goalData }),
+  deleteGoal: (type, id) => api.delete(`/goals/${type}/${id}`),
+  getSellerTracking: (id, period) => api.get(`/goals/tracking/seller/${id}`, { params: { period } }),
+}
+
 // Performance service
 export const performanceService = {
-  getTeamPerformance: (filters) => {
-    const params = new URLSearchParams()
-    if (filters.period) params.append("period", filters.period)
-    if (filters.startDate) params.append("startDate", filters.startDate)
-    if (filters.endDate) params.append("endDate", filters.endDate)
-    if (filters.supervisor) params.append("supervisor", filters.supervisor)
-
-    return api.get(`/performance/team?${params.toString()}`)
-  },
-  getRepresentativeDetails: (id, filters) => {
-    const params = new URLSearchParams()
-    if (filters.period) params.append("period", filters.period)
-    if (filters.startDate) params.append("startDate", filters.startDate)
-    if (filters.endDate) params.append("endDate", filters.endDate)
-
-    return api.get(`/performance/representative/${id}?${params.toString()}`)
-  },
+  getTeamPerformance: (filters) => api.get("/performance/team", { params: filters }),
+  getRepresentativeDetails: (id, filters) => api.get(`/performance/representative/${id}`, { params: filters }),
 }
 
 // Supervisors service

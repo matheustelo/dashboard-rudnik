@@ -30,40 +30,26 @@ app.use((req, res, next) => {
 })
 
 // Auth Middleware
-const authenticateToken = async (req, res, next) => {
-  try {
-    const authHeader = req.headers["authorization"]
-    const token = authHeader && authHeader.split(" ")[1]
-    if (!token) return res.sendStatus(401)
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers["authorization"]
+  const token = authHeader && authHeader.split(" ")[1]
+  if (!token) return res.sendStatus(401)
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key")
-
-    // Verify user still exists and is active
-    const result = await pool.query(
-      "SELECT id, name, email, role, supervisor, is_active FROM clone_users_apprudnik WHERE id = $1 AND is_active = true",
-      [decoded.id],
-    )
-
-    if (result.rows.length === 0) {
-      return res.status(401).json({ message: "User not found or inactive" })
-    }
-
-    req.user = result.rows[0]
+  jwt.verify(token, process.env.JWT_SECRET || "your-secret-key", (err, user) => {
+    if (err) return res.sendStatus(403)
+    req.user = user
     next()
-  } catch (error) {
-    console.error("❌ Auth error:", error.message)
-    return res.status(403).json({ message: "Invalid or expired token" })
-  }
+  })
 }
 
-const authorize = (...roles) => {
-  return (req, res, next) => {
+const authorize =
+  (...roles) =>
+  (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
       return res.status(403).json({ message: "Insufficient permissions" })
     }
     next()
   }
-}
 
 // Helper to get date range
 function getDateRange(period, startDate, endDate) {
@@ -100,6 +86,7 @@ app.post("/api/auth/login", async (req, res) => {
     if (result.rows.length === 0) return res.status(401).json({ message: "Credenciais inválidas" })
 
     const user = result.rows[0]
+    // Using a placeholder password check as per previous context
     if (password !== "123456") return res.status(401).json({ message: "Credenciais inválidas" })
 
     const token = jwt.sign(
@@ -124,7 +111,6 @@ app.get("/api/team-leaders", authenticateToken, authorize("admin", "gerente_come
       ORDER BY name
     `
     const { rows } = await pool.query(leadersQuery)
-    console.log("✅ Team Leaders: Fetched", rows.length, "leaders")
     res.json(rows)
   } catch (error) {
     console.error("❌ Error fetching team leaders:", error)
@@ -132,7 +118,190 @@ app.get("/api/team-leaders", authenticateToken, authorize("admin", "gerente_come
   }
 })
 
-// Get Team Performance with fixed JSON handling
+// Get Team Performance
+app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
+  try {
+    const { period, startDate, endDate, supervisorId } = req.query
+    const { startDate: dateStart, endDate: dateEnd } = getDateRange(period, startDate, endDate)
+
+    let supervisorFilter = ""
+    const queryParams = [dateStart, dateEnd]
+
+    if (supervisorId && supervisorId !== "all") {
+      // Filter by users who are children of the selected supervisor/parceiro
+      supervisorFilter = `AND u.id::text IN (
+        SELECT jsonb_array_elements_text(children) 
+        FROM clone_users_apprudnik 
+        WHERE id = $3
+      )`
+      queryParams.push(supervisorId)
+    }
+
+    const teamMembersQuery = `
+  SELECT 
+    u.id, u.name, u.email, u.role,
+    sup.name as supervisor_name,
+    COUNT(p.id) as total_propostas,
+    SUM(CASE WHEN p.has_generated_sale = true THEN 1 ELSE 0 END) as propostas_convertidas,
+    COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) ELSE 0 END), 0) as faturamento_total,
+    COALESCE(m_prop.valor_meta, 40) as meta_propostas,
+    COALESCE(m_vend.valor_meta, 12) as meta_vendas,
+    COALESCE(m_fat.valor_meta, 60000) as meta_faturamento
+  FROM clone_users_apprudnik u
+  LEFT JOIN clone_users_apprudnik sup ON u.supervisor = sup.id
+  LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller AND p.created_at BETWEEN $1 AND $2
+  LEFT JOIN metas_individuais m_prop ON u.id = m_prop.usuario_id AND m_prop.tipo_meta = 'propostas' AND m_prop.data_inicio <= $2 AND m_prop.data_fim >= $1
+  LEFT JOIN metas_individuais m_vend ON u.id = m_vend.usuario_id AND m_vend.tipo_meta = 'vendas' AND m_vend.data_inicio <= $2 AND m_vend.data_fim >= $1
+  LEFT JOIN metas_individuais m_fat ON u.id = m_fat.usuario_id AND m_fat.tipo_meta = 'faturamento' AND m_fat.data_inicio <= $2 AND m_fat.data_fim >= $1
+  WHERE u.role IN ('vendedor', 'representante') AND u.is_active = true
+  ${supervisorFilter}
+  GROUP BY u.id, u.name, u.email, u.role, sup.name, m_prop.valor_meta, m_vend.valor_meta, m_fat.valor_meta
+  ORDER BY faturamento_total DESC
+`
+    const { rows: teamMembers } = await pool.query(teamMembersQuery, queryParams)
+    // ... (processing logic remains the same as previous turn, it's correct)
+    const formattedTeamMembers = teamMembers.map((member) => {
+      const conversionRate =
+        member.total_propostas > 0 ? ((member.propostas_convertidas / member.total_propostas) * 100).toFixed(2) : 0
+      return {
+        id: member.id,
+        name: member.name,
+        email: member.email,
+        role: member.role,
+        supervisorName: member.supervisor_name,
+        performance: {
+          totalPropostas: Number.parseInt(member.total_propostas),
+          propostasConvertidas: Number.parseInt(member.propostas_convertidas),
+          conversionRate: Number.parseFloat(conversionRate),
+          faturamentoTotal: Number.parseFloat(member.faturamento_total),
+        },
+        targets: {
+          metaPropostas: Number.parseInt(member.meta_propostas),
+          metaVendas: Number.parseInt(member.meta_vendas),
+          metaFaturamento: Number.parseFloat(member.meta_faturamento),
+        },
+        achievements: {
+          propostasAchievement:
+            member.meta_propostas > 0 ? ((member.total_propostas / member.meta_propostas) * 100).toFixed(1) : 0,
+          vendasAchievement:
+            member.meta_vendas > 0 ? ((member.propostas_convertidas / member.meta_vendas) * 100).toFixed(1) : 0,
+          faturamentoAchievement:
+            member.meta_faturamento > 0 ? ((member.faturamento_total / member.meta_faturamento) * 100).toFixed(1) : 0,
+        },
+      }
+    })
+    res.json({ teamMembers: formattedTeamMembers })
+  } catch (error) {
+    console.error("❌ Error fetching team performance:", error)
+    res.status(500).json({ message: "Erro ao carregar performance da equipe", error: error.message })
+  }
+})
+
+// Get Revenue vs. Target Chart Data
+app.get(
+  "/api/dashboard/revenue-vs-target",
+  authenticateToken,
+  authorize("admin", "gerente_comercial"),
+  async (req, res) => {
+    try {
+      const { period, startDate, endDate } = req.query
+      const { startDate: dateStart, endDate: dateEnd } = getDateRange(period, startDate, endDate)
+
+      const revenueQuery = `
+  SELECT to_char(date_trunc('month', p.created_at), 'YYYY-MM') as month, 
+         SUM(CAST(p.total_price AS DECIMAL)) as revenue
+  FROM clone_propostas_apprudnik p
+  WHERE p.has_generated_sale = true AND p.created_at BETWEEN $1 AND $2
+  GROUP BY 1 ORDER BY 1;
+`
+      const revenueResult = await pool.query(revenueQuery, [dateStart, dateEnd])
+
+      const targetQuery = `
+      SELECT to_char(date_trunc('month', m.data_inicio), 'YYYY-MM') as month, SUM(m.valor_meta) as target
+      FROM metas_gerais m
+      WHERE m.tipo_meta = 'faturamento' AND m.data_inicio BETWEEN $1 AND $2
+      GROUP BY 1 ORDER BY 1;
+    `
+      const targetResult = await pool.query(targetQuery, [dateStart, dateEnd])
+
+      const dataMap = new Map()
+      revenueResult.rows.forEach((row) =>
+        dataMap.set(row.month, { month: row.month, revenue: Number.parseFloat(row.revenue), target: 0 }),
+      )
+      targetResult.rows.forEach((row) => {
+        if (!dataMap.has(row.month)) dataMap.set(row.month, { month: row.month, revenue: 0, target: 0 })
+        dataMap.get(row.month).target = Number.parseFloat(row.target)
+      })
+
+      const chartData = Array.from(dataMap.values()).sort((a, b) => a.month.localeCompare(b.month))
+      res.json(chartData)
+    } catch (error) {
+      console.error("❌ Error fetching revenue vs target chart data:", error)
+      res.status(500).json({ message: "Erro ao carregar dados do gráfico", error: error.message })
+    }
+  },
+)
+
+// Get Revenue by Supervisor Chart Data
+app.get(
+  "/api/dashboard/revenue-by-supervisor",
+  authenticateToken,
+  authorize("admin", "gerente_comercial"),
+  async (req, res) => {
+    try {
+      const { period, startDate, endDate } = req.query
+      const { startDate: dateStart, endDate: dateEnd } = getDateRange(period, startDate, endDate)
+
+      const query = `
+  SELECT 
+    sup.name as supervisor_name, 
+    COALESCE(SUM(CAST(p.total_price AS DECIMAL)), 0) as total_revenue
+  FROM clone_users_apprudnik sup
+  LEFT JOIN clone_users_apprudnik u ON u.supervisor = sup.id
+  LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
+    AND p.has_generated_sale = true 
+    AND p.created_at BETWEEN $1 AND $2
+  WHERE sup.role IN ('supervisor', 'parceiro_comercial') AND sup.is_active = true
+  GROUP BY sup.id, sup.name
+  ORDER BY total_revenue DESC;
+`
+      const { rows } = await pool.query(query, [dateStart, dateEnd])
+      const chartData = rows.map((row) => ({
+        supervisorName: row.supervisor_name,
+        totalRevenue: Number.parseFloat(row.total_revenue),
+      }))
+      res.json(chartData)
+    } catch (error) {
+      console.error("❌ Error fetching revenue by supervisor chart data:", error)
+      res.status(500).json({ message: "Erro ao carregar dados do gráfico", error: error.message })
+    }
+  },
+)
+
+// Get supervisors list
+app.get("/api/supervisors", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
+  console.log("--- Supervisors API: GET /api/supervisors started ---")
+  try {
+    const supervisorsQuery = `
+      SELECT DISTINCT id, name
+      FROM clone_users_apprudnik 
+      WHERE role = 'supervisor' AND is_active = true
+      ORDER BY name
+    `
+    const supervisors = await pool.query(supervisorsQuery)
+
+    console.log("✅ Supervisors: Fetched", supervisors.rows.length, "supervisors")
+    res.json(supervisors.rows)
+  } catch (error) {
+    console.error("❌ Supervisors: Error fetching supervisors:", error.message)
+    res.status(500).json({
+      message: "Erro ao buscar supervisores",
+      error: error.message,
+    })
+  }
+})
+
+// Get comprehensive team performance with enhanced filtering
 app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
   console.log("--- Performance API: GET /api/performance/team started ---")
   try {
@@ -141,21 +310,13 @@ app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_
 
     console.log("📊 Team Performance: Date range:", { dateStart, dateEnd, supervisor })
 
-    // Build supervisor filter with proper JSON handling
+    // Build supervisor filter
     let supervisorFilter = ""
     const queryParams = [dateStart, dateEnd]
 
     if (supervisor && supervisor !== "all") {
-      // Use JSON contains operator for proper JSONB handling
-      supervisorFilter = `AND (
-        u.supervisor = $3 OR 
-        u.id IN (
-          SELECT jsonb_array_elements_text(children)::int 
-          FROM clone_users_apprudnik 
-          WHERE id = $3 AND children IS NOT NULL
-        )
-      )`
-      queryParams.push(Number.parseInt(supervisor))
+      supervisorFilter = "AND u.supervisor = $3"
+      queryParams.push(supervisor)
     }
 
     // Get all active sales representatives with targets
@@ -281,115 +442,6 @@ app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_
   }
 })
 
-// Get Revenue vs. Target Chart Data
-app.get(
-  "/api/dashboard/revenue-vs-target",
-  authenticateToken,
-  authorize("admin", "gerente_comercial"),
-  async (req, res) => {
-    try {
-      const { period, startDate, endDate } = req.query
-      const { startDate: dateStart, endDate: dateEnd } = getDateRange(period, startDate, endDate)
-
-      console.log("📊 Revenue vs Target: Date range:", { dateStart, dateEnd })
-
-      // Get monthly revenue data
-      const revenueQuery = `
-        SELECT 
-          to_char(date_trunc('month', p.created_at), 'YYYY-MM') as month, 
-          COALESCE(SUM(p.total_price), 0) as revenue
-        FROM clone_propostas_apprudnik p
-        WHERE p.has_generated_sale = true AND p.created_at BETWEEN $1 AND $2
-        GROUP BY date_trunc('month', p.created_at)
-        ORDER BY month
-      `
-      const revenueResult = await pool.query(revenueQuery, [dateStart, dateEnd])
-
-      // Get monthly targets (using a default target for now)
-      const defaultMonthlyTarget = 150000 // R$ 150,000 per month
-
-      // Create chart data combining revenue and targets
-      const chartData = []
-      const currentDate = new Date(dateStart)
-      const endDateObj = new Date(dateEnd)
-
-      while (currentDate <= endDateObj) {
-        const monthKey = currentDate.toISOString().substring(0, 7) // YYYY-MM format
-        const revenueData = revenueResult.rows.find((row) => row.month === monthKey)
-
-        chartData.push({
-          month: monthKey,
-          revenue: revenueData ? Number.parseFloat(revenueData.revenue) : 0,
-          target: defaultMonthlyTarget,
-          monthName: currentDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" }),
-        })
-
-        currentDate.setMonth(currentDate.getMonth() + 1)
-      }
-
-      console.log("✅ Revenue vs Target: Generated", chartData.length, "data points")
-      res.json(chartData)
-    } catch (error) {
-      console.error("❌ Error fetching revenue vs target chart data:", error)
-      res.status(500).json({ message: "Erro ao carregar dados do gráfico", error: error.message })
-    }
-  },
-)
-
-// Get Revenue by Supervisor Chart Data
-app.get(
-  "/api/dashboard/revenue-by-supervisor",
-  authenticateToken,
-  authorize("admin", "gerente_comercial"),
-  async (req, res) => {
-    try {
-      const { period, startDate, endDate } = req.query
-      const { startDate: dateStart, endDate: dateEnd } = getDateRange(period, startDate, endDate)
-
-      console.log("📊 Revenue by Supervisor: Date range:", { dateStart, dateEnd })
-
-      // Get revenue by supervisor using the children JSON field
-      const query = `
-        WITH supervisor_revenue AS (
-          SELECT 
-            s.id as supervisor_id,
-            s.name as supervisor_name,
-            s.role as supervisor_role,
-            COALESCE(SUM(p.total_price), 0) as total_revenue
-          FROM clone_users_apprudnik s
-          LEFT JOIN clone_propostas_apprudnik p ON p.seller IN (
-            SELECT jsonb_array_elements_text(s.children)::int
-            WHERE s.children IS NOT NULL
-          ) AND p.has_generated_sale = true AND p.created_at BETWEEN $1 AND $2
-          WHERE s.role IN ('supervisor', 'parceiro_comercial') AND s.is_active = true
-          GROUP BY s.id, s.name, s.role
-        )
-        SELECT 
-          supervisor_name,
-          supervisor_role,
-          total_revenue
-        FROM supervisor_revenue
-        WHERE total_revenue > 0
-        ORDER BY total_revenue DESC
-      `
-
-      const { rows } = await pool.query(query, [dateStart, dateEnd])
-
-      const chartData = rows.map((row) => ({
-        supervisorName: row.supervisor_name,
-        supervisorRole: row.supervisor_role,
-        totalRevenue: Number.parseFloat(row.total_revenue),
-      }))
-
-      console.log("✅ Revenue by Supervisor: Generated", chartData.length, "data points")
-      res.json(chartData)
-    } catch (error) {
-      console.error("❌ Error fetching revenue by supervisor chart data:", error)
-      res.status(500).json({ message: "Erro ao carregar dados do gráfico", error: error.message })
-    }
-  },
-)
-
 // Get detailed representative performance (drill-down)
 app.get(
   "/api/performance/representative/:id",
@@ -406,11 +458,11 @@ app.get(
 
       // Get representative basic info
       const userQuery = `
-        SELECT u.*, s.name as supervisor_name
-        FROM clone_users_apprudnik u
-        LEFT JOIN clone_users_apprudnik s ON u.supervisor = s.id
-        WHERE u.id = $1
-      `
+      SELECT u.*, s.name as supervisor_name
+      FROM clone_users_apprudnik u
+      LEFT JOIN clone_users_apprudnik s ON u.supervisor = s.id
+      WHERE u.id = $1
+    `
       const userResult = await pool.query(userQuery, [id])
 
       if (userResult.rows.length === 0) {
@@ -421,57 +473,57 @@ app.get(
 
       // Get detailed proposals
       const proposalsQuery = `
-        SELECT 
-          id, client_name, total_price, has_generated_sale, created_at,
-          CASE 
-            WHEN has_generated_sale = true THEN 'Convertida'
-            ELSE 'Pendente'
-          END as status
-        FROM clone_propostas_apprudnik 
-        WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-        ORDER BY created_at DESC
-      `
+      SELECT 
+        id, client_name, total_price, has_generated_sale, created_at,
+        CASE 
+          WHEN has_generated_sale = true THEN 'Convertida'
+          ELSE 'Pendente'
+        END as status
+      FROM clone_propostas_apprudnik 
+      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      ORDER BY created_at DESC
+    `
       const proposals = await pool.query(proposalsQuery, [id, dateStart, dateEnd])
 
       // Get monthly performance trend
       const monthlyTrendQuery = `
-        SELECT 
-          DATE_TRUNC('month', created_at) as mes,
-          COUNT(*) as propostas,
-          COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
-          COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento,
-          COALESCE(AVG(CASE WHEN has_generated_sale = true THEN total_price END), 0) as ticket_medio
-        FROM clone_propostas_apprudnik 
-        WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-        GROUP BY DATE_TRUNC('month', created_at)
-        ORDER BY mes
-      `
+      SELECT 
+        DATE_TRUNC('month', created_at) as mes,
+        COUNT(*) as propostas,
+        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
+        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento,
+        COALESCE(AVG(CASE WHEN has_generated_sale = true THEN total_price END), 0) as ticket_medio
+      FROM clone_propostas_apprudnik 
+      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      GROUP BY DATE_TRUNC('month', created_at)
+      ORDER BY mes
+    `
       const monthlyTrend = await pool.query(monthlyTrendQuery, [id, dateStart, dateEnd])
 
       // Get weekly performance for detailed chart
       const weeklyTrendQuery = `
-        SELECT 
-          DATE_TRUNC('week', created_at) as semana,
-          COUNT(*) as propostas,
-          COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
-          COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento
-        FROM clone_propostas_apprudnik 
-        WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-        GROUP BY DATE_TRUNC('week', created_at)
-        ORDER BY semana
-      `
+      SELECT 
+        DATE_TRUNC('week', created_at) as semana,
+        COUNT(*) as propostas,
+        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
+        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento
+      FROM clone_propostas_apprudnik 
+      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      GROUP BY DATE_TRUNC('week', created_at)
+      ORDER BY semana
+    `
       const weeklyTrend = await pool.query(weeklyTrendQuery, [id, dateStart, dateEnd])
 
       // Get conversion funnel data
       const funnelQuery = `
-        SELECT 
-          COUNT(*) as total_propostas,
-          COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas_fechadas,
-          COALESCE(SUM(total_price), 0) as valor_total_propostas,
-          COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as valor_vendas
-        FROM clone_propostas_apprudnik 
-        WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-      `
+      SELECT 
+        COUNT(*) as total_propostas,
+        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas_fechadas,
+        COALESCE(SUM(total_price), 0) as valor_total_propostas,
+        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as valor_vendas
+      FROM clone_propostas_apprudnik 
+      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+    `
       const funnel = await pool.query(funnelQuery, [id, dateStart, dateEnd])
 
       // Calculate performance metrics
@@ -534,61 +586,297 @@ app.get(
   },
 )
 
-// Get supervisors list
-app.get("/api/supervisors", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
-  console.log("--- Supervisors API: GET /api/supervisors started ---")
+// Goals API endpoints
+app.get("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
+  console.log("--- Goals API: GET /api/goals started ---")
   try {
-    const supervisorsQuery = `
-      SELECT DISTINCT id, name, role
-      FROM clone_users_apprudnik 
-      WHERE role IN ('supervisor', 'parceiro_comercial') AND is_active = true
-      ORDER BY name
-    `
-    const supervisors = await pool.query(supervisorsQuery)
+    const { period } = req.query
+    const { startDate, endDate } = getDateRange(period)
+    console.log("📅 Goals: Date range:", { startDate, endDate })
 
-    console.log("✅ Supervisors: Fetched", supervisors.rows.length, "supervisors")
-    res.json(supervisors.rows)
+    // Check if tables exist first
+    const tableCheckQuery = `
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'metas_gerais'
+      ) as metas_gerais_exists,
+      EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'metas_individuais'
+      ) as metas_individuais_exists
+    `
+
+    const tableCheck = await pool.query(tableCheckQuery)
+    console.log("🔍 Goals: Table check:", tableCheck.rows[0])
+
+    if (!tableCheck.rows[0].metas_gerais_exists || !tableCheck.rows[0].metas_individuais_exists) {
+      console.log("❌ Goals: Tables do not exist, returning empty data")
+      return res.json({
+        generalGoals: [],
+        individualGoals: [],
+        message: "Goal tables not found. Please run the database migration script.",
+      })
+    }
+
+    const generalGoalsQuery = `
+      SELECT * FROM metas_gerais 
+      WHERE data_inicio <= $2 AND data_fim >= $1
+      ORDER BY data_inicio DESC
+    `
+    const generalGoals = await pool.query(generalGoalsQuery, [startDate, endDate])
+    console.log("✅ Goals: Fetched", generalGoals.rows.length, "general goals")
+
+    const individualGoalsQuery = `
+      SELECT m.*, u.name as user_name, u.email as user_email 
+      FROM metas_individuais m
+      JOIN clone_users_apprudnik u ON m.usuario_id = u.id
+      WHERE m.data_inicio <= $2 AND m.data_fim >= $1
+      ORDER BY u.name, m.data_inicio DESC
+    `
+    const individualGoals = await pool.query(individualGoalsQuery, [startDate, endDate])
+    console.log("✅ Goals: Fetched", individualGoals.rows.length, "individual goals")
+
+    res.json({
+      generalGoals: generalGoals.rows,
+      individualGoals: individualGoals.rows,
+    })
   } catch (error) {
-    console.error("❌ Supervisors: Error fetching supervisors:", error.message)
+    console.error("❌ Goals: Error fetching goals:", error.message)
     res.status(500).json({
-      message: "Erro ao buscar supervisores",
+      message: "Erro ao carregar metas",
       error: error.message,
     })
   }
 })
 
-// Other dashboard endpoints remain the same...
-app.get("/api/dashboard/vendedor/:id", authenticateToken, async (req, res) => {
+// Create/Update goal
+app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
+  console.log("--- Goals API: POST /api/goals started ---")
+  try {
+    const { type, goalData } = req.body
+    const { id, tipo_meta, valor_meta, data_inicio, data_fim, usuario_id } = goalData
+    const created_by = req.user.id
+
+    console.log("📝 Goals: Creating/updating goal:", { type, goalData })
+
+    let result
+    if (type === "general") {
+      if (id) {
+        result = await pool.query(
+          `UPDATE metas_gerais SET tipo_meta = $1, valor_meta = $2, data_inicio = $3, data_fim = $4, atualizado_em = NOW()
+           WHERE id = $5 RETURNING *`,
+          [tipo_meta, valor_meta, data_inicio, data_fim, id],
+        )
+      } else {
+        result = await pool.query(
+          `INSERT INTO metas_gerais (tipo_meta, valor_meta, data_inicio, data_fim, criado_por)
+           VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+          [tipo_meta, valor_meta, data_inicio, data_fim, created_by],
+        )
+      }
+    } else if (type === "individual") {
+      if (id) {
+        result = await pool.query(
+          `UPDATE metas_individuais SET tipo_meta = $1, valor_meta = $2, data_inicio = $3, data_fim = $4, usuario_id = $5, atualizado_em = NOW()
+           WHERE id = $6 RETURNING *`,
+          [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, id],
+        )
+      } else {
+        result = await pool.query(
+          `INSERT INTO metas_individuais (tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, criado_por)
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+          [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, created_by],
+        )
+      }
+    } else {
+      return res.status(400).json({ message: "Invalid goal type" })
+    }
+
+    console.log("✅ Goals: Goal saved successfully")
+    res.status(201).json(result.rows[0])
+  } catch (error) {
+    console.error("❌ Goals: Error saving goal:", error.message)
+    res.status(500).json({
+      message: "Erro ao salvar meta",
+      error: error.message,
+    })
+  }
+})
+
+// Delete goal
+app.delete("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
+  console.log("--- Goals API: DELETE /api/goals started ---")
+  try {
+    const { type, id } = req.params
+    console.log("🗑️ Goals: Deleting goal:", { type, id })
+
+    if (type === "general") {
+      await pool.query("DELETE FROM metas_gerais WHERE id = $1", [id])
+    } else if (type === "individual") {
+      await pool.query("DELETE FROM metas_individuais WHERE id = $1", [id])
+    } else {
+      return res.status(400).json({ message: "Invalid goal type" })
+    }
+
+    console.log("✅ Goals: Goal deleted successfully")
+    res.status(204).send()
+  } catch (error) {
+    console.error("❌ Goals: Error deleting goal:", error.message)
+    res.status(500).json({
+      message: "Erro ao excluir meta",
+      error: error.message,
+    })
+  }
+})
+
+// Get goal tracking for seller
+app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) => {
+  console.log("--- Goals API: GET /api/goals/tracking/seller started ---")
   try {
     const { id } = req.params
     const { period } = req.query
     const { startDate, endDate } = getDateRange(period)
 
+    console.log("📊 Goals Tracking: User ID:", id, "Period:", period)
+
+    // Check if user can access this data
     if (req.user.role === "vendedor" && req.user.id !== Number.parseInt(id)) {
       return res.status(403).json({ message: "Access denied" })
     }
 
-    const proposalsQuery = `
+    // Get individual goals for this user
+    const individualGoalsQuery = `
+      SELECT * FROM metas_individuais 
+      WHERE usuario_id = $1 
+      AND data_inicio <= $3 AND data_fim >= $2
+      ORDER BY data_inicio DESC
+    `
+    const individualGoals = await pool.query(individualGoalsQuery, [id, startDate, endDate])
+
+    // Get general goals that apply to this user
+    const generalGoalsQuery = `
+      SELECT * FROM metas_gerais 
+      WHERE data_inicio <= $2 AND data_fim >= $1
+      ORDER BY data_inicio DESC
+    `
+    const generalGoals = await pool.query(generalGoalsQuery, [startDate, endDate])
+
+    // Get actual performance data
+    const performanceQuery = `
       SELECT 
-        COUNT(*) as total, 
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento_total
+        COUNT(*) as total_propostas,
+        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as propostas_convertidas,
+        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento_total
       FROM clone_propostas_apprudnik 
       WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
     `
+    const performance = await pool.query(performanceQuery, [id, startDate, endDate])
+
+    const actualData = performance.rows[0]
+
+    // Calculate progress for each goal
+    const processGoals = (goals, isIndividual = false) => {
+      return goals.map((goal) => {
+        let achieved = 0
+        if (goal.tipo_meta === "faturamento") {
+          achieved = Number.parseFloat(actualData.faturamento_total)
+        } else if (goal.tipo_meta === "propostas") {
+          achieved = Number.parseInt(actualData.total_propostas)
+        }
+
+        const target = Number.parseFloat(goal.valor_meta)
+        const progress = target > 0 ? (achieved / target) * 100 : 0
+
+        return {
+          ...goal,
+          achieved,
+          progress: Math.min(progress, 100), // Cap at 100%
+          isIndividual,
+        }
+      })
+    }
+
+    const individualGoalsWithProgress = processGoals(individualGoals.rows, true)
+    const generalGoalsWithProgress = processGoals(generalGoals.rows, false)
+
+    const allGoals = [...individualGoalsWithProgress, ...generalGoalsWithProgress]
+
+    console.log("✅ Goals Tracking: Processed", allGoals.length, "goals")
+
+    res.json(allGoals)
+  } catch (error) {
+    console.error("❌ Goals Tracking: Error:", error.message)
+    res.status(500).json({
+      message: "Erro ao carregar tracking de metas",
+      error: error.message,
+    })
+  }
+})
+
+// Get users for goal assignment
+app.get("/api/users", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
+  console.log("--- Users API: GET /api/users started ---")
+  try {
+    const usersQuery = `
+      SELECT id, name, email, role, supervisor, is_active
+      FROM clone_users_apprudnik 
+      WHERE is_active = true
+      ORDER BY name
+    `
+
+    const result = await pool.query(usersQuery)
+    console.log("✅ Users: Fetched", result.rows.length, "users")
+
+    res.json(result.rows)
+  } catch (error) {
+    console.error("❌ Users: Error fetching users:", error.message)
+    res.status(500).json({
+      message: "Erro ao buscar usuários",
+      error: error.message,
+    })
+  }
+})
+
+// Dashboard endpoints (keeping existing ones)
+app.get("/api/dashboard/vendedor/:id", authenticateToken, async (req, res) => {
+  try {
+    console.log("📊 Vendedor dashboard request:", { id: req.params.id, period: req.query.period })
+    const { id } = req.params
+    const { period } = req.query
+
+    const { startDate, endDate } = getDateRange(period)
+    console.log("📅 Date range:", { startDate, endDate })
+
+    // Check if user can access this data
+    if (req.user.role === "vendedor" && req.user.id !== Number.parseInt(id)) {
+      return res.status(403).json({ message: "Access denied" })
+    }
+
+    // Get proposals data
+    const proposalsQuery = `
+  SELECT 
+    COUNT(*) as total, 
+    COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas,
+    COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento_total
+  FROM clone_propostas_apprudnik 
+  WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+`
+
     const propostas = await pool.query(proposalsQuery, [id, startDate, endDate])
 
+    // Get monthly sales data
     const monthlySalesQuery = `
-      SELECT 
-        DATE_TRUNC('month', created_at) as mes,
-        COUNT(*) as total_propostas,
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento
-      FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-      GROUP BY DATE_TRUNC('month', created_at)
-      ORDER BY mes
-    `
+  SELECT 
+    DATE_TRUNC('month', created_at) as mes,
+    COUNT(*) as total_propostas,
+    COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
+    COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento
+  FROM clone_propostas_apprudnik 
+  WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+  GROUP BY DATE_TRUNC('month', created_at)
+  ORDER BY mes
+`
+
     const vendasMensais = await pool.query(monthlySalesQuery, [id, startDate, endDate])
 
     const totalPropostas = Number.parseInt(propostas.rows[0].total)
@@ -597,7 +885,7 @@ app.get("/api/dashboard/vendedor/:id", authenticateToken, async (req, res) => {
     const taxaConversao = totalPropostas > 0 ? ((propostasConvertidas / totalPropostas) * 100).toFixed(2) : 0
     const ticketMedio = propostasConvertidas > 0 ? (faturamentoTotal / propostasConvertidas).toFixed(2) : 0
 
-    res.json({
+    const response = {
       resumo: {
         totalPropostas,
         propostasConvertidas,
@@ -611,43 +899,210 @@ app.get("/api/dashboard/vendedor/:id", authenticateToken, async (req, res) => {
         vendas: Number.parseInt(row.vendas),
         faturamento: Number.parseFloat(row.faturamento),
       })),
-    })
+    }
+
+    res.json(response)
   } catch (error) {
     console.error("❌ Dashboard vendedor error:", error)
-    res.status(500).json({ message: "Erro ao carregar dashboard", error: error.message })
+    res.status(500).json({
+      message: "Erro ao carregar dashboard",
+      error: error.message,
+    })
+  }
+})
+
+app.get("/api/dashboard/representante/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { period } = req.query
+
+    const { startDate, endDate } = getDateRange(period)
+
+    if (req.user.role === "representante" && req.user.id !== Number.parseInt(id)) {
+      return res.status(403).json({ message: "Access denied" })
+    }
+
+    const proposalsQuery = `
+  SELECT 
+    COUNT(*) as total, 
+    COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas,
+    COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento_total
+  FROM clone_propostas_apprudnik 
+  WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+`
+
+    const monthlySalesQuery = `
+  SELECT 
+    DATE_TRUNC('month', created_at) as mes,
+    COUNT(*) as total_propostas,
+    COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
+    COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento
+  FROM clone_propostas_apprudnik 
+  WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+  GROUP BY DATE_TRUNC('month', created_at)
+  ORDER BY mes
+`
+
+    const propostas = await pool.query(proposalsQuery, [id, startDate, endDate])
+    const vendasMensais = await pool.query(monthlySalesQuery, [id, startDate, endDate])
+
+    const totalPropostas = Number.parseInt(propostas.rows[0].total)
+    const propostasConvertidas = Number.parseInt(propostas.rows[0].convertidas)
+    const faturamentoTotal = Number.parseFloat(propostas.rows[0].faturamento_total)
+    const taxaConversao = totalPropostas > 0 ? ((propostasConvertidas / totalPropostas) * 100).toFixed(2) : 0
+    const ticketMedio = propostasConvertidas > 0 ? (faturamentoTotal / propostasConvertidas).toFixed(2) : 0
+
+    const response = {
+      resumo: {
+        totalPropostas,
+        propostasConvertidas,
+        faturamentoTotal,
+        taxaConversao: Number.parseFloat(taxaConversao),
+        ticketMedio: Number.parseFloat(ticketMedio),
+      },
+      vendasMensais: vendasMensais.rows.map((row) => ({
+        mes: row.mes,
+        totalPropostas: Number.parseInt(row.total_propostas),
+        vendas: Number.parseInt(row.vendas),
+        faturamento: Number.parseFloat(row.faturamento),
+      })),
+    }
+
+    res.json(response)
+  } catch (error) {
+    console.error("❌ Dashboard representante error:", error)
+    res.status(500).json({
+      message: "Erro ao carregar dashboard",
+      error: error.message,
+    })
+  }
+})
+
+app.get("/api/dashboard/supervisor/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { period } = req.query
+
+    const { startDate, endDate } = getDateRange(period)
+
+    if (req.user.role === "supervisor" && req.user.id !== Number.parseInt(id)) {
+      return res.status(403).json({ message: "Access denied" })
+    }
+
+    const teamQuery = `
+      SELECT id, name FROM clone_users_apprudnik 
+      WHERE supervisor = $1 AND is_active = true
+    `
+    const vendedores = await pool.query(teamQuery, [id])
+    const vendedorIds = vendedores.rows.map((v) => v.id)
+
+    if (vendedorIds.length === 0) {
+      return res.json({
+        resumo: { totalPropostas: 0, propostasConvertidas: 0, faturamentoTotal: 0 },
+        rankingVendedores: [],
+      })
+    }
+
+    const teamSummaryQuery = `
+  SELECT 
+    COUNT(*) as total_propostas,
+    COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas,
+    COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento
+  FROM clone_propostas_apprudnik 
+  WHERE seller = ANY($1) AND created_at >= $2 AND created_at <= $3
+`
+
+    const rankingQuery = `
+  SELECT 
+    u.name, u.id,
+    COUNT(p.*) as propostas,
+    COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) as vendas,
+    COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento
+  FROM clone_users_apprudnik u
+  LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
+    AND p.created_at >= $2 AND p.created_at <= $3
+  WHERE u.id = ANY($1)
+  GROUP BY u.id, u.name
+  ORDER BY faturamento DESC
+`
+
+    const resumoEquipe = await pool.query(teamSummaryQuery, [vendedorIds, startDate, endDate])
+    const ranking = await pool.query(rankingQuery, [vendedorIds, startDate, endDate])
+
+    const response = {
+      resumo: {
+        totalPropostas: Number.parseInt(resumoEquipe.rows[0].total_propostas),
+        propostasConvertidas: Number.parseInt(resumoEquipe.rows[0].convertidas),
+        faturamentoTotal: Number.parseFloat(resumoEquipe.rows[0].faturamento),
+      },
+      rankingVendedores: ranking.rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        propostas: Number.parseInt(row.propostas),
+        vendas: Number.parseInt(row.vendas),
+        faturamento: Number.parseFloat(row.faturamento),
+      })),
+    }
+
+    res.json(response)
+  } catch (error) {
+    console.error("❌ Dashboard supervisor error:", error)
+    res.status(500).json({
+      message: "Erro ao carregar dashboard",
+      error: error.message,
+    })
   }
 })
 
 app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) => {
   try {
     const { period } = req.query
+
     const { startDate, endDate } = getDateRange(period)
 
     const globalQuery = `
-      SELECT 
-        COUNT(*) as total_propostas,
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento_total
-      FROM clone_propostas_apprudnik 
-      WHERE created_at >= $1 AND created_at <= $2
-    `
-    const indicadores = await pool.query(globalQuery, [startDate, endDate])
+  SELECT 
+    COUNT(*) as total_propostas,
+    COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
+    COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento_total
+  FROM clone_propostas_apprudnik 
+  WHERE created_at >= $1 AND created_at <= $2
+`
 
     const monthlyRevenueQuery = `
-      SELECT 
-        DATE_TRUNC('month', created_at) as mes,
-        COALESCE(SUM(total_price), 0) as faturamento,
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas
-      FROM clone_propostas_apprudnik 
-      WHERE has_generated_sale = true AND created_at >= $1 AND created_at <= $2
-      GROUP BY DATE_TRUNC('month', created_at)
-      ORDER BY mes
-    `
-    const faturamentoMensal = await pool.query(monthlyRevenueQuery, [startDate, endDate])
+  SELECT 
+    DATE_TRUNC('month', created_at) as mes,
+    COALESCE(SUM(CAST(total_price AS DECIMAL)), 0) as faturamento,
+    COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas
+  FROM clone_propostas_apprudnik 
+  WHERE has_generated_sale = true AND created_at >= $1 AND created_at <= $2
+  GROUP BY DATE_TRUNC('month', created_at)
+  ORDER BY mes
+`
 
+    const topPerformersQuery = `
+  SELECT 
+    u.name,
+    u.role,
+    COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento,
+    COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) as vendas
+  FROM clone_users_apprudnik u
+  LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
+    AND p.created_at >= $1 AND p.created_at <= $2
+  WHERE u.role IN ('vendedor', 'representante') AND u.is_active = true
+  GROUP BY u.id, u.name, u.role
+  ORDER BY faturamento DESC
+  LIMIT 10
+`
+
+    const indicadores = await pool.query(globalQuery, [startDate, endDate])
+    const faturamentoMensal = await pool.query(monthlyRevenueQuery, [startDate, endDate])
+    const topVendedores = await pool.query(topPerformersQuery, [startDate, endDate])
+
+    // Meta mensal (exemplo fixo, pode vir de uma tabela de metas)
     const metaMensal = 150000 // R$ 150.000,00
 
-    res.json({
+    const response = {
       indicadores: {
         totalPropostas: Number.parseInt(indicadores.rows[0].total_propostas),
         totalVendas: Number.parseInt(indicadores.rows[0].vendas),
@@ -659,10 +1114,21 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
         faturamento: Number.parseFloat(row.faturamento),
         vendas: Number.parseInt(row.vendas),
       })),
-    })
+      topVendedores: topVendedores.rows.map((row) => ({
+        name: row.name,
+        role: row.role,
+        faturamento: Number.parseFloat(row.faturamento),
+        vendas: Number.parseInt(row.vendas),
+      })),
+    }
+
+    res.json(response)
   } catch (error) {
     console.error("❌ Dashboard gerente comercial error:", error)
-    res.status(500).json({ message: "Erro ao carregar dashboard", error: error.message })
+    res.status(500).json({
+      message: "Erro ao carregar dashboard",
+      error: error.message,
+    })
   }
 })
 
@@ -677,12 +1143,15 @@ app.use((error, req, res, next) => {
 
 // 404 handler
 app.use("*", (req, res) => {
+  console.log("❌ 404: Route not found:", req.originalUrl)
   res.status(404).json({ message: "Route not found" })
 })
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`)
   console.log(`📊 Dashboard API available at http://localhost:${PORT}/api/dashboard`)
+  console.log(`🎯 Goals API available at http://localhost:${PORT}/api/goals`)
+  console.log(`👤 Users API available at http://localhost:${PORT}/api/users`)
   console.log(`📈 Performance API available at http://localhost:${PORT}/api/performance`)
   console.log(`🏥 Health check at http://localhost:${PORT}/health`)
 })
