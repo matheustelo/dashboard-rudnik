@@ -1,13 +1,70 @@
 <template>
   <div class="bg-white shadow rounded-lg overflow-hidden">
     <div class="px-4 py-5 sm:p-6">
-      <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
-        {{ title }}
-      </h3>
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg leading-6 font-medium text-gray-900">
+          {{ title }}
+        </h3>
+        
+        <!-- Enhanced Filters -->
+        <div class="flex space-x-4">
+          <!-- Date Range Filter -->
+          <div class="flex space-x-2">
+            <input
+              v-model="filters.startDate"
+              type="date"
+              class="border border-gray-300 rounded-md px-3 py-2 text-sm"
+              @change="$emit('filter-change', filters)"
+            />
+            <input
+              v-model="filters.endDate"
+              type="date"
+              class="border border-gray-300 rounded-md px-3 py-2 text-sm"
+              @change="$emit('filter-change', filters)"
+            />
+          </div>
+          
+          <!-- Supervisor Filter -->
+          <select
+            v-model="filters.supervisor"
+            @change="$emit('filter-change', filters)"
+            class="border border-gray-300 rounded-md px-3 py-2 text-sm"
+          >
+            <option value="all">Todos os Supervisores</option>
+            <option 
+              v-for="supervisor in supervisors" 
+              :key="supervisor.id" 
+              :value="supervisor.id"
+            >
+              {{ supervisor.name }}
+            </option>
+          </select>
+          
+          <!-- Period Filter -->
+          <select
+            v-model="filters.period"
+            @change="$emit('filter-change', filters)"
+            class="border border-gray-300 rounded-md px-3 py-2 text-sm"
+          >
+            <option value="">Período Personalizado</option>
+            <option value="2025-01">Janeiro 2025</option>
+            <option value="2025-02">Fevereiro 2025</option>
+            <option value="2025-03">Março 2025</option>
+            <option value="2025-04">Abril 2025</option>
+            <option value="2025-05">Maio 2025</option>
+            <option value="2025-06">Junho 2025</option>
+            <option value="2025-07">Julho 2025</option>
+          </select>
+        </div>
+      </div>
+      
       <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Posição
+              </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Nome
               </th>
@@ -18,7 +75,13 @@
                 Propostas
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Meta Propostas
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Vendas
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Meta Vendas
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Taxa Conversão
@@ -27,22 +90,39 @@
                 Faturamento
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Ticket Médio
-              </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Metas
-              </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
+                Meta Faturamento
               </th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
             <tr
-              v-for="(member, index) in teamMembers"
+              v-for="(member, index) in sortedTeamMembers"
               :key="member.id"
-              :class="getRowClass(member, index)"
+              :class="getRowClass(index)"
+              class="hover:bg-gray-50 transition-colors duration-200"
             >
+              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                <span
+                  v-if="index === 0"
+                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"
+                >
+                  🥇 1º
+                </span>
+                <span
+                  v-else-if="index === 1"
+                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
+                >
+                  🥈 2º
+                </span>
+                <span
+                  v-else-if="index === 2"
+                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800"
+                >
+                  🥉 3º
+                </span>
+                <span v-else class="text-gray-500">{{ index + 1 }}º</span>
+              </td>
+              
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center">
                   <div class="flex-shrink-0 h-10 w-10">
@@ -53,11 +133,20 @@
                     </div>
                   </div>
                   <div class="ml-4">
-                    <div class="text-sm font-medium text-gray-900">{{ member.name }}</div>
+                    <button
+                      @click="$emit('drill-down', member)"
+                      class="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                    >
+                      {{ member.name }}
+                    </button>
                     <div class="text-sm text-gray-500">{{ member.email }}</div>
+                    <div v-if="member.supervisorName" class="text-xs text-gray-400">
+                      Supervisor: {{ member.supervisorName }}
+                    </div>
                   </div>
                 </div>
               </td>
+              
               <td class="px-6 py-4 whitespace-nowrap">
                 <span 
                   :class="getRoleClass(member.role)"
@@ -66,12 +155,49 @@
                   {{ getRoleLabel(member.role) }}
                 </span>
               </td>
+              
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ member.performance.totalPropostas }}
+                <div class="flex flex-col">
+                  <span class="font-medium">{{ member.performance.totalPropostas }}</span>
+                  <div class="w-full bg-gray-200 rounded-full h-1 mt-1">
+                    <div 
+                      class="h-1 rounded-full bg-blue-500"
+                      :style="{ width: Math.min((member.performance.totalPropostas / member.targets.metaPropostas) * 100, 100) + '%' }"
+                    ></div>
+                  </div>
+                </div>
               </td>
+              
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <div class="flex flex-col">
+                  <span>{{ member.targets.metaPropostas }}</span>
+                  <span class="text-xs" :class="getAchievementColor(member.achievements.propostasAchievement)">
+                    {{ member.achievements.propostasAchievement }}%
+                  </span>
+                </div>
+              </td>
+              
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ member.performance.propostasConvertidas }}
+                <div class="flex flex-col">
+                  <span class="font-medium">{{ member.performance.propostasConvertidas }}</span>
+                  <div class="w-full bg-gray-200 rounded-full h-1 mt-1">
+                    <div 
+                      class="h-1 rounded-full bg-green-500"
+                      :style="{ width: Math.min((member.performance.propostasConvertidas / member.targets.metaVendas) * 100, 100) + '%' }"
+                    ></div>
+                  </div>
+                </div>
               </td>
+              
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <div class="flex flex-col">
+                  <span>{{ member.targets.metaVendas }}</span>
+                  <span class="text-xs" :class="getAchievementColor(member.achievements.vendasAchievement)">
+                    {{ member.achievements.vendasAchievement }}%
+                  </span>
+                </div>
+              </td>
+              
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center">
                   <div class="flex-1">
@@ -86,31 +212,26 @@
                   </div>
                 </div>
               </td>
+              
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                R$ {{ formatCurrency(member.performance.faturamentoTotal) }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                R$ {{ formatCurrency(member.performance.ticketMedio) }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm text-gray-900">
-                  {{ member.goals.achievedGoals }}/{{ member.goals.totalGoals }}
-                </div>
-                <div class="w-full bg-gray-200 rounded-full h-2 mt-1">
-                  <div 
-                    class="h-2 rounded-full"
-                    :class="getGoalProgressColor(member.goals)"
-                    :style="{ width: getGoalProgressPercentage(member.goals) + '%' }"
-                  ></div>
+                <div class="flex flex-col">
+                  <span class="font-medium">R$ {{ formatCurrency(member.performance.faturamentoTotal) }}</span>
+                  <div class="w-full bg-gray-200 rounded-full h-1 mt-1">
+                    <div 
+                      class="h-1 rounded-full bg-purple-500"
+                      :style="{ width: Math.min((member.performance.faturamentoTotal / member.targets.metaFaturamento) * 100, 100) + '%' }"
+                    ></div>
+                  </div>
                 </div>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <span 
-                  :class="getStatusClass(member)"
-                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                >
-                  {{ getStatusLabel(member) }}
-                </span>
+              
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <div class="flex flex-col">
+                  <span>R$ {{ formatCurrency(member.targets.metaFaturamento) }}</span>
+                  <span class="text-xs" :class="getAchievementColor(member.achievements.faturamentoAchievement)">
+                    {{ member.achievements.faturamentoAchievement }}%
+                  </span>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -121,15 +242,37 @@
 </template>
 
 <script setup>
+import { computed, ref } from 'vue'
+
 const props = defineProps({
   teamMembers: {
     type: Array,
     required: true
   },
+  supervisors: {
+    type: Array,
+    default: () => []
+  },
   title: {
     type: String,
-    default: 'Performance da Equipe'
+    default: 'Performance Detalhada da Equipe'
   }
+})
+
+const emit = defineEmits(['filter-change', 'drill-down'])
+
+const filters = ref({
+  startDate: '',
+  endDate: '',
+  supervisor: 'all',
+  period: ''
+})
+
+// Sort team members by faturamento (descending)
+const sortedTeamMembers = computed(() => {
+  return [...props.teamMembers].sort((a, b) => 
+    b.performance.faturamentoTotal - a.performance.faturamentoTotal
+  )
 })
 
 const formatCurrency = (value) => {
@@ -161,7 +304,7 @@ const getRoleLabel = (role) => {
   }
 }
 
-const getRowClass = (member, index) => {
+const getRowClass = (index) => {
   if (index < 3) {
     return 'bg-yellow-50'
   }
@@ -174,42 +317,10 @@ const getConversionRateColor = (rate) => {
   return 'bg-red-500'
 }
 
-const getGoalProgressColor = (goals) => {
-  if (goals.totalGoals === 0) return 'bg-gray-300'
-  const percentage = (goals.achievedGoals / goals.totalGoals) * 100
-  if (percentage >= 100) return 'bg-green-500'
-  if (percentage >= 75) return 'bg-yellow-500'
-  return 'bg-red-500'
-}
-
-const getGoalProgressPercentage = (goals) => {
-  if (goals.totalGoals === 0) return 0
-  return Math.min((goals.achievedGoals / goals.totalGoals) * 100, 100)
-}
-
-const getStatusClass = (member) => {
-  const conversionRate = member.performance.conversionRate
-  const goalProgress = member.goals.totalGoals > 0 ? (member.goals.achievedGoals / member.goals.totalGoals) * 100 : 0
-  
-  if (conversionRate >= 20 && goalProgress >= 75) {
-    return 'bg-green-100 text-green-800'
-  } else if (conversionRate >= 15 && goalProgress >= 50) {
-    return 'bg-yellow-100 text-yellow-800'
-  } else {
-    return 'bg-red-100 text-red-800'
-  }
-}
-
-const getStatusLabel = (member) => {
-  const conversionRate = member.performance.conversionRate
-  const goalProgress = member.goals.totalGoals > 0 ? (member.goals.achievedGoals / member.goals.totalGoals) * 100 : 0
-  
-  if (conversionRate >= 20 && goalProgress >= 75) {
-    return 'Excelente'
-  } else if (conversionRate >= 15 && goalProgress >= 50) {
-    return 'Bom'
-  } else {
-    return 'Precisa Melhorar'
-  }
+const getAchievementColor = (percentage) => {
+  const pct = parseFloat(percentage)
+  if (pct >= 100) return 'text-green-600 font-medium'
+  if (pct >= 75) return 'text-yellow-600 font-medium'
+  return 'text-red-600 font-medium'
 }
 </script>

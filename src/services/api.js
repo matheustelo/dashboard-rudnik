@@ -65,7 +65,28 @@ export const goalsService = {
 
 // Performance service
 export const performanceService = {
-  getTeamPerformance: (period) => api.get("/performance/team", { params: { period } }),
+  getTeamPerformance: (filters) => {
+    const params = new URLSearchParams()
+    if (filters.period) params.append("period", filters.period)
+    if (filters.startDate) params.append("startDate", filters.startDate)
+    if (filters.endDate) params.append("endDate", filters.endDate)
+    if (filters.supervisor) params.append("supervisor", filters.supervisor)
+
+    return api.get(`/performance/team?${params.toString()}`)
+  },
+  getRepresentativeDetails: (id, filters) => {
+    const params = new URLSearchParams()
+    if (filters.period) params.append("period", filters.period)
+    if (filters.startDate) params.append("startDate", filters.startDate)
+    if (filters.endDate) params.append("endDate", filters.endDate)
+
+    return api.get(`/performance/representative/${id}?${params.toString()}`)
+  },
+}
+
+// Supervisors service
+export const supervisorService = {
+  getSupervisors: () => api.get("/supervisors"),
 }
 
 // Users service

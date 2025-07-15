@@ -106,22 +106,26 @@ const authorize = (...roles) => {
 }
 
 // Helper function to get date range
-function getDateRange(period) {
+function getDateRange(period, startDate, endDate) {
+  if (startDate && endDate) {
+    return { startDate, endDate }
+  }
+
   if (!period) {
     const now = new Date()
-    const startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    const start = new Date(now.getFullYear(), now.getMonth(), 1)
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0)
     return {
-      startDate: startDate.toISOString().split("T")[0],
-      endDate: endDate.toISOString().split("T")[0],
+      startDate: start.toISOString().split("T")[0],
+      endDate: end.toISOString().split("T")[0],
     }
   }
 
   const [year, month] = period.split("-")
-  const startDate = `${year}-${month.padStart(2, "0")}-01`
-  const endDate = `${year}-${month.padStart(2, "0")}-31`
+  const start = `${year}-${month.padStart(2, "0")}-01`
+  const end = `${year}-${month.padStart(2, "0")}-31`
 
-  return { startDate, endDate }
+  return { startDate: start, endDate: end }
 }
 
 // Health check
@@ -187,6 +191,314 @@ app.post("/api/auth/login", async (req, res) => {
     res.status(500).json({ message: "Erro interno do servidor", error: error.message })
   }
 })
+
+// Get supervisors list
+app.get("/api/supervisors", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
+  console.log("--- Supervisors API: GET /api/supervisors started ---")
+  try {
+    const supervisorsQuery = `
+      SELECT DISTINCT id, name
+      FROM clone_users_apprudnik 
+      WHERE role = 'supervisor' AND is_active = true
+      ORDER BY name
+    `
+    const supervisors = await pool.query(supervisorsQuery)
+
+    console.log("✅ Supervisors: Fetched", supervisors.rows.length, "supervisors")
+    res.json(supervisors.rows)
+  } catch (error) {
+    console.error("❌ Supervisors: Error fetching supervisors:", error.message)
+    res.status(500).json({
+      message: "Erro ao buscar supervisores",
+      error: error.message,
+    })
+  }
+})
+
+// Get comprehensive team performance with enhanced filtering
+app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
+  console.log("--- Performance API: GET /api/performance/team started ---")
+  try {
+    const { period, startDate, endDate, supervisor } = req.query
+    const { startDate: dateStart, endDate: dateEnd } = getDateRange(period, startDate, endDate)
+
+    console.log("📊 Team Performance: Date range:", { dateStart, dateEnd, supervisor })
+
+    // Build supervisor filter
+    let supervisorFilter = ""
+    const queryParams = [dateStart, dateEnd]
+
+    if (supervisor && supervisor !== "all") {
+      supervisorFilter = "AND u.supervisor = $3"
+      queryParams.push(supervisor)
+    }
+
+    // Get all active sales representatives with targets
+    const teamMembersQuery = `
+      SELECT 
+        u.id, u.name, u.email, u.role, u.supervisor,
+        s.name as supervisor_name,
+        COUNT(p.*) as total_propostas,
+        COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) as propostas_convertidas,
+        COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento_total,
+        COALESCE(AVG(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) END), 0) as ticket_medio,
+        -- Default targets (can be customized per user)
+        CASE 
+          WHEN u.role = 'vendedor' THEN 50
+          WHEN u.role = 'representante' THEN 30
+          ELSE 40
+        END as meta_propostas,
+        CASE 
+          WHEN u.role = 'vendedor' THEN 15
+          WHEN u.role = 'representante' THEN 10
+          ELSE 12
+        END as meta_vendas,
+        CASE 
+          WHEN u.role = 'vendedor' THEN 75000
+          WHEN u.role = 'representante' THEN 50000
+          ELSE 60000
+        END as meta_faturamento
+      FROM clone_users_apprudnik u
+      LEFT JOIN clone_users_apprudnik s ON u.supervisor = s.id
+      LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
+        AND p.created_at >= $1 AND p.created_at <= $2
+      WHERE u.role IN ('vendedor', 'representante') AND u.is_active = true
+      ${supervisorFilter}
+      GROUP BY u.id, u.name, u.email, u.role, u.supervisor, s.name
+      ORDER BY faturamento_total DESC
+    `
+
+    const teamMembers = await pool.query(teamMembersQuery, queryParams)
+
+    // Calculate team stats
+    const totalMembers = teamMembers.rows.length
+    const totalPropostas = teamMembers.rows.reduce((sum, member) => sum + Number.parseInt(member.total_propostas), 0)
+    const totalConvertidas = teamMembers.rows.reduce(
+      (sum, member) => sum + Number.parseInt(member.propostas_convertidas),
+      0,
+    )
+    const totalFaturamento = teamMembers.rows.reduce(
+      (sum, member) => sum + Number.parseFloat(member.faturamento_total),
+      0,
+    )
+    const teamConversionRate = totalPropostas > 0 ? ((totalConvertidas / totalPropostas) * 100).toFixed(2) : 0
+
+    // Calculate goal achievement rates
+    const totalMetaPropostas = teamMembers.rows.reduce((sum, member) => sum + Number.parseInt(member.meta_propostas), 0)
+    const totalMetaVendas = teamMembers.rows.reduce((sum, member) => sum + Number.parseInt(member.meta_vendas), 0)
+    const totalMetaFaturamento = teamMembers.rows.reduce(
+      (sum, member) => sum + Number.parseFloat(member.meta_faturamento),
+      0,
+    )
+
+    const goalAchievementRate =
+      totalMetaFaturamento > 0 ? ((totalFaturamento / totalMetaFaturamento) * 100).toFixed(2) : 0
+
+    // Format team members data
+    const formattedTeamMembers = teamMembers.rows.map((member) => {
+      const conversionRate =
+        member.total_propostas > 0 ? ((member.propostas_convertidas / member.total_propostas) * 100).toFixed(2) : 0
+
+      return {
+        id: member.id,
+        name: member.name,
+        email: member.email,
+        role: member.role,
+        supervisor: member.supervisor,
+        supervisorName: member.supervisor_name,
+        performance: {
+          totalPropostas: Number.parseInt(member.total_propostas),
+          propostasConvertidas: Number.parseInt(member.propostas_convertidas),
+          conversionRate: Number.parseFloat(conversionRate),
+          faturamentoTotal: Number.parseFloat(member.faturamento_total),
+          ticketMedio: Number.parseFloat(member.ticket_medio),
+        },
+        targets: {
+          metaPropostas: Number.parseInt(member.meta_propostas),
+          metaVendas: Number.parseInt(member.meta_vendas),
+          metaFaturamento: Number.parseFloat(member.meta_faturamento),
+        },
+        achievements: {
+          propostasAchievement:
+            member.meta_propostas > 0 ? ((member.total_propostas / member.meta_propostas) * 100).toFixed(1) : 0,
+          vendasAchievement:
+            member.meta_vendas > 0 ? ((member.propostas_convertidas / member.meta_vendas) * 100).toFixed(1) : 0,
+          faturamentoAchievement:
+            member.meta_faturamento > 0 ? ((member.faturamento_total / member.meta_faturamento) * 100).toFixed(1) : 0,
+        },
+      }
+    })
+
+    console.log("✅ Team Performance: Processed", formattedTeamMembers.length, "team members")
+
+    res.json({
+      teamStats: {
+        totalMembers,
+        teamConversionRate: Number.parseFloat(teamConversionRate),
+        totalFaturamento,
+        goalAchievementRate: Number.parseFloat(goalAchievementRate),
+        totalPropostas,
+        totalConvertidas,
+        totalMetaPropostas,
+        totalMetaVendas,
+        totalMetaFaturamento,
+      },
+      teamMembers: formattedTeamMembers,
+      period: { startDate: dateStart, endDate: dateEnd },
+      filters: { supervisor },
+    })
+  } catch (error) {
+    console.error("❌ Team Performance: Error:", error.message)
+    res.status(500).json({
+      message: "Erro ao carregar performance da equipe",
+      error: error.message,
+    })
+  }
+})
+
+// Get detailed representative performance (drill-down)
+app.get(
+  "/api/performance/representative/:id",
+  authenticateToken,
+  authorize("admin", "gerente_comercial"),
+  async (req, res) => {
+    console.log("--- Performance API: GET /api/performance/representative started ---")
+    try {
+      const { id } = req.params
+      const { period, startDate, endDate } = req.query
+      const { startDate: dateStart, endDate: dateEnd } = getDateRange(period, startDate, endDate)
+
+      console.log("📊 Representative Performance: User ID:", id, "Date range:", { dateStart, dateEnd })
+
+      // Get representative basic info
+      const userQuery = `
+      SELECT u.*, s.name as supervisor_name
+      FROM clone_users_apprudnik u
+      LEFT JOIN clone_users_apprudnik s ON u.supervisor = s.id
+      WHERE u.id = $1
+    `
+      const userResult = await pool.query(userQuery, [id])
+
+      if (userResult.rows.length === 0) {
+        return res.status(404).json({ message: "Representative not found" })
+      }
+
+      const representative = userResult.rows[0]
+
+      // Get detailed proposals
+      const proposalsQuery = `
+      SELECT 
+        id, client_name, total_price, has_generated_sale, created_at,
+        CASE 
+          WHEN has_generated_sale = true THEN 'Convertida'
+          ELSE 'Pendente'
+        END as status
+      FROM clone_propostas_apprudnik 
+      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      ORDER BY created_at DESC
+    `
+      const proposals = await pool.query(proposalsQuery, [id, dateStart, dateEnd])
+
+      // Get monthly performance trend
+      const monthlyTrendQuery = `
+      SELECT 
+        DATE_TRUNC('month', created_at) as mes,
+        COUNT(*) as propostas,
+        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
+        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento,
+        COALESCE(AVG(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as ticket_medio
+      FROM clone_propostas_apprudnik 
+      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      GROUP BY DATE_TRUNC('month', created_at)
+      ORDER BY mes
+    `
+      const monthlyTrend = await pool.query(monthlyTrendQuery, [id, dateStart, dateEnd])
+
+      // Get weekly performance for detailed chart
+      const weeklyTrendQuery = `
+      SELECT 
+        DATE_TRUNC('week', created_at) as semana,
+        COUNT(*) as propostas,
+        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
+        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento
+      FROM clone_propostas_apprudnik 
+      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      GROUP BY DATE_TRUNC('week', created_at)
+      ORDER BY semana
+    `
+      const weeklyTrend = await pool.query(weeklyTrendQuery, [id, dateStart, dateEnd])
+
+      // Get conversion funnel data
+      const funnelQuery = `
+      SELECT 
+        COUNT(*) as total_propostas,
+        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas_fechadas,
+        COALESCE(SUM(CAST(total_price AS DECIMAL)), 0) as valor_total_propostas,
+        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as valor_vendas
+      FROM clone_propostas_apprudnik 
+      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+    `
+      const funnel = await pool.query(funnelQuery, [id, dateStart, dateEnd])
+
+      // Calculate performance metrics
+      const totalPropostas = Number.parseInt(funnel.rows[0].total_propostas)
+      const vendasFechadas = Number.parseInt(funnel.rows[0].vendas_fechadas)
+      const conversionRate = totalPropostas > 0 ? ((vendasFechadas / totalPropostas) * 100).toFixed(2) : 0
+      const ticketMedio = vendasFechadas > 0 ? (funnel.rows[0].valor_vendas / vendasFechadas).toFixed(2) : 0
+
+      const response = {
+        representative: {
+          id: representative.id,
+          name: representative.name,
+          email: representative.email,
+          role: representative.role,
+          supervisorName: representative.supervisor_name,
+        },
+        summary: {
+          totalPropostas,
+          vendasFechadas,
+          conversionRate: Number.parseFloat(conversionRate),
+          faturamentoTotal: Number.parseFloat(funnel.rows[0].valor_vendas),
+          ticketMedio: Number.parseFloat(ticketMedio),
+          valorTotalPropostas: Number.parseFloat(funnel.rows[0].valor_total_propostas),
+        },
+        proposals: proposals.rows.map((proposal) => ({
+          id: proposal.id,
+          clientName: proposal.client_name,
+          totalPrice: Number.parseFloat(proposal.total_price),
+          status: proposal.status,
+          createdAt: proposal.created_at,
+          hasGeneratedSale: proposal.has_generated_sale,
+        })),
+        monthlyTrend: monthlyTrend.rows.map((row) => ({
+          mes: row.mes,
+          propostas: Number.parseInt(row.propostas),
+          vendas: Number.parseInt(row.vendas),
+          faturamento: Number.parseFloat(row.faturamento),
+          ticketMedio: Number.parseFloat(row.ticket_medio),
+          conversionRate: row.propostas > 0 ? ((row.vendas / row.propostas) * 100).toFixed(2) : 0,
+        })),
+        weeklyTrend: weeklyTrend.rows.map((row) => ({
+          semana: row.semana,
+          propostas: Number.parseInt(row.propostas),
+          vendas: Number.parseInt(row.vendas),
+          faturamento: Number.parseFloat(row.faturamento),
+          conversionRate: row.propostas > 0 ? ((row.vendas / row.propostas) * 100).toFixed(2) : 0,
+        })),
+        period: { startDate: dateStart, endDate: dateEnd },
+      }
+
+      console.log("✅ Representative Performance: Processed data for", representative.name)
+      res.json(response)
+    } catch (error) {
+      console.error("❌ Representative Performance: Error:", error.message)
+      res.status(500).json({
+        message: "Erro ao carregar performance do representante",
+        error: error.message,
+      })
+    }
+  },
+)
 
 // Goals API endpoints
 app.get("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
@@ -410,170 +722,6 @@ app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) =>
     console.error("❌ Goals Tracking: Error:", error.message)
     res.status(500).json({
       message: "Erro ao carregar tracking de metas",
-      error: error.message,
-    })
-  }
-})
-
-// Get comprehensive team performance for gerente_comercial
-app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
-  console.log("--- Performance API: GET /api/performance/team started ---")
-  try {
-    const { period } = req.query
-    const { startDate, endDate } = getDateRange(period)
-
-    console.log("📊 Team Performance: Date range:", { startDate, endDate })
-
-    // Get all active sales representatives
-    const teamMembersQuery = `
-      SELECT id, name, email, role, supervisor
-      FROM clone_users_apprudnik 
-      WHERE role IN ('vendedor', 'representante') AND is_active = true
-      ORDER BY name
-    `
-    const teamMembers = await pool.query(teamMembersQuery)
-
-    // Get performance data for each team member
-    const performancePromises = teamMembers.rows.map(async (member) => {
-      // Basic performance metrics
-      const performanceQuery = `
-        SELECT 
-          COUNT(*) as total_propostas,
-          COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as propostas_convertidas,
-          COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento_total,
-          COALESCE(AVG(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as ticket_medio
-        FROM clone_propostas_apprudnik 
-        WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-      `
-      const performance = await pool.query(performanceQuery, [member.id, startDate, endDate])
-      const perfData = performance.rows[0]
-
-      // Calculate conversion rate
-      const totalPropostas = Number.parseInt(perfData.total_propostas)
-      const propostasConvertidas = Number.parseInt(perfData.propostas_convertidas)
-      const conversionRate = totalPropostas > 0 ? (propostasConvertidas / totalPropostas) * 100 : 0
-
-      // Get individual goals for this member
-      const individualGoalsQuery = `
-        SELECT * FROM metas_individuais 
-        WHERE usuario_id = $1 
-        AND data_inicio <= $3 AND data_fim >= $2
-        ORDER BY data_inicio DESC
-      `
-      const individualGoals = await pool.query(individualGoalsQuery, [member.id, startDate, endDate])
-
-      // Get general goals
-      const generalGoalsQuery = `
-        SELECT * FROM metas_gerais 
-        WHERE data_inicio <= $2 AND data_fim >= $1
-        ORDER BY data_inicio DESC
-      `
-      const generalGoals = await pool.query(generalGoalsQuery, [startDate, endDate])
-
-      // Calculate goal achievement
-      const calculateGoalAchievement = (goals) => {
-        return goals.map((goal) => {
-          let achieved = 0
-          if (goal.tipo_meta === "faturamento") {
-            achieved = Number.parseFloat(perfData.faturamento_total)
-          } else if (goal.tipo_meta === "propostas") {
-            achieved = Number.parseInt(perfData.total_propostas)
-          }
-
-          const target = Number.parseFloat(goal.valor_meta)
-          const progress = target > 0 ? (achieved / target) * 100 : 0
-
-          return {
-            ...goal,
-            achieved,
-            target,
-            progress: Math.round(progress * 100) / 100,
-            status: progress >= 100 ? "achieved" : progress >= 75 ? "on-track" : "behind",
-          }
-        })
-      }
-
-      const individualGoalsWithProgress = calculateGoalAchievement(individualGoals.rows)
-      const generalGoalsWithProgress = calculateGoalAchievement(generalGoals.rows)
-
-      // Get monthly trend data
-      const monthlyTrendQuery = `
-        SELECT 
-          DATE_TRUNC('month', created_at) as mes,
-          COUNT(*) as propostas,
-          COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
-          COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento
-        FROM clone_propostas_apprudnik 
-        WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-        GROUP BY DATE_TRUNC('month', created_at)
-        ORDER BY mes
-      `
-      const monthlyTrend = await pool.query(monthlyTrendQuery, [member.id, startDate, endDate])
-
-      return {
-        ...member,
-        performance: {
-          totalPropostas,
-          propostasConvertidas,
-          faturamentoTotal: Number.parseFloat(perfData.faturamento_total),
-          ticketMedio: Number.parseFloat(perfData.ticket_medio),
-          conversionRate: Math.round(conversionRate * 100) / 100,
-        },
-        goals: {
-          individual: individualGoalsWithProgress,
-          general: generalGoalsWithProgress,
-          totalGoals: individualGoalsWithProgress.length + generalGoalsWithProgress.length,
-          achievedGoals: [...individualGoalsWithProgress, ...generalGoalsWithProgress].filter(
-            (g) => g.status === "achieved",
-          ).length,
-        },
-        monthlyTrend: monthlyTrend.rows.map((row) => ({
-          mes: row.mes,
-          propostas: Number.parseInt(row.propostas),
-          vendas: Number.parseInt(row.vendas),
-          faturamento: Number.parseFloat(row.faturamento),
-          conversionRate: row.propostas > 0 ? Math.round((row.vendas / row.propostas) * 10000) / 100 : 0,
-        })),
-      }
-    })
-
-    const teamPerformance = await Promise.all(performancePromises)
-
-    // Calculate team-wide statistics
-    const teamStats = {
-      totalMembers: teamPerformance.length,
-      totalPropostas: teamPerformance.reduce((sum, member) => sum + member.performance.totalPropostas, 0),
-      totalVendas: teamPerformance.reduce((sum, member) => sum + member.performance.propostasConvertidas, 0),
-      totalFaturamento: teamPerformance.reduce((sum, member) => sum + member.performance.faturamentoTotal, 0),
-      averageConversionRate:
-        teamPerformance.length > 0
-          ? Math.round(
-              (teamPerformance.reduce((sum, member) => sum + member.performance.conversionRate, 0) /
-                teamPerformance.length) *
-                100,
-            ) / 100
-          : 0,
-      totalGoals: teamPerformance.reduce((sum, member) => sum + member.goals.totalGoals, 0),
-      totalAchievedGoals: teamPerformance.reduce((sum, member) => sum + member.goals.achievedGoals, 0),
-    }
-
-    teamStats.teamConversionRate =
-      teamStats.totalPropostas > 0 ? Math.round((teamStats.totalVendas / teamStats.totalPropostas) * 10000) / 100 : 0
-
-    teamStats.goalAchievementRate =
-      teamStats.totalGoals > 0 ? Math.round((teamStats.totalAchievedGoals / teamStats.totalGoals) * 10000) / 100 : 0
-
-    console.log("✅ Team Performance: Processed", teamPerformance.length, "team members")
-
-    res.json({
-      teamStats,
-      teamMembers: teamPerformance,
-      period: { startDate, endDate },
-    })
-  } catch (error) {
-    console.error("❌ Team Performance: Error:", error.message)
-    res.status(500).json({
-      message: "Erro ao carregar performance da equipe",
       error: error.message,
     })
   }
@@ -832,7 +980,7 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
       SELECT 
         COUNT(*) as total_propostas,
         COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento_total
+        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento_total
       FROM clone_propostas_apprudnik 
       WHERE created_at >= $1 AND created_at <= $2
     `
@@ -869,11 +1017,15 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
 
     const topVendedores = await pool.query(topPerformersQuery, [startDate, endDate])
 
+    // Meta mensal (exemplo fixo, pode vir de uma tabela de metas)
+    const metaMensal = 150000 // R$ 150.000,00
+
     const response = {
       indicadores: {
         totalPropostas: Number.parseInt(indicadores.rows[0].total_propostas),
         totalVendas: Number.parseInt(indicadores.rows[0].vendas),
         faturamentoTotal: Number.parseFloat(indicadores.rows[0].faturamento_total),
+        metaMensal,
       },
       faturamentoMensal: faturamentoMensal.rows.map((row) => ({
         mes: row.mes,

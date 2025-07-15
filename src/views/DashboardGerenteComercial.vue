@@ -15,19 +15,6 @@
             >
               Gerenciar Metas
             </router-link>
-            <select
-              v-model="selectedPeriod"
-              @change="loadDashboard"
-              class="border border-gray-300 rounded-md px-3 py-2"
-            >
-              <option value="2025-01">Janeiro 2025</option>
-              <option value="2025-02">Fevereiro 2025</option>
-              <option value="2025-03">Março 2025</option>
-              <option value="2025-04">Abril 2025</option>
-              <option value="2025-05">Maio 2025</option>
-              <option value="2025-06">Junho 2025</option>
-              <option value="2025-07">Julho 2025</option>
-            </select>
             <button
               @click="logout"
               class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
@@ -128,41 +115,36 @@
                       Faturamento Total
                     </dt>
                     <dd class="text-lg font-medium text-gray-900">
-                      R$ {{ formatCurrency(teamPerformance.teamStats.totalFaturamento) }}
+                      <div v-if="dashboardData">
+                        R$ {{ formatCurrency(dashboardData.indicadores.faturamentoTotal) }} / 
+                        R$ {{ formatCurrency(dashboardData.indicadores.metaMensal) }}
+                      </div>
+                      <div v-else>
+                        R$ {{ formatCurrency(teamPerformance.teamStats.totalFaturamento) }}
+                      </div>
+                    </dd>
+                    <dd v-if="dashboardData" class="text-xs text-gray-500 mt-1">
+                      {{ getMetaProgressPercentage() }}% da meta mensal
                     </dd>
                   </dl>
                 </div>
               </div>
             </div>
+            <!-- Progress bar for meta -->
+            <div v-if="dashboardData" class="px-5 pb-3">
+              <div class="w-full bg-gray-200 rounded-full h-2">
+                <div 
+                  class="h-2 rounded-full transition-all duration-300"
+                  :class="getMetaProgressColor()"
+                  :style="{ width: Math.min(getMetaProgressPercentage(), 100) + '%' }"
+                ></div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- Performance Charts -->
-        <div v-if="teamPerformance" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <TeamPerformanceChart
-            :data="conversionRateChartData"
-            title="Taxa de Conversão por Representante"
-            type="bar"
-            :options="chartOptions.conversionRate"
-          />
-
-          <TeamPerformanceChart
-            :data="goalAchievementChartData"
-            title="Atingimento de Metas por Representante"
-            type="bar"
-            :options="chartOptions.goalAchievement"
-          />
-        </div>
-
-        <!-- Detailed Performance Table -->
-        <PerformanceTable
-          v-if="teamPerformance"
-          :team-members="teamPerformance.teamMembers"
-          title="Performance Detalhada da Equipe"
-        />
-
         <!-- Original KPIs (for backward compatibility) -->
-        <div v-if="dashboardData" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div v-if="dashboardData" class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div class="bg-white overflow-hidden shadow rounded-lg">
             <div class="p-5">
               <div class="flex items-center">
@@ -206,130 +188,38 @@
               </div>
             </div>
           </div>
-
-          <div class="bg-white overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-              <div class="flex items-center">
-                <div class="flex-shrink-0">
-                  <div class="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
-                    <span class="text-white text-sm font-bold">R$</span>
-                  </div>
-                </div>
-                <div class="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt class="text-sm font-medium text-gray-500 truncate">
-                      Faturamento Total
-                    </dt>
-                    <dd class="text-lg font-medium text-gray-900">
-                      R$ {{ formatCurrency(dashboardData.indicadores.faturamentoTotal) }}
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
-        <!-- Top Performers Chart -->
-        <div v-if="dashboardData" class="bg-white p-6 rounded-lg shadow">
-          <h3 class="text-lg font-medium text-gray-900 mb-4">Top Vendedores</h3>
-          <BarChart
-            v-if="chartData.topVendedores"
-            :data="chartData.topVendedores"
-            :options="chartOptions.bar"
-          />
-        </div>
+        <!-- Enhanced Performance Table -->
+        <PerformanceTable
+          v-if="teamPerformance"
+          :team-members="teamPerformance.teamMembers"
+          :supervisors="supervisors"
+          title="Performance Detalhada da Equipe"
+          @filter-change="handleFilterChange"
+          @drill-down="handleDrillDown"
+        />
 
-        <!-- Top Vendedores Table -->
-        <div v-if="dashboardData" class="bg-white shadow rounded-lg">
-          <div class="px-4 py-5 sm:p-6">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
-              Top 10 Vendedores e Representantes
-            </h3>
-            <div class="overflow-hidden">
-              <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                  <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Posição
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Nome
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Tipo
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Vendas
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Faturamento
-                    </th>
-                  </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                  <tr
-                    v-for="(vendedor, index) in dashboardData.topVendedores"
-                    :key="index"
-                    :class="index < 3 ? 'bg-yellow-50' : ''"
-                  >
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      <span
-                        v-if="index === 0"
-                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"
-                      >
-                        🥇 1º
-                      </span>
-                      <span
-                        v-else-if="index === 1"
-                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
-                      >
-                        🥈 2º
-                      </span>
-                      <span
-                        v-else-if="index === 2"
-                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800"
-                      >
-                        🥉 3º
-                      </span>
-                      <span v-else class="text-gray-500">{{ index + 1 }}º</span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {{ vendedor.name }}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span 
-                        :class="vendedor.role === 'representante' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'"
-                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                      >
-                        {{ vendedor.role === 'representante' ? 'Representante' : 'Vendedor' }}
-                      </span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {{ vendedor.vendas }}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      R$ {{ formatCurrency(vendedor.faturamento) }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+        <!-- Representative Detail Modal -->
+        <RepresentativeDetailModal
+          :is-open="showDetailModal"
+          :representative="selectedRepresentative"
+          :details="representativeDetails"
+          :loading="detailLoading"
+          @close="closeDetailModal"
+        />
       </div>
     </main>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { dashboardService, performanceService } from '../services/api'
-import BarChart from '../components/BarChart.vue'
-import TeamPerformanceChart from '../components/TeamPerformanceChart.vue'
+import { dashboardService, performanceService, supervisorService } from '../services/api'
 import PerformanceTable from '../components/PerformanceTable.vue'
+import RepresentativeDetailModal from '../components/RepresentativeDetailModal.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -337,132 +227,36 @@ const authStore = useAuthStore()
 const loading = ref(true)
 const dashboardData = ref(null)
 const teamPerformance = ref(null)
-const selectedPeriod = ref('2025-07')
+const supervisors = ref([])
+const showDetailModal = ref(false)
+const selectedRepresentative = ref(null)
+const representativeDetails = ref(null)
+const detailLoading = ref(false)
 
-const chartData = computed(() => {
-  if (!dashboardData.value) return {}
-
-  return {
-    topVendedores: {
-      labels: dashboardData.value.topVendedores?.slice(0, 5).map(v => v.name) || [],
-      datasets: [{
-        label: 'Faturamento (R$)',
-        data: dashboardData.value.topVendedores?.slice(0, 5).map(v => v.faturamento) || [],
-        backgroundColor: [
-          'rgba(255, 206, 84, 0.8)',
-          'rgba(192, 192, 192, 0.8)',
-          'rgba(255, 159, 64, 0.8)',
-          'rgba(54, 162, 235, 0.8)',
-          'rgba(153, 102, 255, 0.8)'
-        ]
-      }]
-    }
-  }
+const currentFilters = ref({
+  period: '2025-07',
+  startDate: '',
+  endDate: '',
+  supervisor: 'all'
 })
-
-const conversionRateChartData = computed(() => {
-  if (!teamPerformance.value) return {}
-
-  return {
-    labels: teamPerformance.value.teamMembers.map(member => member.name),
-    datasets: [{
-      label: 'Taxa de Conversão (%)',
-      data: teamPerformance.value.teamMembers.map(member => member.performance.conversionRate),
-      backgroundColor: teamPerformance.value.teamMembers.map(member => {
-        const rate = member.performance.conversionRate
-        if (rate >= 20) return 'rgba(34, 197, 94, 0.8)'
-        if (rate >= 15) return 'rgba(234, 179, 8, 0.8)'
-        return 'rgba(239, 68, 68, 0.8)'
-      })
-    }]
-  }
-})
-
-const goalAchievementChartData = computed(() => {
-  if (!teamPerformance.value) return {}
-
-  return {
-    labels: teamPerformance.value.teamMembers.map(member => member.name),
-    datasets: [{
-      label: 'Metas Atingidas',
-      data: teamPerformance.value.teamMembers.map(member => member.goals.achievedGoals),
-      backgroundColor: 'rgba(34, 197, 94, 0.8)'
-    }, {
-      label: 'Total de Metas',
-      data: teamPerformance.value.teamMembers.map(member => member.goals.totalGoals),
-      backgroundColor: 'rgba(156, 163, 175, 0.8)'
-    }]
-  }
-})
-
-const chartOptions = {
-  bar: {
-    responsive: true,
-    plugins: {
-      legend: {
-        position: 'top'
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true
-      }
-    }
-  },
-  conversionRate: {
-    responsive: true,
-    plugins: {
-      legend: {
-        position: 'top'
-      },
-      tooltip: {
-        callbacks: {
-          label: function(context) {
-            return context.dataset.label + ': ' + context.parsed.y + '%'
-          }
-        }
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        max: 100,
-        ticks: {
-          callback: function(value) {
-            return value + '%'
-          }
-        }
-      }
-    }
-  },
-  goalAchievement: {
-    responsive: true,
-    plugins: {
-      legend: {
-        position: 'top'
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true
-      }
-    }
-  }
-}
 
 const loadDashboard = async () => {
   loading.value = true
   try {
-    // Load both original dashboard data and team performance
-    const [dashboardResponse, performanceResponse] = await Promise.all([
-      dashboardService.getGerenteComercialDashboard(selectedPeriod.value),
-      performanceService.getTeamPerformance(selectedPeriod.value)
+    // Load dashboard data, team performance, and supervisors
+    const [dashboardResponse, performanceResponse, supervisorsResponse] = await Promise.all([
+      dashboardService.getGerenteComercialDashboard(currentFilters.value.period),
+      performanceService.getTeamPerformance(currentFilters.value),
+      supervisorService.getSupervisors()
     ])
     
     dashboardData.value = dashboardResponse.data
     teamPerformance.value = performanceResponse.data
+    supervisors.value = supervisorsResponse.data
     
+    console.log('Dashboard Data:', dashboardData.value)
     console.log('Team Performance Data:', teamPerformance.value)
+    console.log('Supervisors:', supervisors.value)
   } catch (error) {
     console.error('Erro ao carregar dashboard:', error)
   } finally {
@@ -470,11 +264,66 @@ const loadDashboard = async () => {
   }
 }
 
+const handleFilterChange = async (filters) => {
+  currentFilters.value = { ...filters }
+  
+  try {
+    const performanceResponse = await performanceService.getTeamPerformance(filters)
+    teamPerformance.value = performanceResponse.data
+    
+    // Also update dashboard data if period changed
+    if (filters.period) {
+      const dashboardResponse = await dashboardService.getGerenteComercialDashboard(filters.period)
+      dashboardData.value = dashboardResponse.data
+    }
+  } catch (error) {
+    console.error('Erro ao aplicar filtros:', error)
+  }
+}
+
+const handleDrillDown = async (representative) => {
+  selectedRepresentative.value = representative
+  showDetailModal.value = true
+  detailLoading.value = true
+  
+  try {
+    const response = await performanceService.getRepresentativeDetails(
+      representative.id, 
+      currentFilters.value
+    )
+    representativeDetails.value = response.data
+  } catch (error) {
+    console.error('Erro ao carregar detalhes do representante:', error)
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+const closeDetailModal = () => {
+  showDetailModal.value = false
+  selectedRepresentative.value = null
+  representativeDetails.value = null
+}
+
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('pt-BR', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(value)
+}
+
+const getMetaProgressPercentage = () => {
+  if (!dashboardData.value) return 0
+  const { faturamentoTotal, metaMensal } = dashboardData.value.indicadores
+  return metaMensal > 0 ? ((faturamentoTotal / metaMensal) * 100).toFixed(1) : 0
+}
+
+const getMetaProgressColor = () => {
+  const percentage = getMetaProgressPercentage()
+  if (percentage >= 100) return 'bg-green-500'
+  if (percentage >= 75) return 'bg-yellow-500'
+  if (percentage >= 50) return 'bg-orange-500'
+  return 'bg-red-500'
 }
 
 const logout = () => {
