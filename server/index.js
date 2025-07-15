@@ -129,9 +129,9 @@ app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_
 
     if (supervisorId && supervisorId !== "all") {
       // Filter by users who are children of the selected supervisor/parceiro
-      supervisorFilter = `AND u.id::text IN (
-        SELECT jsonb_array_elements_text(children) 
-        FROM clone_users_apprudnik 
+      supervisorFilter = `AND u.id IN (
+        SELECT jsonb_array_elements_text(children)::bigint
+        FROM clone_users_apprudnik
         WHERE id = $3
       )`
       queryParams.push(supervisorId)
@@ -149,7 +149,7 @@ app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_
         COALESCE(m_fat.valor_meta, 60000) as meta_faturamento
       FROM clone_users_apprudnik u
       LEFT JOIN clone_users_apprudnik s ON u.supervisor = s.id
-      LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
+      LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller::bigint 
         AND p.created_at >= $1 AND p.created_at <= $2
       LEFT JOIN metas_individuais m_prop ON u.id = m_prop.usuario_id AND m_prop.tipo_meta = 'propostas' AND m_prop.data_inicio <= $2 AND m_prop.data_fim >= $1
       LEFT JOIN metas_individuais m_vend ON u.id = m_vend.usuario_id AND m_vend.tipo_meta = 'vendas' AND m_vend.data_inicio <= $2 AND m_vend.data_fim >= $1
@@ -254,13 +254,14 @@ app.get(
 
       const query = `
       WITH supervisor_children AS (
-        SELECT id as supervisor_id, name as supervisor_name, jsonb_array_elements_text(children) as child_id
+        SELECT id as supervisor_id, name as supervisor_name,
+          jsonb_array_elements_text(children)::bigint as child_id
         FROM clone_users_apprudnik
         WHERE role IN ('supervisor', 'parceiro_comercial')
       )
       SELECT sc.supervisor_name, COALESCE(SUM(CAST(p.total_price AS DECIMAL)), 0) as total_revenue
       FROM clone_propostas_apprudnik p
-      JOIN supervisor_children sc ON p.seller::text = sc.child_id
+      JOIN supervisor_children sc ON p.seller::bigint = sc.child_id
       WHERE p.has_generated_sale = true AND p.created_at BETWEEN $1 AND $2
       GROUP BY sc.supervisor_name
       ORDER BY total_revenue DESC;
@@ -346,7 +347,7 @@ app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_
         END as meta_faturamento
       FROM clone_users_apprudnik u
       LEFT JOIN clone_users_apprudnik s ON u.supervisor = s.id
-      LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
+      LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller::bigint
         AND p.created_at >= $1 AND p.created_at <= $2
       WHERE u.role IN ('vendedor', 'representante') AND u.is_active = true
       ${supervisorFilter}
@@ -480,7 +481,7 @@ app.get(
           ELSE 'Pendente'
         END as status
       FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      WHERE seller::bigint = $1 AND created_at >= $2 AND created_at <= $3
       ORDER BY created_at DESC
     `
       const proposals = await pool.query(proposalsQuery, [id, dateStart, dateEnd])
@@ -494,7 +495,7 @@ app.get(
         COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento,
         COALESCE(AVG(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as ticket_medio
       FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      WHERE seller::bigint = $1 AND created_at >= $2 AND created_at <= $3
       GROUP BY DATE_TRUNC('month', created_at)
       ORDER BY mes
     `
@@ -508,7 +509,7 @@ app.get(
         COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
         COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento
       FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      WHERE seller::bigint = $1 AND created_at >= $2 AND created_at <= $3
       GROUP BY DATE_TRUNC('week', created_at)
       ORDER BY semana
     `
@@ -522,7 +523,7 @@ app.get(
         COALESCE(SUM(CAST(total_price AS DECIMAL)), 0) as valor_total_propostas,
         COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as valor_vendas
       FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      WHERE seller::bigint = $1 AND created_at >= $2 AND created_at <= $3
     `
       const funnel = await pool.query(funnelQuery, [id, dateStart, dateEnd])
 
@@ -768,7 +769,7 @@ app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) =>
         COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as propostas_convertidas,
         COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento_total
       FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      WHERE seller::bigint = $1 AND created_at >= $2 AND created_at <= $3
     `
     const performance = await pool.query(performanceQuery, [id, startDate, endDate])
 
@@ -859,7 +860,7 @@ app.get("/api/dashboard/vendedor/:id", authenticateToken, async (req, res) => {
         COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas,
         COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento_total
       FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      WHERE seller::bigint = $1 AND created_at >= $2 AND created_at <= $3
     `
 
     const propostas = await pool.query(proposalsQuery, [id, startDate, endDate])
@@ -872,7 +873,7 @@ app.get("/api/dashboard/vendedor/:id", authenticateToken, async (req, res) => {
         COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
         COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento
       FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      WHERE seller::bigint = $1 AND created_at >= $2 AND created_at <= $3
       GROUP BY DATE_TRUNC('month', created_at)
       ORDER BY mes
     `
@@ -928,7 +929,7 @@ app.get("/api/dashboard/representante/:id", authenticateToken, async (req, res) 
         COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas,
         COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento_total
       FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      WHERE seller::bigint = $1 AND created_at >= $2 AND created_at <= $3
     `
 
     const propostas = await pool.query(proposalsQuery, [id, startDate, endDate])
@@ -940,7 +941,7 @@ app.get("/api/dashboard/representante/:id", authenticateToken, async (req, res) 
         COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
         COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento
       FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      WHERE seller::bigint = $1 AND created_at >= $2 AND created_at <= $3
       GROUP BY DATE_TRUNC('month', created_at)
       ORDER BY mes
     `
@@ -1010,7 +1011,7 @@ app.get("/api/dashboard/supervisor/:id", authenticateToken, async (req, res) => 
         COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas,
         COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento
       FROM clone_propostas_apprudnik 
-      WHERE seller = ANY($1) AND created_at >= $2 AND created_at <= $3
+      WHERE seller::bigint = ANY($1) AND created_at >= $2 AND created_at <= $3
     `
 
     const resumoEquipe = await pool.query(teamSummaryQuery, [vendedorIds, startDate, endDate])
@@ -1022,7 +1023,7 @@ app.get("/api/dashboard/supervisor/:id", authenticateToken, async (req, res) => 
         COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) as vendas,
         COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento
       FROM clone_users_apprudnik u
-      LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
+      LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller::bigint
         AND p.created_at >= $2 AND p.created_at <= $3
       WHERE u.id = ANY($1)
       GROUP BY u.id, u.name
@@ -1093,7 +1094,7 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
         COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento,
         COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) as vendas
       FROM clone_users_apprudnik u
-      LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
+      LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller::bigint 
         AND p.created_at >= $1 AND p.created_at <= $2
       WHERE u.role IN ('vendedor', 'representante') AND u.is_active = true
       GROUP BY u.id, u.name, u.role
