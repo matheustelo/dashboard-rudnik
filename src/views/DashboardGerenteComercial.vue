@@ -27,7 +27,7 @@
     </header>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+    <main class="max-w-screen-2xl mx-auto py-6 sm:px-6 lg:px-8">
       <div v-if="loading" class="text-center py-12">
         <div class="text-lg">Carregando dashboard...</div>
       </div>
@@ -83,28 +83,6 @@
             <div class="p-5">
               <div class="flex items-center">
                 <div class="flex-shrink-0">
-                  <div class="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
-                    <span class="text-white text-sm font-bold">🎯</span>
-                  </div>
-                </div>
-                <div class="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt class="text-sm font-medium text-gray-500 truncate">
-                      Taxa Atingimento Metas
-                    </dt>
-                    <dd class="text-lg font-medium text-gray-900">
-                      {{ teamPerformance.teamStats.goalAchievementRate }}%
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="bg-white overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-              <div class="flex items-center">
-                <div class="flex-shrink-0">
                   <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
                     <span class="text-white text-sm font-bold">💰</span>
                   </div>
@@ -112,7 +90,7 @@
                 <div class="ml-5 w-0 flex-1">
                   <dl>
                     <dt class="text-sm font-medium text-gray-500 truncate">
-                      Faturamento Total
+                      Valor de Venda Total
                     </dt>
                     <dd class="text-lg font-medium text-gray-900">
                       <div v-if="dashboardData">
