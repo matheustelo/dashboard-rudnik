@@ -230,7 +230,7 @@ app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_
 
     if (supervisor && supervisor !== "all") {
       supervisorFilter = "AND CAST(u.supervisor AS BIGINT) = $3"
-      queryParams.push(Number.parseInt(supervisor))
+      supervisorFilter = `AND CAST(u.supervisor AS TEXT)::BIGINT = $${queryParams.length}`
     }
 
     // Get all active sales representatives with targets
@@ -263,8 +263,8 @@ app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_
         ON (u.supervisor)::bigint = s.id
       LEFT JOIN clone_propostas_apprudnik p 
         ON u.id = p.seller 
-      AND p.created_at >= '2023-01-01 00:00:00' 
-      AND p.created_at <= '2026-01-01 00:00:00'
+      AND p.created_at >= $1 
+      AND p.created_at <= $2
       WHERE u.role IN ('vendedor', 'representante') AND u.is_active = true
         ${supervisorFilter}
       GROUP BY u.id, u.name, u.email, u.role, u.supervisor, s.name
