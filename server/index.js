@@ -129,35 +129,50 @@ app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_
 
     if (supervisorId && supervisorId !== "all") {
       // Filter by users who are children of the selected supervisor/parceiro
-      supervisorFilter = `AND u.id::text IN (
-        SELECT jsonb_array_elements_text(children) 
-        FROM clone_users_apprudnik 
+      supervisorFilter = `AND u.id IN (
+        SELECT jsonb_array_elements_text(children)::bigint
+        FROM clone_users_apprudnik
         WHERE id = $3
       )`
       queryParams.push(supervisorId)
     }
 
     const teamMembersQuery = `
-  SELECT 
-    u.id, u.name, u.email, u.role,
-    sup.name as supervisor_name,
-    COUNT(p.id) as total_propostas,
-    SUM(CASE WHEN p.has_generated_sale = true THEN 1 ELSE 0 END) as propostas_convertidas,
-    COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) ELSE 0 END), 0) as faturamento_total,
-    COALESCE(m_prop.valor_meta, 40) as meta_propostas,
-    COALESCE(m_vend.valor_meta, 12) as meta_vendas,
-    COALESCE(m_fat.valor_meta, 60000) as meta_faturamento
-  FROM clone_users_apprudnik u
-  LEFT JOIN clone_users_apprudnik sup ON u.supervisor = sup.id
-  LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller AND p.created_at BETWEEN $1 AND $2
-  LEFT JOIN metas_individuais m_prop ON u.id = m_prop.usuario_id AND m_prop.tipo_meta = 'propostas' AND m_prop.data_inicio <= $2 AND m_prop.data_fim >= $1
-  LEFT JOIN metas_individuais m_vend ON u.id = m_vend.usuario_id AND m_vend.tipo_meta = 'vendas' AND m_vend.data_inicio <= $2 AND m_vend.data_fim >= $1
-  LEFT JOIN metas_individuais m_fat ON u.id = m_fat.usuario_id AND m_fat.tipo_meta = 'faturamento' AND m_fat.data_inicio <= $2 AND m_fat.data_fim >= $1
-  WHERE u.role IN ('vendedor', 'representante') AND u.is_active = true
-  ${supervisorFilter}
-  GROUP BY u.id, u.name, u.email, u.role, sup.name, m_prop.valor_meta, m_vend.valor_meta, m_fat.valor_meta
-  ORDER BY faturamento_total DESC
-`
+        SELECT 
+          u.id, u.name, u.email, u.role,
+          sup.name as supervisor_name,
+          COUNT(p.id) as total_propostas,
+          SUM(CASE WHEN p.has_generated_sale = true THEN 1 ELSE 0 END) as propostas_convertidas,
+          COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) ELSE 0 END), 0) as faturamento_total,
+          COALESCE(m_prop.valor_meta, 40) as meta_propostas,
+          COALESCE(m_vend.valor_meta, 12) as meta_vendas,
+          COALESCE(m_fat.valor_meta, 60000) as meta_faturamento
+        FROM clone_users_apprudnik u
+        LEFT JOIN clone_users_apprudnik sup 
+          ON (u.supervisor)::bigint = sup.id
+        LEFT JOIN clone_propostas_apprudnik p 
+          ON u.id = p.seller 
+          AND p.created_at BETWEEN $1 AND $2
+        LEFT JOIN metas_individuais m_prop 
+          ON u.id = m_prop.usuario_id 
+          AND m_prop.tipo_meta = 'propostas' 
+          AND m_prop.data_inicio <= $2 AND m_prop.data_fim >= $1
+        LEFT JOIN metas_individuais m_vend 
+          ON u.id = m_vend.usuario_id 
+          AND m_vend.tipo_meta = 'vendas' 
+          AND m_vend.data_inicio <= $2 AND m_vend.data_fim >= $1
+        LEFT JOIN metas_individuais m_fat 
+          ON u.id = m_fat.usuario_id 
+          AND m_fat.tipo_meta = 'faturamento' 
+          AND m_fat.data_inicio <= $2 AND m_fat.data_fim >= $1
+        WHERE u.role IN ('vendedor', 'representante') 
+          AND u.is_active = true
+          ${supervisorFilter}
+        GROUP BY 
+          u.id, u.name, u.email, u.role, sup.name, 
+          m_prop.valor_meta, m_vend.valor_meta, m_fat.valor_meta
+        ORDER BY faturamento_total DESC
+      `;
     const { rows: teamMembers } = await pool.query(teamMembersQuery, queryParams)
     // ... (processing logic remains the same as previous turn, it's correct)
     const formattedTeamMembers = teamMembers.map((member) => {
@@ -249,34 +264,47 @@ app.get(
   authorize("admin", "gerente_comercial"),
   async (req, res) => {
     try {
-      const { period, startDate, endDate } = req.query
-      const { startDate: dateStart, endDate: dateEnd } = getDateRange(period, startDate, endDate)
+      const { period, startDate, endDate } = req.query;
+      const { startDate: dateStart, endDate: dateEnd } = getDateRange(
+        period,
+        startDate,
+        endDate
+      );
 
       const query = `
-  SELECT 
-    sup.name as supervisor_name, 
-    COALESCE(SUM(CAST(p.total_price AS DECIMAL)), 0) as total_revenue
-  FROM clone_users_apprudnik sup
-  LEFT JOIN clone_users_apprudnik u ON u.supervisor = sup.id
-  LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
-    AND p.has_generated_sale = true 
-    AND p.created_at BETWEEN $1 AND $2
-  WHERE sup.role IN ('supervisor', 'parceiro_comercial') AND sup.is_active = true
-  GROUP BY sup.id, sup.name
-  ORDER BY total_revenue DESC;
-`
-      const { rows } = await pool.query(query, [dateStart, dateEnd])
+        SELECT 
+          sup.name AS supervisor_name, 
+          COALESCE(SUM(p.total_price::DECIMAL), 0) AS total_revenue
+        FROM clone_users_apprudnik sup
+        LEFT JOIN clone_users_apprudnik u 
+          ON (u.supervisor)::bigint = sup.id
+        LEFT JOIN clone_propostas_apprudnik p 
+          ON u.id = p.seller 
+         AND p.has_generated_sale = true 
+         AND p.created_at BETWEEN $1 AND $2
+        WHERE sup.role IN ('supervisor', 'parceiro_comercial') 
+          AND sup.is_active = true
+        GROUP BY sup.id, sup.name
+        ORDER BY total_revenue DESC;
+      `;
+
+      const { rows } = await pool.query(query, [dateStart, dateEnd]);
+
       const chartData = rows.map((row) => ({
         supervisorName: row.supervisor_name,
-        totalRevenue: Number.parseFloat(row.total_revenue),
-      }))
-      res.json(chartData)
+        totalRevenue: parseFloat(row.total_revenue),
+      }));
+
+      res.json(chartData);
     } catch (error) {
-      console.error("❌ Error fetching revenue by supervisor chart data:", error)
-      res.status(500).json({ message: "Erro ao carregar dados do gráfico", error: error.message })
+      console.error("❌ Error fetching revenue by supervisor chart data:", error);
+      res.status(500).json({
+        message: "Erro ao carregar dados do gráfico",
+        error: error.message,
+      });
     }
-  },
-)
+  }
+);
 
 // Get supervisors list
 app.get("/api/supervisors", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
@@ -460,7 +488,7 @@ app.get(
       const userQuery = `
       SELECT u.*, s.name as supervisor_name
       FROM clone_users_apprudnik u
-      LEFT JOIN clone_users_apprudnik s ON u.supervisor = s.id
+      LEFT JOIN clone_users_apprudnik s ON (u.supervisor)::bigint = s.id
       WHERE u.id = $1
     `
       const userResult = await pool.query(userQuery, [id])
@@ -473,57 +501,85 @@ app.get(
 
       // Get detailed proposals
       const proposalsQuery = `
-      SELECT 
-        id, client_name, total_price, has_generated_sale, created_at,
-        CASE 
-          WHEN has_generated_sale = true THEN 'Convertida'
-          ELSE 'Pendente'
-        END as status
-      FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-      ORDER BY created_at DESC
-    `
+        SELECT 
+            p.id, 
+            c.name AS client_name, 
+            p.total_price, 
+            p.has_generated_sale, 
+            p.created_at,
+            CASE 
+                WHEN p.has_generated_sale = true THEN 'Convertida'
+                ELSE 'Pendente'
+            END AS status
+        FROM 
+            clone_propostas_apprudnik p
+        JOIN 
+            clone_contatos_apprudnik c 
+            ON p.lead = c.id
+        WHERE 
+            p.seller = $1 
+            AND p.created_at >= $2 
+            AND p.created_at <= $3
+        ORDER BY 
+            p.created_at DESC;
+      `
       const proposals = await pool.query(proposalsQuery, [id, dateStart, dateEnd])
 
       // Get monthly performance trend
       const monthlyTrendQuery = `
       SELECT 
-        DATE_TRUNC('month', created_at) as mes,
-        COUNT(*) as propostas,
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento,
-        COALESCE(AVG(CASE WHEN has_generated_sale = true THEN total_price END), 0) as ticket_medio
-      FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-      GROUP BY DATE_TRUNC('month', created_at)
-      ORDER BY mes
-    `
+          DATE_TRUNC('month', created_at) AS mes,
+          COUNT(*) AS propostas,
+          COUNT(CASE WHEN has_generated_sale = true THEN 1 END) AS vendas,
+          COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) AS faturamento,
+          COALESCE(AVG(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) AS ticket_medio
+      FROM 
+          clone_propostas_apprudnik 
+      WHERE 
+          seller = $1 
+          AND created_at >= $2 
+          AND created_at <= $3
+      GROUP BY 
+          DATE_TRUNC('month', created_at)
+      ORDER BY 
+          mes;
+      `
       const monthlyTrend = await pool.query(monthlyTrendQuery, [id, dateStart, dateEnd])
 
       // Get weekly performance for detailed chart
       const weeklyTrendQuery = `
       SELECT 
-        DATE_TRUNC('week', created_at) as semana,
-        COUNT(*) as propostas,
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento
-      FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-      GROUP BY DATE_TRUNC('week', created_at)
-      ORDER BY semana
-    `
+          DATE_TRUNC('week', created_at) AS semana,
+          COUNT(*) AS propostas,
+          COUNT(CASE WHEN has_generated_sale = true THEN 1 END) AS vendas,
+          COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) AS faturamento
+      FROM 
+          clone_propostas_apprudnik 
+      WHERE 
+          seller = $1 
+          AND created_at >= $2 
+          AND created_at <= $3
+      GROUP BY 
+          DATE_TRUNC('week', created_at)
+      ORDER BY 
+          semana;
+      `
       const weeklyTrend = await pool.query(weeklyTrendQuery, [id, dateStart, dateEnd])
 
       // Get conversion funnel data
       const funnelQuery = `
       SELECT 
-        COUNT(*) as total_propostas,
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas_fechadas,
-        COALESCE(SUM(total_price), 0) as valor_total_propostas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as valor_vendas
-      FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-    `
+          COUNT(*) AS total_propostas,
+          COUNT(CASE WHEN has_generated_sale = true THEN 1 END) AS vendas_fechadas,
+          COALESCE(SUM(CAST(total_price AS DECIMAL)), 0) AS valor_total_propostas,
+          COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) AS valor_vendas
+      FROM 
+          clone_propostas_apprudnik 
+      WHERE 
+          seller = $1 
+          AND created_at >= $2 
+          AND created_at <= $3;
+      `
       const funnel = await pool.query(funnelQuery, [id, dateStart, dateEnd])
 
       // Calculate performance metrics
