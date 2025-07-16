@@ -322,7 +322,7 @@ const distributionProgress = computed(() => {
   return total > 0 ? (totalDistributed.value / total) * 100 : 0
 })
 
-const openGoalModal = (type, goal = null) => {
+const openGoalModal = async (type, goal = null) => {
   modal.type = type
   validationErrors.value = []
   teamMembers.value = []
@@ -335,7 +335,8 @@ const openGoalModal = (type, goal = null) => {
       data_fim: goal.data_fim.split('T')[0],
     }
     if (type === 'team') {
-      onLeaderChange()
+      await onLeaderChange()
+      prefillMemberGoals(goal)
     }
   } else {
     modal.title = `Nova Meta ${type === 'individual' ? 'Individual' : 'de Equipe'}`
@@ -372,6 +373,25 @@ const onLeaderChange = async () => {
     console.error('Erro ao buscar membros da equipe:', error)
     teamMembers.value = []
   }
+}
+
+// Pre-fill member goals when editing a team goal
+const prefillMemberGoals = (goal) => {
+  if (!goal) return
+
+  teamMembers.value.forEach((member) => {
+    const existing = goals.value.individualGoals.find(
+      (g) =>
+        g.usuario_id === member.id &&
+        g.tipo_meta === goal.tipo_meta &&
+        g.data_inicio.split('T')[0] === goal.data_inicio.split('T')[0] &&
+        g.data_fim.split('T')[0] === goal.data_fim.split('T')[0]
+    )
+    if (existing) {
+      member.goalAmount = parseFloat(existing.valor_meta) || 0
+    }
+  })
+  validateDistribution()
 }
 
 const updateMemberGoal = (memberId, value) => {
