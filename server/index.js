@@ -758,7 +758,7 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
               WHERE (elem->>'id')::int = $2
             )
         `
-        const validationResult = await client.query(validationQuery, [childrenIds.map((child) => child.id), usuario_id])
+        const validationResult = await client.query(validationQuery, [childrenIds.map((child) => child.id), supervisorId])
 
         if (validationResult.rows.length !== childrenIds.length) {
           await client.query("ROLLBACK")

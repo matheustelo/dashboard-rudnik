@@ -10,22 +10,57 @@ const logger = {
 
 const router = express.Router()
 
-// GET /api/users - Fetch all users (for admin and gerente_comercial)
+// Helper function to parse JSON fields safely
+const parseJsonField = (field) => {
+  if (!field) return []
+  if (typeof field === "string") {
+    try {
+      return JSON.parse(field)
+    } catch (e) {
+      console.warn("Failed to parse JSON field:", field)
+      return []
+    }
+  }
+  if (Array.isArray(field)) return field
+  return []
+}
+
+// GET /api/users - Fetch all users with hierarchical relationships
 router.get("/", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
   try {
-    console.log("👥 Users API: Fetching all users")
+    console.log("👥 Users API: Fetching all users with hierarchical data")
 
     const usersQuery = `
-      SELECT id, name, email, role, supervisor, is_active, created_at
+      SELECT 
+        id, 
+        name, 
+        email, 
+        role, 
+        supervisor,
+        supervisors,
+        children,
+        is_active, 
+        created_at,
+        last_login
       FROM clone_users_apprudnik 
       WHERE is_active = true
       ORDER BY name
     `
 
     const result = await query(usersQuery)
-    console.log("✅ Users API: Fetched", result.rows.length, "users")
+    console.log("✅ Users API: Fetched", result.rows.length, "users from database")
 
-    res.json(result.rows)
+    // Build hierarchical relationships
+    const usersWithHierarchy = result.rows.map((user) => ({
+      ...user,
+      supervisors: parseJsonField(user.supervisors),
+      children: parseJsonField(user.children),
+      has_team: parseJsonField(user.children).length > 0,
+      team_members_count: parseJsonField(user.children).length,
+    }))
+
+    console.log("✅ Users API: Processed hierarchical relationships")
+    res.json(usersWithHierarchy)
   } catch (error) {
     console.error("❌ Users API: Error fetching users:", error.message)
     res.status(500).json({
@@ -35,13 +70,21 @@ router.get("/", authenticateToken, authorize("admin", "gerente_comercial"), asyn
   }
 })
 
-// GET /api/users/sellers - Fetch only sellers and representatives
-router.get("/sellers", authenticateToken, authorize("admin", "gerente_comercial", "supervisor"), async (req, res) => {
+// GET /api/users/sellers - Fetch only sellers and representatives with their supervisors
+router.get("/sellers", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
   try {
-    console.log("👥 Users API: Fetching sellers and representatives")
+    console.log("👥 Users API: Fetching sellers and representatives with supervisor info")
 
     const sellersQuery = `
-      SELECT id, name, email, role, supervisor, is_active
+      SELECT 
+        id, 
+        name, 
+        email, 
+        role, 
+        supervisor,
+        supervisors,
+        children,
+        is_active
       FROM clone_users_apprudnik 
       WHERE role IN ('vendedor', 'representante') AND is_active = true
       ORDER BY name
@@ -50,7 +93,18 @@ router.get("/sellers", authenticateToken, authorize("admin", "gerente_comercial"
     const result = await query(sellersQuery)
     console.log("✅ Users API: Fetched", result.rows.length, "sellers/representatives")
 
-    res.json(result.rows)
+    // Enhance sellers with supervisor information
+    const enhancedSellers = result.rows.map((seller) => {
+      const supervisors = parseJsonField(seller.supervisors)
+      return {
+        ...seller,
+        supervisors: supervisors,
+        has_supervisor: supervisors.length > 0,
+        direct_supervisor_id: supervisors.length > 0 ? supervisors[0] : null,
+      }
+    })
+
+    res.json(enhancedSellers)
   } catch (error) {
     console.error("❌ Users API: Error fetching sellers:", error.message)
     res.status(500).json({
@@ -60,216 +114,360 @@ router.get("/sellers", authenticateToken, authorize("admin", "gerente_comercial"
   }
 })
 
-// Get user by ID
-router.get("/:id", authenticateToken, idValidation, async (req, res, next) => {
+// GET /api/users/team-leaders - Fetch users who can lead teams (supervisors, parceiros, etc.)
+router.get("/team-leaders", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
+  try {
+    console.log("👥 Users API: Fetching team leaders")
+
+    const leadersQuery = `
+      SELECT 
+        id, 
+        name, 
+        email, 
+        role, 
+        children,
+        created_at
+      FROM clone_users_apprudnik 
+      WHERE role IN ('supervisor', 'parceiro_comercial', 'gerente_comercial') 
+        AND is_active = true
+      ORDER BY name
+    `
+
+    const result = await query(leadersQuery)
+    console.log("✅ Users API: Fetched", result.rows.length, "team leaders")
+
+    // Enhance team leaders with team information
+    const enhancedTeamLeaders = await Promise.all(
+      result.rows.map(async (leader) => {
+        const children = parseJsonField(leader.children)
+
+        // Get actual team members (vendedor/representante only)
+        let teamMembers = []
+        if (children.length > 0) {
+          const teamQuery = `
+            SELECT id, name, email, role
+            FROM clone_users_apprudnik 
+            WHERE id = ANY($1) 
+              AND role IN ('vendedor', 'representante') 
+              AND is_active = true
+            ORDER BY name
+          `
+
+          const teamResult = await query(teamQuery, [children])
+          teamMembers = teamResult.rows
+        }
+
+        return {
+          ...leader,
+          children: children,
+          team_members: teamMembers,
+          team_members_count: teamMembers.length,
+          has_team: teamMembers.length > 0,
+        }
+      }),
+    )
+
+    console.log("✅ Users API: Fetched", enhancedTeamLeaders.length, "team leaders")
+
+    res.json(enhancedTeamLeaders)
+  } catch (error) {
+    console.error("❌ Users API: Error fetching team leaders:", error.message)
+    res.status(500).json({
+      message: "Erro ao buscar líderes de equipe",
+      error: error.message,
+    })
+  }
+})
+
+// Get user by ID with full hierarchy information
+router.get("/:id", authenticateToken, idValidation, async (req, res) => {
   try {
     const { id } = req.params
 
-    // Check permissions
-    if (req.user.role !== "gestor" && req.user.id !== Number.parseInt(id)) {
-      return res.status(403).json({ message: "Access denied" })
-    }
+    console.log("👥 Users API: Fetching user:", id)
 
     const userQuery = `
       SELECT 
-        u.id,
-        u.name,
-        u.email,
-        u.role,
-        u.supervisor,
-        u.is_active,
-        u.created_at,
-        u.last_login,
-        s.name as supervisor_name
-      FROM clone_users_apprudnik u
-      LEFT JOIN clone_users_apprudnik s ON u.supervisor = s.id
-      WHERE u.id = $1
+        id, 
+        name, 
+        email, 
+        role, 
+        supervisor,
+        supervisors,
+        children,
+        is_active,
+        created_at
+      FROM clone_users_apprudnik 
+      WHERE id = $1
     `
 
     const result = await query(userQuery, [id])
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: "User not found" })
+      return res.status(404).json({
+        message: "Usuário não encontrado",
+        error: "USER_NOT_FOUND",
+      })
     }
 
-    res.json({
-      success: true,
-      data: result.rows[0],
-    })
+    const user = result.rows[0]
+
+    // Enhance user with hierarchy information
+    const enhancedUser = {
+      ...user,
+      supervisors: parseJsonField(user.supervisors),
+      children: parseJsonField(user.children),
+      has_team: parseJsonField(user.children).length > 0,
+      team_members_count: parseJsonField(user.children).length,
+    }
+
+    console.log("✅ Users API: Fetched user:", enhancedUser.name)
+
+    res.json(enhancedUser)
   } catch (error) {
-    next(error)
+    console.error("❌ Users API: Error fetching user:", error.message)
+    res.status(500).json({
+      message: "Erro ao buscar usuário",
+      error: error.message,
+    })
   }
 })
 
-// Create user (gestor only)
-router.post("/", authenticateToken, authorize("gestor"), userValidation, async (req, res, next) => {
+// Get user's team (for supervisors) - Updated to use children field
+router.get("/:id/team", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+
+    console.log("👥 Users API: Fetching team for user:", id)
+
+    // Validate ID
+    const userId = Number.parseInt(id)
+    if (isNaN(userId) || userId <= 0) {
+      return res.status(400).json({
+        message: "ID do usuário deve ser um número válido",
+        error: "INVALID_ID",
+      })
+    }
+
+    // Check permissions
+    if (req.user.role !== "admin" && req.user.role !== "gerente_comercial" && req.user.id !== userId) {
+      return res.status(403).json({
+        message: "Acesso negado",
+        error: "ACCESS_DENIED",
+      })
+    }
+
+    // Get user's children field
+    const userQuery = `
+      SELECT children, name, role
+      FROM clone_users_apprudnik 
+      WHERE id = $1 AND is_active = true
+    `
+
+    const userResult = await query(userQuery, [userId])
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        message: "Usuário não encontrado",
+        error: "USER_NOT_FOUND",
+      })
+    }
+
+    const user = userResult.rows[0]
+    const children = parseJsonField(user.children)
+
+    console.log("👤 User:", user.name, "Children:", children)
+
+    if (children.length === 0) {
+      console.log("ℹ️ No team members found for user:", userId)
+      return res.json({
+        success: true,
+        data: [],
+        message: "Usuário não possui equipe",
+      })
+    }
+
+    // Get team members (only vendedor and representante roles)
+    const teamQuery = `
+      SELECT id, name, email, role, created_at
+      FROM clone_users_apprudnik 
+      WHERE id = ANY($1) 
+        AND role IN ('vendedor', 'representante') 
+        AND is_active = true
+      ORDER BY name
+    `
+
+    const teamResult = await query(teamQuery, [children])
+
+    console.log("✅ Users API: Found", teamResult.rows.length, "team members")
+
+    res.json({
+      success: true,
+      data: teamResult.rows,
+      leader: {
+        id: user.id,
+        name: user.name,
+        role: user.role,
+      },
+    })
+  } catch (error) {
+    console.error("❌ Users API: Error fetching user team:", error.message)
+    res.status(500).json({
+      message: "Erro ao buscar equipe do usuário",
+      error: error.message,
+    })
+  }
+})
+
+// Create user (admin and gerente_comercial only)
+router.post("/", authenticateToken, authorize("admin", "gerente_comercial"), userValidation, async (req, res) => {
   try {
     const { name, email, role, supervisor } = req.body
 
+    console.log("👥 Users API: Creating user:", { name, email, role })
+
     // Check if email already exists
-    const existingUser = await query("SELECT id FROM clone_users_apprudnik WHERE email = $1", [email])
-
-    if (existingUser.rows.length > 0) {
-      return res.status(409).json({ message: "Email already exists" })
-    }
-
-    // Validate supervisor if provided
-    if (supervisor) {
-      const supervisorExists = await query(
-        "SELECT id FROM clone_users_apprudnik WHERE id = $1 AND role IN ($2, $3) AND is_active = true",
-        [supervisor, "supervisor", "gestor"],
-      )
-
-      if (supervisorExists.rows.length === 0) {
-        return res.status(400).json({ message: "Invalid supervisor" })
-      }
-    }
-
-    // Default password hash for "123456"
-    const defaultPasswordHash = await bcrypt.hash("123456", 10)
-
-    const insertQuery = `
-      INSERT INTO clone_users_apprudnik (name, email, role, supervisor, password_hash, is_active, created_at)
-      VALUES ($1, $2, $3, $4, $5, true, NOW())
-      RETURNING id, name, email, role, supervisor, is_active, created_at
+    const existingUserQuery = `
+      SELECT id FROM clone_users_apprudnik WHERE email = $1
     `
 
-    const result = await query(insertQuery, [name, email, role, supervisor || null, defaultPasswordHash])
+    const existingUser = await query(existingUserQuery, [email])
 
-    logger.info(`User created: ${email} by ${req.user.email}`)
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({
+        message: "Email já está em uso",
+        error: "EMAIL_EXISTS",
+      })
+    }
+
+    const insertUserQuery = `
+      INSERT INTO clone_users_apprudnik (name, email, role, is_active, created_at)
+      VALUES ($1, $2, $3, true, NOW())
+      RETURNING id, name, email, role, created_at
+    `
+
+    const result = await query(insertUserQuery, [name, email, role])
+
+    console.log("✅ Users API: User created:", result.rows[0])
 
     res.status(201).json({
       success: true,
-      data: result.rows[0],
-      message: "User created successfully",
+      message: "Usuário criado com sucesso",
+      user: result.rows[0],
     })
   } catch (error) {
-    next(error)
+    console.error("❌ Users API: Error creating user:", error.message)
+    res.status(500).json({
+      message: "Erro ao criar usuário",
+      error: error.message,
+    })
   }
 })
 
 // Update user
-router.put("/:id", authenticateToken, idValidation, userValidation, async (req, res, next) => {
-  try {
-    const { id } = req.params
-    const { name, email, role, supervisor, is_active } = req.body
+router.put(
+  "/:id",
+  authenticateToken,
+  authorize("admin", "gerente_comercial"),
+  idValidation,
+  userValidation,
+  async (req, res) => {
+    try {
+      const { id } = req.params
+      const { name, email, role, is_active } = req.body
 
-    // Check permissions
-    if (req.user.role !== "gestor" && req.user.id !== Number.parseInt(id)) {
-      return res.status(403).json({ message: "Access denied" })
-    }
+      console.log("👥 Users API: Updating user:", id)
 
-    // Non-gestors can only update their own basic info
-    if (req.user.role !== "gestor") {
-      if (role !== req.user.role || supervisor !== req.user.supervisor) {
-        return res.status(403).json({ message: "Cannot modify role or supervisor" })
-      }
-    }
-
-    // Check if user exists
-    const userExists = await query("SELECT id FROM clone_users_apprudnik WHERE id = $1", [id])
-
-    if (userExists.rows.length === 0) {
-      return res.status(404).json({ message: "User not found" })
-    }
-
-    // Check email uniqueness
-    const emailExists = await query("SELECT id FROM clone_users_apprudnik WHERE email = $1 AND id != $2", [email, id])
-
-    if (emailExists.rows.length > 0) {
-      return res.status(409).json({ message: "Email already exists" })
-    }
-
-    const updateQuery = `
-      UPDATE clone_users_apprudnik 
-      SET name = $1, email = $2, role = $3, supervisor = $4, is_active = $5, updated_at = NOW()
-      WHERE id = $6
-      RETURNING id, name, email, role, supervisor, is_active, updated_at
+      // Check if user exists
+      const existingUserQuery = `
+      SELECT id FROM clone_users_apprudnik WHERE id = $1
     `
 
-    const result = await query(updateQuery, [
-      name,
-      email,
-      role,
-      supervisor || null,
-      is_active !== undefined ? is_active : true,
-      id,
-    ])
+      const existingUser = await query(existingUserQuery, [id])
 
-    logger.info(`User updated: ${email} by ${req.user.email}`)
+      if (existingUser.rows.length === 0) {
+        return res.status(404).json({
+          message: "Usuário não encontrado",
+          error: "USER_NOT_FOUND",
+        })
+      }
 
-    res.json({
-      success: true,
-      data: result.rows[0],
-      message: "User updated successfully",
-    })
-  } catch (error) {
-    next(error)
-  }
-})
+      // Check if email is already used by another user
+      const emailCheckQuery = `
+      SELECT id FROM clone_users_apprudnik WHERE email = $1 AND id != $2
+    `
+
+      const emailCheck = await query(emailCheckQuery, [email, id])
+
+      if (emailCheck.rows.length > 0) {
+        return res.status(400).json({
+          message: "Email já está em uso por outro usuário",
+          error: "EMAIL_EXISTS",
+        })
+      }
+
+      const updateUserQuery = `
+      UPDATE clone_users_apprudnik 
+      SET name = $1, email = $2, role = $3, is_active = $4, updated_at = NOW()
+      WHERE id = $5
+      RETURNING id, name, email, role, is_active, updated_at
+    `
+
+      const result = await query(updateUserQuery, [name, email, role, is_active, id])
+
+      console.log("✅ Users API: User updated:", result.rows[0])
+
+      res.json({
+        success: true,
+        message: "Usuário atualizado com sucesso",
+        user: result.rows[0],
+      })
+    } catch (error) {
+      console.error("❌ Users API: Error updating user:", error.message)
+      res.status(500).json({
+        message: "Erro ao atualizar usuário",
+        error: error.message,
+      })
+    }
+  },
+)
 
 // Delete user (soft delete)
-router.delete("/:id", authenticateToken, authorize("gestor"), idValidation, async (req, res, next) => {
+router.delete("/:id", authenticateToken, authorize("admin", "gerente_comercial"), idValidation, async (req, res) => {
   try {
     const { id } = req.params
 
-    // Cannot delete self
-    if (req.user.id === Number.parseInt(id)) {
-      return res.status(400).json({ message: "Cannot delete your own account" })
-    }
+    console.log("👥 Users API: Soft deleting user:", id)
 
-    const result = await query(
-      "UPDATE clone_users_apprudnik SET is_active = false, updated_at = NOW() WHERE id = $1 RETURNING email",
-      [id],
-    )
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: "User not found" })
-    }
-
-    logger.info(`User deactivated: ${result.rows[0].email} by ${req.user.email}`)
-
-    res.json({
-      success: true,
-      message: "User deactivated successfully",
-    })
-  } catch (error) {
-    next(error)
-  }
-})
-
-// Get user's team (for supervisors)
-router.get("/:id/team", authenticateToken, idValidation, async (req, res, next) => {
-  try {
-    const { id } = req.params
-
-    // Check permissions
-    if (req.user.role !== "gestor" && req.user.id !== Number.parseInt(id)) {
-      return res.status(403).json({ message: "Access denied" })
-    }
-
-    const teamQuery = `
-      SELECT 
-        id,
-        name,
-        email,
-        role,
-        is_active,
-        created_at,
-        last_login
-      FROM clone_users_apprudnik 
-      WHERE supervisor = $1 AND is_active = true
-      ORDER BY name
+    const updateUserQuery = `
+      UPDATE clone_users_apprudnik 
+      SET is_active = false, updated_at = NOW()
+      WHERE id = $1
+      RETURNING id, name, email
     `
 
-    const result = await query(teamQuery, [id])
+    const result = await query(updateUserQuery, [id])
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "Usuário não encontrado",
+        error: "USER_NOT_FOUND",
+      })
+    }
+
+    console.log("✅ Users API: User soft deleted:", result.rows[0])
 
     res.json({
       success: true,
-      data: result.rows,
+      message: "Usuário desativado com sucesso",
+      user: result.rows[0],
     })
   } catch (error) {
-    next(error)
+    console.error("❌ Users API: Error deleting user:", error.message)
+    res.status(500).json({
+      message: "Erro ao desativar usuário",
+      error: error.message,
+    })
   }
 })
 

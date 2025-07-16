@@ -5,137 +5,702 @@ const { getDateRange } = require("../utils/dateHelpers")
 
 const router = express.Router()
 
-// GET /api/goals - Fetch all goals for the management view
-router.get("/", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res, next) => {
+// Helper function to parse JSON fields safely
+const parseJsonField = (field) => {
+  if (!field) return []
+  if (typeof field === "string") {
+    try {
+      return JSON.parse(field)
+    } catch (e) {
+      console.warn("Failed to parse JSON field:", field)
+      return []
+    }
+  }
+  if (Array.isArray(field)) return field
+  return []
+}
+
+// Helper function to validate and sanitize numeric values
+const validateNumericValue = (value, fieldName) => {
+  console.log(`🔍 Validating ${fieldName}:`, value, typeof value)
+
+  // Handle null or undefined
+  if (value === null || value === undefined || value === "") {
+    throw new Error(`${fieldName} é obrigatório`)
+  }
+
+  // Convert to string first to handle various input types
+  const stringValue = String(value).trim()
+
+  // Check if it's a valid number string
+  if (stringValue === "" || stringValue === "null" || stringValue === "undefined") {
+    throw new Error(`${fieldName} não pode estar vazio`)
+  }
+
+  // Parse as float
+  const numericValue = Number.parseFloat(stringValue)
+
+  // Validate the parsed number
+  if (isNaN(numericValue)) {
+    throw new Error(`${fieldName} deve ser um número válido. Valor recebido: "${stringValue}"`)
+  }
+
+  if (numericValue < 0) {
+    throw new Error(`${fieldName} não pode ser negativo`)
+  }
+
+  if (!isFinite(numericValue)) {
+    throw new Error(`${fieldName} deve ser um número finito`)
+  }
+
+  console.log(`✅ ${fieldName} validated:`, numericValue)
+  return numericValue
+}
+
+// Helper function to validate goal type
+const validateGoalType = (tipo_meta) => {
+  console.log("🔍 Validating goal type:", tipo_meta)
+
+  if (!tipo_meta || typeof tipo_meta !== "string") {
+    throw new Error("Tipo de meta é obrigatório")
+  }
+
+  const validTypes = ["faturamento", "propostas"]
+  const normalizedType = tipo_meta.toLowerCase().trim()
+
+  if (!validTypes.includes(normalizedType)) {
+    throw new Error(`Tipo de meta inválido. Valores aceitos: ${validTypes.join(", ")}`)
+  }
+
+  console.log("✅ Goal type validated:", normalizedType)
+  return normalizedType
+}
+
+// Helper function to validate date format
+const validateDate = (dateString, fieldName) => {
+  console.log(`🔍 Validating ${fieldName}:`, dateString)
+
+  if (!dateString) {
+    throw new Error(`${fieldName} é obrigatório`)
+  }
+
+  const date = new Date(dateString)
+  if (isNaN(date.getTime())) {
+    throw new Error(`${fieldName} deve ser uma data válida`)
+  }
+
+  console.log(`✅ ${fieldName} validated:`, date.toISOString().split("T")[0])
+  return date.toISOString().split("T")[0]
+}
+
+// Helper function to get team members using children field
+const getTeamMembers = async (leaderId) => {
+  console.log("🔄 Getting team members for leader:", leaderId)
+
   try {
+    // Get leader's children field
+    const leaderQuery = `
+      SELECT children, name, role
+      FROM clone_users_apprudnik 
+      WHERE id = $1 AND is_active = true
+    `
+
+    const leaderResult = await query(leaderQuery, [leaderId])
+
+    if (leaderResult.rows.length === 0) {
+      console.log("❌ Leader not found:", leaderId)
+      return []
+    }
+
+    const leader = leaderResult.rows[0]
+    const children = parseJsonField(leader.children)
+
+    console.log("👥 Leader children:", children)
+
+    if (children.length === 0) {
+      console.log("ℹ️ No children found for leader:", leaderId)
+      return []
+    }
+
+    // Get team members (only vendedor and representante roles)
+    const teamQuery = `
+      SELECT id, name, email, role
+      FROM clone_users_apprudnik 
+      WHERE id = ANY($1) 
+        AND role IN ('vendedor', 'representante') 
+        AND is_active = true
+      ORDER BY name
+    `
+
+    const teamResult = await query(teamQuery, [children])
+    console.log("✅ Found", teamResult.rows.length, "team members")
+
+    return teamResult.rows
+  } catch (error) {
+    console.error("❌ Error getting team members:", error)
+    return []
+  }
+}
+
+// GET /api/goals - Fetch all goals with enhanced hierarchy information
+router.get("/", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
+  try {
+    console.log("🎯 Goals API: Fetching all goals")
     const { period } = req.query
-    const { startDate, endDate } = getDateRange(period)
 
+    let dateFilter = ""
+    const params = []
+
+    if (period) {
+      const now = new Date()
+      let startDate
+
+      switch (period) {
+        case "week":
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7)
+          break
+        case "month":
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+          break
+        case "quarter":
+          const quarter = Math.floor(now.getMonth() / 3)
+          startDate = new Date(now.getFullYear(), quarter * 3, 1)
+          break
+        case "year":
+          startDate = new Date(now.getFullYear(), 0, 1)
+          break
+        default:
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+      }
+
+      dateFilter = "AND g.data_inicio >= $1"
+      params.push(startDate.toISOString().split("T")[0])
+    }
+
+    // Fetch general goals (team goals)
     const generalGoalsQuery = `
-      SELECT * FROM metas_gerais 
-      WHERE data_inicio <= $2 AND data_fim >= $1
-      ORDER BY data_inicio DESC
+      SELECT 
+        g.id,
+        g.usuario_id,
+        g.tipo_meta,
+        g.valor_meta,
+        g.data_inicio,
+        g.data_fim,
+        g.created_at,
+        u.name as supervisor_name,
+        u.role as supervisor_role,
+        u.children
+      FROM metas_gerais g
+      JOIN clone_users_apprudnik u ON g.usuario_id = u.id
+      WHERE u.is_active = true ${dateFilter}
+      ORDER BY g.created_at DESC
     `
-    const generalGoals = await query(generalGoalsQuery, [startDate, endDate])
 
+    // Fetch individual goals
     const individualGoalsQuery = `
-      SELECT m.*, u.name as user_name, u.email as user_email 
-      FROM metas_individuais m
-      JOIN clone_users_apprudnik u ON m.usuario_id = u.id
-      WHERE m.data_inicio <= $2 AND m.data_fim >= $1
-      ORDER BY u.name, m.data_inicio DESC
+      SELECT 
+        g.id,
+        g.usuario_id,
+        g.tipo_meta,
+        g.valor_meta,
+        g.data_inicio,
+        g.data_fim,
+        g.created_at,
+        u.name as user_name,
+        u.role as user_role,
+        u.supervisors
+      FROM metas_individuais g
+      JOIN clone_users_apprudnik u ON g.usuario_id = u.id
+      WHERE u.is_active = true ${dateFilter}
+      ORDER BY g.created_at DESC
     `
-    const individualGoals = await query(individualGoalsQuery, [startDate, endDate])
+
+    const [generalResult, individualResult] = await Promise.all([
+      query(generalGoalsQuery, params),
+      query(individualGoalsQuery, params),
+    ])
+
+    // Enhance general goals with team information
+    const enhancedGeneralGoals = await Promise.all(
+      generalResult.rows.map(async (goal) => {
+        const teamMembers = await getTeamMembers(goal.usuario_id)
+        return {
+          ...goal,
+          children: parseJsonField(goal.children),
+          team_members: teamMembers,
+          team_members_count: teamMembers.length,
+        }
+      }),
+    )
+
+    // Enhance individual goals with supervisor information
+    const enhancedIndividualGoals = individualResult.rows.map((goal) => ({
+      ...goal,
+      supervisors: parseJsonField(goal.supervisors),
+    }))
+
+    console.log(
+      "✅ Goals API: Fetched",
+      enhancedGeneralGoals.length,
+      "general goals and",
+      enhancedIndividualGoals.length,
+      "individual goals",
+    )
 
     res.json({
-      generalGoals: generalGoals.rows,
-      individualGoals: individualGoals.rows,
+      generalGoals: enhancedGeneralGoals,
+      individualGoals: enhancedIndividualGoals,
     })
   } catch (error) {
-    next(error)
+    console.error("❌ Goals API: Error fetching goals:", error.message)
+    res.status(500).json({
+      message: "Erro ao buscar metas",
+      error: error.message,
+    })
   }
 })
 
-// POST /api/goals - Create or update a goal
-router.post("/", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res, next) => {
+// POST /api/goals - Create a new goal with enhanced validation
+router.post("/", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
   try {
-    const { type, goalData } = req.body
-    const { id, tipo_meta, valor_meta, data_inicio, data_fim, usuario_id } = goalData
-    const created_by = req.user.id
+    console.log("🎯 Goals API: Creating new goal")
+    console.log("📥 Request body:", JSON.stringify(req.body, null, 2))
 
-    let result
-    if (type === "general") {
-      if (id) {
-        result = await query(
-          `UPDATE metas_gerais SET tipo_meta = $1, valor_meta = $2, data_inicio = $3, data_fim = $4, atualizado_em = NOW()
-           WHERE id = $5 RETURNING *`,
-          [tipo_meta, valor_meta, data_inicio, data_fim, id],
-        )
-      } else {
-        result = await query(
-          `INSERT INTO metas_gerais (tipo_meta, valor_meta, data_inicio, data_fim, criado_por)
-           VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-          [tipo_meta, valor_meta, data_inicio, data_fim, created_by],
-        )
-      }
-    } else if (type === "individual") {
-      if (id) {
-        result = await query(
-          `UPDATE metas_individuais SET tipo_meta = $1, valor_meta = $2, data_inicio = $3, data_fim = $4, usuario_id = $5, atualizado_em = NOW()
-           WHERE id = $6 RETURNING *`,
-          [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, id],
-        )
-      } else {
-        result = await query(
-          `INSERT INTO metas_individuais (tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, criado_por)
-           VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-          [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, created_by],
-        )
-      }
-    } else {
-      return res.status(400).json({ message: "Invalid goal type" })
+    const { type, goalData } = req.body
+
+    if (!type) {
+      return res.status(400).json({
+        message: "Tipo de meta é obrigatório",
+        error: "MISSING_TYPE",
+      })
     }
 
-    res.status(201).json(result.rows[0])
+    if (!goalData) {
+      return res.status(400).json({
+        message: "Dados da meta são obrigatórios",
+        error: "MISSING_GOAL_DATA",
+      })
+    }
+
+    console.log("Goal type:", type)
+    console.log("Goal data:", goalData)
+
+    if (type === "general") {
+      // Create general goal with manual distribution
+      const { usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, manualDistribution } = goalData
+
+      try {
+        // Validate all required fields with detailed error messages
+        if (!usuario_id) {
+          throw new Error("ID do usuário é obrigatório")
+        }
+
+        const validatedUserId = Number.parseInt(usuario_id)
+        if (isNaN(validatedUserId) || validatedUserId <= 0) {
+          throw new Error("ID do usuário deve ser um número válido")
+        }
+
+        const validatedGoalType = validateGoalType(tipo_meta)
+        const validatedGoalValue = validateNumericValue(valor_meta, "Valor da meta")
+        const validatedStartDate = validateDate(data_inicio, "Data de início")
+        const validatedEndDate = validateDate(data_fim, "Data de fim")
+
+        // Validate date range
+        if (new Date(validatedStartDate) >= new Date(validatedEndDate)) {
+          throw new Error("Data de início deve ser anterior à data de fim")
+        }
+
+        console.log("✅ All validations passed for general goal")
+
+        // Verify the user exists and can lead a team
+        const userQuery = `
+          SELECT id, name, role, children
+          FROM clone_users_apprudnik 
+          WHERE id = $1 AND is_active = true
+        `
+
+        const userResult = await query(userQuery, [validatedUserId])
+
+        if (userResult.rows.length === 0) {
+          return res.status(404).json({
+            message: "Usuário não encontrado ou inativo",
+            error: "USER_NOT_FOUND",
+          })
+        }
+
+        const user = userResult.rows[0]
+        const teamMembers = await getTeamMembers(validatedUserId)
+
+        console.log("👤 User:", user.name, "Team members:", teamMembers.length)
+
+        // Start transaction
+        await query("BEGIN")
+
+        try {
+          // Insert general goal with validated data
+          const insertGeneralGoalQuery = `
+            INSERT INTO metas_gerais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, created_at)
+            VALUES ($1, $2, $3, $4, $5, NOW())
+            RETURNING id
+          `
+
+          console.log("📝 Inserting general goal with values:", [
+            validatedUserId,
+            validatedGoalType,
+            validatedGoalValue,
+            validatedStartDate,
+            validatedEndDate,
+          ])
+
+          const generalGoalResult = await query(insertGeneralGoalQuery, [
+            validatedUserId,
+            validatedGoalType,
+            validatedGoalValue,
+            validatedStartDate,
+            validatedEndDate,
+          ])
+
+          const generalGoalId = generalGoalResult.rows[0].id
+          console.log("✅ General goal created with ID:", generalGoalId)
+
+          // Handle manual distribution if provided
+          if (manualDistribution && Array.isArray(manualDistribution) && manualDistribution.length > 0) {
+            console.log("📊 Processing manual distribution:", manualDistribution)
+
+            // Validate that all distributed users are in the team
+            const teamMemberIds = teamMembers.map((m) => m.id)
+            const invalidDistributions = manualDistribution.filter((d) => !teamMemberIds.includes(d.usuario_id))
+
+            if (invalidDistributions.length > 0) {
+              throw new Error("Algumas distribuições são para usuários que não estão na equipe")
+            }
+
+            // Insert individual goals for each distribution
+            for (const distribution of manualDistribution) {
+              try {
+                const distributionUserId = Number.parseInt(distribution.usuario_id)
+                const distributionValue = validateNumericValue(distribution.valor_meta, "Valor da distribuição")
+
+                if (distributionValue > 0) {
+                  const insertIndividualGoalQuery = `
+                    INSERT INTO metas_individuais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, meta_geral_id, created_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                  `
+
+                  console.log("📝 Inserting individual goal with values:", [
+                    distributionUserId,
+                    validatedGoalType,
+                    distributionValue,
+                    validatedStartDate,
+                    validatedEndDate,
+                    generalGoalId,
+                  ])
+
+                  await query(insertIndividualGoalQuery, [
+                    distributionUserId,
+                    validatedGoalType,
+                    distributionValue,
+                    validatedStartDate,
+                    validatedEndDate,
+                    generalGoalId,
+                  ])
+
+                  console.log(
+                    "✅ Created individual goal for user",
+                    distributionUserId,
+                    "with value",
+                    distributionValue,
+                  )
+                }
+              } catch (distError) {
+                console.error("❌ Error processing distribution:", distError)
+                throw new Error(`Erro na distribuição para usuário ${distribution.usuario_id}: ${distError.message}`)
+              }
+            }
+          }
+
+          await query("COMMIT")
+
+          console.log("✅ Goals API: General goal created successfully with ID:", generalGoalId)
+
+          res.status(201).json({
+            success: true,
+            message: "Meta de equipe criada com sucesso",
+            goalId: generalGoalId,
+          })
+        } catch (error) {
+          await query("ROLLBACK")
+          throw error
+        }
+      } catch (validationError) {
+        console.error("❌ Validation error for general goal:", validationError.message)
+        return res.status(400).json({
+          message: "Erro de validação",
+          error: validationError.message,
+          details: "Verifique os dados enviados e tente novamente",
+        })
+      }
+    } else if (type === "individual") {
+      // Create individual goal
+      const { usuario_id, tipo_meta, valor_meta, data_inicio, data_fim } = goalData
+
+      try {
+        // Validate all required fields
+        if (!usuario_id) {
+          throw new Error("ID do usuário é obrigatório")
+        }
+
+        const validatedUserId = Number.parseInt(usuario_id)
+        if (isNaN(validatedUserId) || validatedUserId <= 0) {
+          throw new Error("ID do usuário deve ser um número válido")
+        }
+
+        const validatedGoalType = validateGoalType(tipo_meta)
+        const validatedGoalValue = validateNumericValue(valor_meta, "Valor da meta")
+        const validatedStartDate = validateDate(data_inicio, "Data de início")
+        const validatedEndDate = validateDate(data_fim, "Data de fim")
+
+        // Validate date range
+        if (new Date(validatedStartDate) >= new Date(validatedEndDate)) {
+          throw new Error("Data de início deve ser anterior à data de fim")
+        }
+
+        console.log("✅ All validations passed for individual goal")
+
+        // Verify the user exists
+        const userQuery = `
+          SELECT id, name, role
+          FROM clone_users_apprudnik 
+          WHERE id = $1 AND role IN ('vendedor', 'representante') AND is_active = true
+        `
+
+        const userResult = await query(userQuery, [validatedUserId])
+
+        if (userResult.rows.length === 0) {
+          return res.status(404).json({
+            message: "Vendedor/Representante não encontrado ou inativo",
+            error: "USER_NOT_FOUND",
+          })
+        }
+
+        const insertIndividualGoalQuery = `
+          INSERT INTO metas_individuais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, created_at)
+          VALUES ($1, $2, $3, $4, $5, NOW())
+          RETURNING id
+        `
+
+        console.log("📝 Inserting individual goal with values:", [
+          validatedUserId,
+          validatedGoalType,
+          validatedGoalValue,
+          validatedStartDate,
+          validatedEndDate,
+        ])
+
+        const result = await query(insertIndividualGoalQuery, [
+          validatedUserId,
+          validatedGoalType,
+          validatedGoalValue,
+          validatedStartDate,
+          validatedEndDate,
+        ])
+
+        console.log("✅ Goals API: Individual goal created successfully with ID:", result.rows[0].id)
+
+        res.status(201).json({
+          success: true,
+          message: "Meta individual criada com sucesso",
+          goalId: result.rows[0].id,
+        })
+      } catch (validationError) {
+        console.error("❌ Validation error for individual goal:", validationError.message)
+        return res.status(400).json({
+          message: "Erro de validação",
+          error: validationError.message,
+          details: "Verifique os dados enviados e tente novamente",
+        })
+      }
+    } else {
+      return res.status(400).json({
+        message: "Tipo de meta inválido. Use 'general' ou 'individual'",
+        error: "INVALID_TYPE",
+      })
+    }
   } catch (error) {
-    next(error)
+    console.error("❌ Goals API: Error creating goal:", error.message)
+    console.error("❌ Stack trace:", error.stack)
+    res.status(500).json({
+      message: "Erro interno do servidor ao criar meta",
+      error: error.message,
+      details: "Entre em contato com o suporte se o problema persistir",
+    })
   }
 })
 
 // DELETE /api/goals/:type/:id - Delete a goal
-router.delete("/:type/:id", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res, next) => {
+router.delete("/:type/:id", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
   try {
     const { type, id } = req.params
-    if (type === "general") {
-      await query("DELETE FROM metas_gerais WHERE id = $1", [id])
-    } else if (type === "individual") {
-      await query("DELETE FROM metas_individuais WHERE id = $1", [id])
-    } else {
-      return res.status(400).json({ message: "Invalid goal type" })
+
+    console.log("🗑️ Goals API: Deleting goal", type, id)
+
+    // Validate ID
+    const goalId = Number.parseInt(id)
+    if (isNaN(goalId) || goalId <= 0) {
+      return res.status(400).json({
+        message: "ID da meta deve ser um número válido",
+        error: "INVALID_ID",
+      })
     }
-    res.status(204).send()
+
+    if (type === "general") {
+      // Start transaction to delete general goal and related individual goals
+      await query("BEGIN")
+
+      try {
+        // Delete related individual goals first
+        await query("DELETE FROM metas_individuais WHERE meta_geral_id = $1", [goalId])
+
+        // Delete general goal
+        const result = await query("DELETE FROM metas_gerais WHERE id = $1 RETURNING id", [goalId])
+
+        if (result.rows.length === 0) {
+          await query("ROLLBACK")
+          return res.status(404).json({
+            message: "Meta de equipe não encontrada",
+            error: "GOAL_NOT_FOUND",
+          })
+        }
+
+        await query("COMMIT")
+
+        console.log("✅ Goals API: General goal and related individual goals deleted")
+
+        res.json({
+          success: true,
+          message: "Meta de equipe excluída com sucesso",
+        })
+      } catch (error) {
+        await query("ROLLBACK")
+        throw error
+      }
+    } else if (type === "individual") {
+      const result = await query("DELETE FROM metas_individuais WHERE id = $1 RETURNING id", [goalId])
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          message: "Meta individual não encontrada",
+          error: "GOAL_NOT_FOUND",
+        })
+      }
+
+      console.log("✅ Goals API: Individual goal deleted")
+
+      res.json({
+        success: true,
+        message: "Meta individual excluída com sucesso",
+      })
+    } else {
+      return res.status(400).json({
+        message: "Tipo de meta inválido. Use 'general' ou 'individual'",
+        error: "INVALID_TYPE",
+      })
+    }
   } catch (error) {
-    next(error)
+    console.error("❌ Goals API: Error deleting goal:", error.message)
+    res.status(500).json({
+      message: "Erro ao excluir meta",
+      error: error.message,
+    })
   }
 })
 
-// GET /api/goals/tracking/seller/:id - Get goal tracking for a seller
-router.get("/tracking/seller/:id", authenticateToken, async (req, res, next) => {
+// GET /api/goals/tracking/seller/:id - Get goal tracking for a specific seller
+router.get("/tracking/seller/:id", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
     const { period } = req.query
-    const { startDate, endDate } = getDateRange(period)
 
+    console.log("📊 Goals API: Fetching goal tracking for seller:", id)
+
+    // Validate ID
+    const sellerId = Number.parseInt(id)
+    if (isNaN(sellerId) || sellerId <= 0) {
+      return res.status(400).json({
+        message: "ID do vendedor deve ser um número válido",
+        error: "INVALID_ID",
+      })
+    }
+
+    // Check permissions
+    if (req.user.role !== "admin" && req.user.role !== "gerente_comercial" && req.user.id !== sellerId) {
+      return res.status(403).json({
+        message: "Acesso negado",
+        error: "ACCESS_DENIED",
+      })
+    }
+
+    let dateFilter = ""
+    const params = [sellerId]
+
+    if (period) {
+      const now = new Date()
+      let startDate
+
+      switch (period) {
+        case "week":
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7)
+          break
+        case "month":
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+          break
+        case "quarter":
+          const quarter = Math.floor(now.getMonth() / 3)
+          startDate = new Date(now.getFullYear(), quarter * 3, 1)
+          break
+        case "year":
+          startDate = new Date(now.getFullYear(), 0, 1)
+          break
+        default:
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+      }
+
+      dateFilter = "AND g.data_inicio >= $2"
+      params.push(startDate.toISOString().split("T")[0])
+    }
+
+    // Get individual goals for the seller
     const goalsQuery = `
-      SELECT * FROM metas_individuais
-      WHERE usuario_id = $1 AND data_inicio <= $3 AND data_fim >= $2
-    `
-    const goalsResult = await query(goalsQuery, [id, startDate, endDate])
-    const goals = goalsResult.rows
-
-    const performanceQuery = `
       SELECT 
-        COUNT(*) as propostas_realizadas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento_realizado
-      FROM clone_propostas_apprudnik
-      WHERE seller = $1 AND created_at BETWEEN $2 AND $3
+        g.id,
+        g.usuario_id,
+        g.tipo_meta,
+        g.valor_meta,
+        g.data_inicio,
+        g.data_fim,
+        g.created_at,
+        u.name as user_name,
+        u.role as user_role
+      FROM metas_individuais g
+      JOIN clone_users_apprudnik u ON g.usuario_id = u.id
+      WHERE g.usuario_id = $1 ${dateFilter}
+      ORDER BY g.created_at DESC
     `
-    const performanceResult = await query(performanceQuery, [id, startDate, endDate])
-    const performance = performanceResult.rows[0]
 
-    const trackingData = goals.map((goal) => {
-      const achieved =
-        goal.tipo_meta === "faturamento"
-          ? Number.parseFloat(performance.faturamento_realizado)
-          : Number.parseInt(performance.propostas_realizadas, 10)
-      const target = Number.parseFloat(goal.valor_meta)
-      const progress = target > 0 ? (achieved / target) * 100 : 0
-      return { ...goal, achieved, progress: Math.min(progress, 100) }
+    const result = await query(goalsQuery, params)
+
+    console.log("✅ Goals API: Found", result.rows.length, "goals for seller")
+
+    res.json({
+      success: true,
+      data: result.rows,
     })
-
-    res.json(trackingData)
   } catch (error) {
-    next(error)
+    console.error("❌ Goals API: Error fetching seller tracking:", error.message)
+    res.status(500).json({
+      message: "Erro ao buscar acompanhamento de metas",
+      error: error.message,
+    })
   }
 })
 
