@@ -74,6 +74,44 @@ function getDateRange(period, startDate, endDate) {
   }
 }
 
+function parseJsonField(field) {
+  if (!field) return []
+  if (Array.isArray(field)) return field
+  if (typeof field === "string") {
+    try {
+      return JSON.parse(field)
+    } catch (err) {
+      console.warn("Failed to parse JSON field", field)
+      return []
+    }
+  }
+  return []
+}
+
+// Helper to fetch a leader's active team members
+async function getTeamMembers(leaderId) {
+  const leaderQuery = `
+    SELECT children
+    FROM clone_users_apprudnik
+    WHERE id = $1 AND is_active = true
+  `
+  const leaderResult = await pool.query(leaderQuery, [leaderId])
+  if (leaderResult.rows.length === 0) return []
+
+  const children = parseJsonField(leaderResult.rows[0].children)
+  if (!children || children.length === 0) return []
+  const childIds = children.map((c) => c.id)
+
+  const teamQuery = `
+    SELECT id, name, email, role
+    FROM clone_users_apprudnik
+    WHERE id = ANY($1) AND is_active = true
+    ORDER BY name
+  `
+  const teamResult = await pool.query(teamQuery, [childIds])
+  return teamResult.rows
+}
+
 // API Endpoints
 
 // Login
@@ -675,26 +713,60 @@ app.get("/api/goals", authenticateToken, authorize("admin", "gerente_comercial")
     }
 
     const generalGoalsQuery = `
-      SELECT * FROM metas_gerais 
-      WHERE data_inicio <= $2 AND data_fim >= $1
-      ORDER BY data_inicio DESC
+      SELECT g.*, u.name AS supervisor_name, u.role AS supervisor_role, u.children
+      FROM metas_gerais g
+      JOIN clone_users_apprudnik u ON g.usuario_id = u.id
+      WHERE g.data_inicio <= $2 AND g.data_fim >= $1
+      ORDER BY g.data_inicio DESC
     `
-    const generalGoals = await pool.query(generalGoalsQuery, [startDate, endDate])
-    console.log("✅ Goals: Fetched", generalGoals.rows.length, "general goals")
+    const generalResult = await pool.query(generalGoalsQuery, [startDate, endDate])
+    console.log("✅ Goals: Fetched", generalResult.rows.length, "general goals")
+
+    const enhancedGeneral = []
+    for (const goal of generalResult.rows) {
+      const teamMembers = await getTeamMembers(goal.usuario_id)
+      const memberIds = teamMembers.map((m) => m.id)
+      let childGoals = []
+      if (memberIds.length > 0) {
+        const childQuery = `
+          SELECT m.*, u.name as user_name, u.role as user_role
+          FROM metas_individuais m
+          JOIN clone_users_apprudnik u ON m.usuario_id = u.id
+          WHERE m.usuario_id = ANY($1)
+            AND m.data_inicio <= $3 AND m.data_fim >= $2
+          ORDER BY u.name, m.data_inicio DESC
+        `
+        const { rows } = await pool.query(childQuery, [memberIds, startDate, endDate])
+        childGoals = rows
+      }
+
+      enhancedGeneral.push({
+        ...goal,
+        children: parseJsonField(goal.children),
+        team_members: teamMembers,
+        team_members_count: teamMembers.length,
+        child_goals: childGoals,
+      })
+    }
 
     const individualGoalsQuery = `
-      SELECT m.*, u.name as user_name, u.email as user_email 
+      SELECT m.*, u.name as user_name, u.email as user_email, u.role as user_role, u.supervisors
       FROM metas_individuais m
       JOIN clone_users_apprudnik u ON m.usuario_id = u.id
       WHERE m.data_inicio <= $2 AND m.data_fim >= $1
       ORDER BY u.name, m.data_inicio DESC
     `
-    const individualGoals = await pool.query(individualGoalsQuery, [startDate, endDate])
-    console.log("✅ Goals: Fetched", individualGoals.rows.length, "individual goals")
+    const individualResult = await pool.query(individualGoalsQuery, [startDate, endDate])
+    console.log("✅ Goals: Fetched", individualResult.rows.length, "individual goals")
+
+    const enhancedIndividual = individualResult.rows.map((goal) => ({
+      ...goal,
+      supervisors: parseJsonField(goal.supervisors),
+    }))
 
     res.json({
-      generalGoals: generalGoals.rows,
-      individualGoals: individualGoals.rows,
+      generalGoals: enhancedGeneral,
+      individualGoals: enhancedIndividual,
     })
   } catch (error) {
     console.error("❌ Goals: Error fetching goals:", error.message)

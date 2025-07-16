@@ -321,7 +321,7 @@
                         <div class="ml-3">
                           <h3 class="text-sm font-medium text-red-800">Atenção</h3>
                           <div class="mt-2 text-sm text-red-700">
-                            <p>Este líder não possui vendedores ou representantes na equipe. A meta não pode ser distribuída manualmente.</p>
+                            <p>Este líder não possui vendedores, representantes, representantes premium ou prepostos na equipe. A meta não pode ser distribuída manualmente.</p>
                           </div>
                         </div>
                       </div>
@@ -472,6 +472,18 @@
                     </ul>
                   </div>
                 </div>
+
+                <div v-if="selectedGoal.child_goals && selectedGoal.child_goals.length > 0" class="mt-6">
+                  <h4 class="text-sm font-medium text-gray-900 mb-3">Metas Individuais Distribuídas</h4>
+                  <div class="bg-gray-50 rounded-lg p-3">
+                    <ul class="space-y-2">
+                      <li v-for="cg in selectedGoal.child_goals" :key="cg.id" class="flex justify-between items-center text-sm">
+                        <span>{{ cg.user_name }} - {{ cg.tipo_meta }}</span>
+                        <span class="text-gray-500">{{ formatCurrency(cg.valor_meta) }}</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
               </div>
             </div>
             <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
@@ -521,7 +533,12 @@ const individualUsers = computed(() => {
     console.warn('allUsers.value is not an array:', allUsers.value)
     return []
   }
-  return allUsers.value.filter((u) => u.role === "vendedor" || u.role === "representante")
+  return allUsers.value.filter((u) =>
+    u.role === "vendedor" ||
+    u.role === "representante" ||
+    u.role === "representante_premium" ||
+    u.role === "preposto"
+  )
 })
 
 const totalDistributed = computed(() => {
@@ -646,9 +663,12 @@ const onLeaderChange = async () => {
     const { data } = await userService.getUserTeam(currentGoal.value.usuario_id)
     console.log('👥 Team members fetched from API:', data)
     
-    // Filter only vendedor and representante roles
-    const filteredMembers = Array.isArray(data) ? data.filter(member => 
-      member.role === 'vendedor' || member.role === 'representante'
+    // Filter allowed roles for distribution
+    const filteredMembers = Array.isArray(data) ? data.filter(member =>
+      member.role === 'vendedor' ||
+      member.role === 'representante' ||
+      member.role === 'representante_premium' ||
+      member.role === 'preposto'
     ) : []
     
     teamMembers.value = filteredMembers.map(member => ({
