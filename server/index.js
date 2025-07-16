@@ -748,8 +748,14 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
 
         // Validate that all users belong to the supervisor
         const validationQuery = `
-          SELECT id FROM clone_users_apprudnik 
-          WHERE id = ANY($1) AND supervisor = $2 AND is_active = true
+          SELECT id FROM clone_users_apprudnik
+          WHERE id = ANY($1)
+            AND is_active = true
+            AND EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements(supervisors) AS elem
+              WHERE (elem->>'id')::int = $2
+            )
         `
         const validationResult = await client.query(validationQuery, [childrenIds.map((child) => child.id), usuario_id])
 
@@ -998,7 +1004,12 @@ app.get("/api/users/:id/team", authenticateToken, async (req, res) => {
     const teamQuery = `
       SELECT id, name, email, role, is_active, created_at
       FROM clone_users_apprudnik
-      WHERE supervisor = $1 AND is_active = true
+      WHERE is_active = true
+        AND EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(supervisors) AS sup
+          WHERE (sup->>'id')::int = $1
+        )
       ORDER BY name
     `
 
