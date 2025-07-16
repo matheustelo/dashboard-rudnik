@@ -105,8 +105,8 @@ app.post("/api/auth/login", async (req, res) => {
 app.get("/api/team-leaders", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
   try {
     const leadersQuery = `
-      SELECT DISTINCT id, name, role
-      FROM clone_users_apprudnik 
+      SELECT DISTINCT id, name, role, children
+      FROM clone_users_apprudnik
       WHERE role IN ('supervisor', 'parceiro_comercial') AND is_active = true
       ORDER BY name
     `
@@ -165,7 +165,7 @@ app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_
         ON u.id = m_fat.usuario_id 
       AND m_fat.tipo_meta = 'faturamento' 
       AND m_fat.data_inicio <= $2 AND m_fat.data_fim >= $1
-      WHERE u.role IN ('vendedor', 'representante') 
+      WHERE u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium')
         AND u.is_active = true
         ${supervisorFilter}
       GROUP BY 
@@ -376,7 +376,7 @@ app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_
       LEFT JOIN clone_users_apprudnik s ON u.supervisor = s.id
       LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
         AND p.created_at >= $1 AND p.created_at <= $2
-      WHERE u.role IN ('vendedor', 'representante') AND u.is_active = true
+      WHERE u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium') AND u.is_active = true
       ${supervisorFilter}
       GROUP BY u.id, u.name, u.email, u.role, u.supervisor, s.name
       ORDER BY faturamento_total DESC
@@ -707,55 +707,139 @@ app.get("/api/goals", authenticateToken, authorize("admin", "gerente_comercial")
 
 // Create/Update goal
 app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
-  console.log("--- Goals API: POST /api/goals started ---")
-  try {
-    const { type, goalData } = req.body
-    const { id, tipo_meta, valor_meta, data_inicio, data_fim, usuario_id } = goalData
-    const created_by = req.user.id
+  const { type, goalData } = req.body
+  const created_by = req.user.id
 
-    console.log("📝 Goals: Creating/updating goal:", { type, goalData })
-
-    let result
-    if (type === "general") {
-      if (id) {
-        result = await pool.query(
-          `UPDATE metas_gerais SET tipo_meta = $1, valor_meta = $2, data_inicio = $3, data_fim = $4, atualizado_em = NOW()
-           WHERE id = $5 RETURNING *`,
-          [tipo_meta, valor_meta, data_inicio, data_fim, id],
-        )
-      } else {
-        result = await pool.query(
-          `INSERT INTO metas_gerais (tipo_meta, valor_meta, data_inicio, data_fim, criado_por)
-           VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-          [tipo_meta, valor_meta, data_inicio, data_fim, created_by],
-        )
-      }
-    } else if (type === "individual") {
-      if (id) {
-        result = await pool.query(
-          `UPDATE metas_individuais SET tipo_meta = $1, valor_meta = $2, data_inicio = $3, data_fim = $4, usuario_id = $5, atualizado_em = NOW()
-           WHERE id = $6 RETURNING *`,
-          [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, id],
-        )
-      } else {
-        result = await pool.query(
-          `INSERT INTO metas_individuais (tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, criado_por)
-           VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-          [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, created_by],
-        )
-      }
-    } else {
-      return res.status(400).json({ message: "Invalid goal type" })
+  if (type === "general") {
+    // This is now a Team Goal
+    const { usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, manualDistribution } = goalData
+    if (!usuario_id) {
+      return res.status(400).json({ message: "Líder de equipe é obrigatório para metas de equipe." })
     }
 
-    console.log("✅ Goals: Goal saved successfully")
+    const client = await pool.connect()
+    try {
+      await client.query("BEGIN")
+
+      // 1. Insert the main team goal
+      const teamGoalQuery = `
+        INSERT INTO metas_gerais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por, is_distributed)
+        VALUES ($1, $2, $3, $4, $5, $6, true) RETURNING *`
+      const teamGoalResult = await client.query(teamGoalQuery, [
+        usuario_id,
+        tipo_meta,
+        valor_meta,
+        data_inicio,
+        data_fim,
+        created_by,
+      ])
+      const teamGoal = teamGoalResult.rows[0]
+
+      let childrenIds = []
+      let distributionMethod = "automatic"
+
+      if (manualDistribution && manualDistribution.length > 0) {
+        // Manual distribution provided
+        distributionMethod = "manual"
+        childrenIds = manualDistribution.map((item) => ({
+          id: item.usuario_id,
+          goalAmount: Number.parseFloat(item.valor_meta) || 0,
+        }))
+
+        // Validate that all users belong to the supervisor
+        const validationQuery = `
+          SELECT id FROM clone_users_apprudnik 
+          WHERE id = ANY($1) AND supervisor = $2 AND is_active = true
+        `
+        const validationResult = await client.query(validationQuery, [childrenIds.map((child) => child.id), usuario_id])
+
+        if (validationResult.rows.length !== childrenIds.length) {
+          await client.query("ROLLBACK")
+          return res.status(400).json({
+            message: "Alguns usuários selecionados não pertencem a este líder ou não estão ativos.",
+          })
+        }
+      } else {
+        // Automatic equal distribution
+        const childrenResult = await client.query(
+          "SELECT id FROM clone_users_apprudnik WHERE supervisor = $1 AND is_active = true",
+          [usuario_id],
+        )
+        const childrenIdsOnly = childrenResult.rows.map((row) => row.id)
+
+        if (!childrenIdsOnly || childrenIdsOnly.length === 0) {
+          await client.query("ROLLBACK")
+          return res.status(400).json({ message: "Este líder não possui vendedores na equipe para distribuir a meta." })
+        }
+
+        // Calculate equal distribution
+        const totalAmount = Number.parseFloat(valor_meta)
+        const childCount = childrenIdsOnly.length
+        const individualAmount = Math.floor((totalAmount / childCount) * 100) / 100
+        const remainder = Number.parseFloat((totalAmount - individualAmount * childCount).toFixed(2))
+
+        childrenIds = childrenIdsOnly.map((id, index) => ({
+          id: id,
+          goalAmount: index === 0 ? individualAmount + remainder : individualAmount,
+        }))
+      }
+
+      // 4. Insert individual goals for each child
+      const individualGoalQuery = `
+        INSERT INTO metas_individuais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por)
+        VALUES ($1, $2, $3, $4, $5, $6)`
+
+      for (const child of childrenIds) {
+        await client.query(individualGoalQuery, [
+          child.id,
+          tipo_meta,
+          child.goalAmount,
+          data_inicio,
+          data_fim,
+          created_by,
+        ])
+      }
+
+      await client.query("COMMIT")
+
+      const totalDistributed = childrenIds.reduce((sum, child) => sum + child.goalAmount, 0)
+
+      res.status(201).json({
+        message: `Meta de equipe criada e distribuída para ${childrenIds.length} vendedores usando distribuição ${distributionMethod === "manual" ? "manual" : "automática"}.`,
+        teamGoal: teamGoal,
+        distribution: {
+          method: distributionMethod,
+          totalGoal: Number.parseFloat(valor_meta),
+          totalDistributed: totalDistributed,
+          childrenCount: childrenIds.length,
+        },
+      })
+    } catch (error) {
+      await client.query("ROLLBACK")
+      console.error("❌ Goals: Error distributing goal:", error)
+      res.status(500).json({ message: "Erro ao distribuir meta", error: error.message })
+    } finally {
+      client.release()
+    }
+  } else if (type === "individual") {
+    const { id, tipo_meta, valor_meta, data_inicio, data_fim, usuario_id } = goalData
+    let result
+    if (id) {
+      result = await pool.query(
+        `UPDATE metas_individuais SET tipo_meta = $1, valor_meta = $2, data_inicio = $3, data_fim = $4, usuario_id = $5, atualizado_em = NOW()
+         WHERE id = $6 RETURNING *`,
+        [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, id],
+      )
+    } else {
+      result = await pool.query(
+        `INSERT INTO metas_individuais (tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, criado_por)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, created_by],
+      )
+    }
     res.status(201).json(result.rows[0])
-  } catch (error) {
-    console.error("❌ Goals: Error saving goal:", error.message)
-    res.status(500).json({
-      message: "Erro ao salvar meta",
-      error: error.message,
-    })
+  } else {
+    return res.status(400).json({ message: "Invalid goal type" })
   }
 })
 
@@ -874,8 +958,8 @@ app.get("/api/users", authenticateToken, authorize("admin", "gerente_comercial")
   console.log("--- Users API: GET /api/users started ---")
   try {
     const usersQuery = `
-      SELECT id, name, email, role, supervisor, is_active
-      FROM clone_users_apprudnik 
+      SELECT id, name, email, role, supervisor, children, is_active
+      FROM clone_users_apprudnik
       WHERE is_active = true
       ORDER BY name
     `
@@ -1145,7 +1229,7 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
   FROM clone_users_apprudnik u
   LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
     AND p.created_at >= $1 AND p.created_at <= $2
-  WHERE u.role IN ('vendedor', 'representante') AND u.is_active = true
+  WHERE u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium') AND u.is_active = true
   GROUP BY u.id, u.name, u.role
   ORDER BY faturamento DESC
   LIMIT 10

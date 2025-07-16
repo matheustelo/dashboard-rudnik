@@ -75,14 +75,14 @@
                     </div>
                   </div>
                 </li>
-                 <li v-if="!goals.generalGoals.length" class="px-4 py-4 sm:px-6 text-center text-gray-500">Nenhuma meta de equipe encontrada.</li>
+                <li v-if="!goals.generalGoals.length" class="px-4 py-4 sm:px-6 text-center text-gray-500">Nenhuma meta de equipe encontrada.</li>
               </ul>
             </div>
           </div>
 
           <!-- Individual Goals Tab -->
           <div v-if="activeTab === 'individual'">
-             <div class="flex justify-between items-center mb-4">
+            <div class="flex justify-between items-center mb-4">
               <h2 class="text-xl font-semibold">Metas Individuais</h2>
               <button @click="openGoalModal('individual')" class="bg-blue-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-blue-700">
                 + Nova Meta Individual
@@ -91,7 +91,7 @@
             <div class="bg-white shadow overflow-hidden sm:rounded-lg">
               <ul role="list" class="divide-y divide-gray-200">
                 <li v-for="goal in goals.individualGoals" :key="goal.id" class="px-4 py-4 sm:px-6">
-                   <div class="flex items-center justify-between">
+                  <div class="flex items-center justify-between">
                     <p class="text-sm font-medium text-indigo-600 truncate">
                       {{ goal.user_name }} - Meta de {{ goal.tipo_meta }}
                     </p>
@@ -130,12 +130,114 @@
                 <div class="mt-4 space-y-4">
                   <div v-if="modal.type === 'team'">
                     <label for="leader" class="block text-sm font-medium text-gray-700">Líder de Equipe</label>
-                    <select id="leader" v-model="currentGoal.usuario_id" required class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
+                    <select id="leader" v-model="currentGoal.usuario_id" @change="onLeaderChange" required class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
                       <option disabled value="">Selecione um líder</option>
                       <option v-for="leader in teamLeaders" :key="leader.id" :value="leader.id">{{ leader.name }} ({{ leader.role }})</option>
                     </select>
-                     <div v-if="distributionPreview" class="mt-2 text-sm text-gray-600 bg-gray-100 p-3 rounded-md border border-gray-200">
-                      <p v-html="distributionPreview"></p>
+                    
+                    <!-- Manual Goal Distribution Interface -->
+                    <div v-if="currentGoal.usuario_id && teamMembers.length > 0" class="mt-4 p-4 bg-gray-50 rounded-lg border">
+                      <h4 class="text-sm font-medium text-gray-900 mb-3">Distribuição Manual de Metas</h4>
+                      
+                      <!-- Summary Section -->
+                      <div class="mb-4 p-3 bg-white rounded border">
+                        <div class="grid grid-cols-3 gap-4 text-sm">
+                          <div>
+                            <span class="text-gray-600">Meta Total:</span>
+                            <div class="font-semibold text-lg">{{ formatCurrency(currentGoal.valor_meta || 0) }}</div>
+                          </div>
+                          <div>
+                            <span class="text-gray-600">Total Distribuído:</span>
+                            <div class="font-semibold text-lg" :class="totalDistributed > (currentGoal.valor_meta || 0) ? 'text-red-600' : 'text-green-600'">
+                              {{ formatCurrency(totalDistributed) }}
+                            </div>
+                          </div>
+                          <div>
+                            <span class="text-gray-600">Restante:</span>
+                            <div class="font-semibold text-lg" :class="remainingAmount < 0 ? 'text-red-600' : 'text-blue-600'">
+                              {{ formatCurrency(remainingAmount) }}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <!-- Progress Bar -->
+                        <div class="mt-2">
+                          <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div 
+                              class="h-2 rounded-full transition-all duration-300"
+                              :class="distributionProgress > 100 ? 'bg-red-500' : distributionProgress === 100 ? 'bg-green-500' : 'bg-blue-500'"
+                              :style="{ width: Math.min(distributionProgress, 100) + '%' }"
+                            ></div>
+                          </div>
+                          <div class="text-xs text-gray-500 mt-1">{{ distributionProgress.toFixed(1) }}% distribuído</div>
+                        </div>
+                      </div>
+                      
+                      <!-- Team Members Goal Assignment -->
+                      <div class="space-y-3 max-h-60 overflow-y-auto">
+                        <div v-for="member in teamMembers" :key="member.id" class="flex items-center justify-between p-3 bg-white rounded border">
+                          <div class="flex-1">
+                            <div class="font-medium text-sm text-gray-900">{{ member.name }}</div>
+                            <div class="text-xs text-gray-500">{{ member.email }}</div>
+                          </div>
+                          <div class="flex items-center space-x-2">
+                            <span class="text-sm text-gray-600">Meta:</span>
+                            <div class="relative">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                :value="member.goalAmount || 0"
+                                @input="updateMemberGoal(member.id, $event.target.value)"
+                                @blur="validateMemberGoal(member.id)"
+                                class="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+                                :class="member.hasError ? 'border-red-500 bg-red-50' : ''"
+                              />
+                              <div v-if="member.hasError" class="absolute -bottom-5 left-0 text-xs text-red-600">
+                                {{ member.errorMessage }}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <!-- Quick Actions -->
+                      <div class="mt-4 flex space-x-2">
+                        <button
+                          type="button"
+                          @click="distributeEqually"
+                          class="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                        >
+                          Distribuir Igualmente
+                        </button>
+                        <button
+                          type="button"
+                          @click="clearAllGoals"
+                          class="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                        >
+                          Limpar Tudo
+                        </button>
+                        <button
+                          type="button"
+                          @click="autoAdjustRemainder"
+                          v-if="remainingAmount !== 0"
+                          class="px-3 py-1 text-xs bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
+                        >
+                          Ajustar Restante
+                        </button>
+                      </div>
+                      
+                      <!-- Validation Messages -->
+                      <div v-if="validationErrors.length > 0" class="mt-3 p-2 bg-red-50 border border-red-200 rounded">
+                        <div class="text-sm text-red-800 font-medium">Erros de Validação:</div>
+                        <ul class="text-sm text-red-700 mt-1 list-disc list-inside">
+                          <li v-for="error in validationErrors" :key="error">{{ error }}</li>
+                        </ul>
+                      </div>
+                    </div>
+                    
+                    <div v-else-if="currentGoal.usuario_id && teamMembers.length === 0" class="mt-2 text-sm text-red-600 bg-red-50 p-3 rounded-md border border-red-200">
+                      <b>Atenção:</b> Este líder não possui vendedores na equipe. A meta não pode ser distribuída.
                     </div>
                   </div>
                   <div v-if="modal.type === 'individual'">
@@ -197,97 +299,185 @@ const currentGoal = ref({})
 
 const individualUsers = computed(() => allUsers.value.filter((u) => u.role === "vendedor" || u.role === "representante"))
 
-const distributionPreview = computed(() => {
-  if (modal.type !== 'team' || !currentGoal.value.usuario_id) return ''
-  
-  const leader = allUsers.value.find(u => u.id === currentGoal.value.usuario_id)
-  const childrenCount = leader?.children?.length || 0
-  
-  if (childrenCount === 0) {
-    return "<b>Atenção:</b> Este líder não possui vendedores na equipe. A meta não pode ser distribuída."
-  }
+// Add these new reactive variables
+const teamMembers = ref([])
+const validationErrors = ref([])
 
-  const totalValue = parseFloat(currentGoal.value.valor_meta) || 0
-  if (totalValue === 0) {
-    return `A meta será distribuída para <b>${childrenCount} vendedor(es)</b>. Insira um valor para ver a distribuição.`
-  }
-
-  const individualValue = totalValue / childrenCount
-  return `Esta meta de <b>${formatCurrency(totalValue)}</b> será distribuída para <b>${childrenCount} vendedor(es)</b>, resultando em uma meta individual de aprox. <b>${formatCurrency(individualValue)}</b> para cada.`
+// Add these computed properties
+const totalDistributed = computed(() => {
+  return teamMembers.value.reduce((sum, member) => sum + (parseFloat(member.goalAmount) || 0), 0)
 })
 
-const fetchAllData = async () => {
-  loading.value = true
+const remainingAmount = computed(() => {
+  return (parseFloat(currentGoal.value.valor_meta) || 0) - totalDistributed.value
+})
+
+const distributionProgress = computed(() => {
+  const total = parseFloat(currentGoal.value.valor_meta) || 0
+  return total > 0 ? (totalDistributed.value / total) * 100 : 0
+})
+
+// Add these new methods
+const onLeaderChange = async () => {
+  if (!currentGoal.value.usuario_id) {
+    teamMembers.value = []
+    return
+  }
+  
   try {
-    await Promise.all([
-      fetchGoals(),
-      fetchUsers(),
-      fetchTeamLeaders(),
-    ])
-  } catch (error) {
-    console.error("Erro ao carregar dados iniciais:", error)
-  } finally {
-    loading.value = false
-  }
-}
-
-const fetchGoals = async () => {
-  const { data } = await goalsService.getGoals()
-  goals.value = data
-}
-
-const fetchUsers = async () => {
-  const { data } = await userService.getUsers()
-  allUsers.value = data
-}
-
-const fetchTeamLeaders = async () => {
-  const { data } = await teamLeaderService.getTeamLeaders()
-  teamLeaders.value = data
-}
-
-const openGoalModal = (type, goal = null) => {
-  modal.type = type
-  if (goal) {
-    modal.title = `Editar Meta ${type === "individual" ? "Individual" : "de Equipe"}`
-    currentGoal.value = { 
-      ...goal,
-      data_inicio: goal.data_inicio.split('T')[0],
-      data_fim: goal.data_fim.split('T')[0]
+    // Fetch team members for the selected leader
+    const leader = allUsers.value.find(u => u.id === currentGoal.value.usuario_id)
+    if (leader) {
+      // Get team members using supervisor relationship
+      teamMembers.value = allUsers.value
+        .filter(u => u.supervisor === leader.id && (u.role === 'vendedor' || u.role === 'representante'))
+        .map(member => ({
+          id: member.id,
+          name: member.name,
+          email: member.email,
+          goalAmount: 0,
+          hasError: false,
+          errorMessage: ''
+        }))
     }
-  } else {
-    modal.title = `Nova Meta ${type === "individual" ? "Individual" : "de Equipe"}`
-    currentGoal.value = { tipo_meta: "faturamento", usuario_id: "" }
+  } catch (error) {
+    console.error('Erro ao buscar membros da equipe:', error)
+    teamMembers.value = []
   }
-  showModal.value = true
 }
 
+const updateMemberGoal = (memberId, value) => {
+  const member = teamMembers.value.find(m => m.id === memberId)
+  if (member) {
+    member.goalAmount = parseFloat(value) || 0
+    member.hasError = false
+    member.errorMessage = ''
+    validateDistribution()
+  }
+}
+
+const validateMemberGoal = (memberId) => {
+  const member = teamMembers.value.find(m => m.id === memberId)
+  if (member) {
+    const value = parseFloat(member.goalAmount) || 0
+    if (value < 0) {
+      member.hasError = true
+      member.errorMessage = 'Valor não pode ser negativo'
+    } else if (isNaN(value)) {
+      member.hasError = true
+      member.errorMessage = 'Valor inválido'
+    } else {
+      member.hasError = false
+      member.errorMessage = ''
+    }
+  }
+}
+
+const validateDistribution = () => {
+  validationErrors.value = []
+  
+  // Check for negative values
+  const negativeValues = teamMembers.value.filter(m => (parseFloat(m.goalAmount) || 0) < 0)
+  if (negativeValues.length > 0) {
+    validationErrors.value.push('Alguns valores são negativos')
+  }
+  
+  // Check for invalid values
+  const invalidValues = teamMembers.value.filter(m => isNaN(parseFloat(m.goalAmount)))
+  if (invalidValues.length > 0) {
+    validationErrors.value.push('Alguns valores são inválidos')
+  }
+  
+  // Check total distribution
+  const totalGoal = parseFloat(currentGoal.value.valor_meta) || 0
+  if (totalDistributed.value > totalGoal) {
+    validationErrors.value.push('Total distribuído excede a meta total')
+  }
+}
+
+const distributeEqually = () => {
+  const totalGoal = parseFloat(currentGoal.value.valor_meta) || 0
+  const memberCount = teamMembers.value.length
+  
+  if (memberCount > 0 && totalGoal > 0) {
+    const equalAmount = Math.floor((totalGoal / memberCount) * 100) / 100
+    const remainder = parseFloat((totalGoal - (equalAmount * memberCount)).toFixed(2))
+    
+    teamMembers.value.forEach((member, index) => {
+      member.goalAmount = index === 0 ? equalAmount + remainder : equalAmount
+      member.hasError = false
+      member.errorMessage = ''
+    })
+    
+    validateDistribution()
+  }
+}
+
+const clearAllGoals = () => {
+  teamMembers.value.forEach(member => {
+    member.goalAmount = 0
+    member.hasError = false
+    member.errorMessage = ''
+  })
+  validateDistribution()
+}
+
+const autoAdjustRemainder = () => {
+  const remaining = remainingAmount.value
+  if (remaining !== 0 && teamMembers.value.length > 0) {
+    // Add remainder to the first member with a goal > 0, or first member if all are 0
+    let targetMember = teamMembers.value.find(m => (parseFloat(m.goalAmount) || 0) > 0)
+    if (!targetMember) {
+      targetMember = teamMembers.value[0]
+    }
+    
+    if (targetMember) {
+      targetMember.goalAmount = parseFloat(targetMember.goalAmount || 0) + remaining
+      validateDistribution()
+    }
+  }
+}
+
+// Update the saveGoal method to handle manual distribution
 const saveGoal = async () => {
   try {
-    const typeToSend = modal.type === 'team' ? 'general' : 'individual'
-    await goalsService.saveGoal(typeToSend, currentGoal.value)
+    validateDistribution()
+    
+    if (validationErrors.value.length > 0) {
+      alert('Por favor, corrija os erros de validação antes de salvar.')
+      return
+    }
+    
+    if (modal.type === 'team') {
+      // Check if total matches
+      const totalGoal = parseFloat(currentGoal.value.valor_meta) || 0
+      if (Math.abs(totalDistributed.value - totalGoal) > 0.01) {
+        const confirmMessage = `A soma das metas individuais (${formatCurrency(totalDistributed.value)}) não corresponde à meta total (${formatCurrency(totalGoal)}). Deseja continuar mesmo assim?`
+        if (!confirm(confirmMessage)) {
+          return
+        }
+      }
+      
+      // Prepare goal data with manual distribution
+      const goalDataWithDistribution = {
+        ...currentGoal.value,
+        manualDistribution: teamMembers.value.map(member => ({
+          usuario_id: member.id,
+          valor_meta: parseFloat(member.goalAmount) || 0
+        }))
+      }
+      
+      await goalsService.saveGoal('general', goalDataWithDistribution)
+    } else {
+      await goalsService.saveGoal('individual', currentGoal.value)
+    }
+    
     showModal.value = false
     fetchGoals()
   } catch (error) {
     console.error("Erro ao salvar meta:", error)
     const errorMessage = error.response?.data?.message || "Falha ao salvar a meta."
     alert(errorMessage)
-  }
-}
-
-const deleteGoal = async (type, id) => {
-  const confirmMessage = type === 'general' 
-    ? "Tem certeza que deseja excluir esta meta de equipe? Todas as metas individuais distribuídas também serão excluídas."
-    : "Tem certeza que deseja excluir esta meta individual?"
-  
-  if (confirm(confirmMessage)) {
-    try {
-      await goalsService.deleteGoal(type, id)
-      fetchGoals()
-    } catch (error) {
-      console.error("Erro ao excluir meta:", error)
-      alert("Falha ao excluir a meta.")
-    }
   }
 }
 
@@ -304,6 +494,27 @@ const formatCurrency = (value) => {
     style: "currency",
     currency: "BRL",
   }).format(numValue)
+}
+
+const fetchGoals = async () => {
+  try {
+    goals.value.generalGoals = await goalsService.getGeneralGoals()
+    goals.value.individualGoals = await goalsService.getIndividualGoals()
+    loading.value = false
+  } catch (error) {
+    console.error("Erro ao buscar metas:", error)
+    loading.value = false
+  }
+}
+
+const fetchAllData = async () => {
+  try {
+    allUsers.value = await userService.getAllUsers()
+    teamLeaders.value = allUsers.value.filter(u => u.role === "supervisor" || u.role === "parceiro")
+    fetchGoals()
+  } catch (error) {
+    console.error("Erro ao buscar dados:", error)
+  }
 }
 
 onMounted(fetchAllData)

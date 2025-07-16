@@ -66,8 +66,22 @@ const emit = defineEmits(['drill-down'])
 
 const sortedTeamMembers = computed(() => [...props.teamMembers].sort((a, b) => b.performance.faturamentoTotal - a.performance.faturamentoTotal))
 const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value || 0)
-const getRoleClass = (role) => ({ 'vendedor': 'bg-blue-100 text-blue-800', 'representante': 'bg-purple-100 text-purple-800' }[role] || 'bg-gray-100 text-gray-800')
-const getRoleLabel = (role) => ({ 'vendedor': 'Vendedor', 'representante': 'Representante' }[role] || role)
+const getRoleClass = (role) => ({
+  vendedor: 'bg-blue-100 text-blue-800',
+  representante: 'bg-purple-100 text-purple-800',
+  parceiro_comercial: 'bg-green-100 text-green-800',
+  supervisor: 'bg-indigo-100 text-indigo-800',
+  preposto: 'bg-teal-100 text-teal-800',
+  representante_premium: 'bg-yellow-100 text-yellow-800',
+}[role] || 'bg-gray-100 text-gray-800')
+const getRoleLabel = (role) => ({
+  vendedor: 'Vendedor',
+  representante: 'Representante',
+  parceiro_comercial: 'Parceiro Comercial',
+  supervisor: 'Supervisor',
+  preposto: 'Preposto',
+  representante_premium: 'Representante Premium',
+}[role] || role)
 const getRowClass = (index) => (index < 3 ? 'bg-yellow-50' : '')
 const getConversionRateColor = (rate) => (rate >= 20 ? 'bg-green-500' : rate >= 15 ? 'bg-yellow-500' : 'bg-red-500')
 const getAchievementColor = (percentage) => {
