@@ -64,6 +64,7 @@
                       {{ goal.supervisor_name }} - Meta de {{ goal.tipo_meta }}
                     </p>
                     <div class="ml-2 flex-shrink-0 flex space-x-4">
+                      <button @click="openGoalModal('team', goal)" class="text-sm font-medium text-gray-500 hover:text-gray-700">Editar</button>
                       <button @click="deleteGoal('general', goal.id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
                     </div>
                   </div>
@@ -321,6 +322,29 @@ const distributionProgress = computed(() => {
   return total > 0 ? (totalDistributed.value / total) * 100 : 0
 })
 
+const openGoalModal = (type, goal = null) => {
+  modal.type = type
+  validationErrors.value = []
+  teamMembers.value = []
+
+  if (goal) {
+    modal.title = `Editar Meta ${type === 'individual' ? 'Individual' : 'de Equipe'}`
+    currentGoal.value = {
+      ...goal,
+      data_inicio: goal.data_inicio.split('T')[0],
+      data_fim: goal.data_fim.split('T')[0],
+    }
+    if (type === 'team') {
+      onLeaderChange()
+    }
+  } else {
+    modal.title = `Nova Meta ${type === 'individual' ? 'Individual' : 'de Equipe'}`
+    currentGoal.value = { tipo_meta: 'faturamento', usuario_id: '' }
+  }
+
+  showModal.value = true
+}
+
 // Add these new methods
 const onLeaderChange = async () => {
   if (!currentGoal.value.usuario_id) {
@@ -482,6 +506,22 @@ const saveGoal = async () => {
     console.error("Erro ao salvar meta:", error)
     const errorMessage = error.response?.data?.message || "Falha ao salvar a meta."
     alert(errorMessage)
+  }
+}
+
+const deleteGoal = async (type, id) => {
+  const confirmMessage = type === 'general'
+    ? 'Tem certeza que deseja excluir esta meta de equipe? Todas as metas individuais distribuídas também serão excluídas.'
+    : 'Tem certeza que deseja excluir esta meta individual?'
+
+  if (confirm(confirmMessage)) {
+    try {
+      await goalsService.deleteGoal(type, id)
+      fetchGoals()
+    } catch (error) {
+      console.error('Erro ao excluir meta:', error)
+      alert('Falha ao excluir a meta.')
+    }
   }
 }
 
