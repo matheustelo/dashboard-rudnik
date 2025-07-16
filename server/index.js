@@ -713,6 +713,7 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
   if (type === "general") {
     // This is now a Team Goal
     const { usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, manualDistribution } = goalData
+    const supervisorId = usuario_id
     if (!usuario_id) {
       return res.status(400).json({ message: "Líder de equipe é obrigatório para metas de equipe." })
     }
@@ -723,8 +724,8 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
 
       // 1. Insert the main team goal
       const teamGoalQuery = `
-        INSERT INTO metas_gerais (tipo_meta, valor_meta, data_inicio, data_fim, criado_por, is_distributed)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO metas_gerais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por, is_distributed)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *`
       const teamGoalResult = await client.query(teamGoalQuery, [
         usuario_id,
@@ -733,6 +734,7 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
         data_inicio,
         data_fim,
         created_by,
+        true,
       ])
       const teamGoal = teamGoalResult.rows[0]
 
