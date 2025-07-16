@@ -241,7 +241,7 @@
                     </div>
                     
                     <div v-else-if="currentGoal.usuario_id && teamMembers.length === 0" class="mt-2 text-sm text-red-600 bg-red-50 p-3 rounded-md border border-red-200">
-                      <b>Atenção:</b> Este líder não possui vendedores na equipe. A meta não pode ser distribuída.
+                      <b>Atenção:</b> {{ teamMembersError || 'Este líder não possui vendedores na equipe. A meta não pode ser distribuída.' }}
                     </div>
                   </div>
                   <div v-if="modal.type === 'individual'">
@@ -307,6 +307,7 @@ const individualUsers = computed(() => allUsers.value.filter((u) => u.role === "
 // Add these new reactive variables
 const teamMembers = ref([])
 const validationErrors = ref([])
+const teamMembersError = ref("")
 
 // Add these computed properties
 const totalDistributed = computed(() => {
@@ -350,16 +351,21 @@ const openGoalModal = async (type, goal = null) => {
 const onLeaderChange = async () => {
   if (!currentGoal.value.usuario_id) {
     teamMembers.value = []
+     teamMembersError.value = ""
     return
   }
   
   try {
+     teamMembersError.value = ""
     // Fetch team members for the selected leader
     const leader = allUsers.value.find(u => u.id === currentGoal.value.usuario_id)
     if (leader) {
       // Get team members using supervisor relationship
       teamMembers.value = allUsers.value
-        .filter(u => u.supervisor === leader.id && (u.role === 'vendedor' || u.role === 'representante'))
+        .filter(u => {
+          const supId = typeof u.supervisor === 'object' ? u.supervisor?.id : u.supervisor
+          return supId === leader.id && (u.role === 'vendedor' || u.role === 'representante' || u.role === 'representante_premium')
+        })
         .map(member => ({
           id: member.id,
           name: member.name,
@@ -368,10 +374,17 @@ const onLeaderChange = async () => {
           hasError: false,
           errorMessage: ''
         }))
+      if (teamMembers.value.length === 0) {
+        teamMembersError.value = 'Nenhum vendedor encontrado para este líder. Verifique se os usuários estão vinculados corretamente.'
+      }
+    } else {
+      teamMembers.value = []
+      teamMembersError.value = 'Líder selecionado não encontrado.'
     }
   } catch (error) {
     console.error('Erro ao buscar membros da equipe:', error)
     teamMembers.value = []
+    teamMembersError.value = 'Falha ao obter membros da equipe.'
   }
 }
 

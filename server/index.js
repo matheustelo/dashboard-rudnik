@@ -762,7 +762,15 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
       } else {
         // Automatic equal distribution
         const childrenResult = await client.query(
-          "SELECT id FROM clone_users_apprudnik WHERE supervisor = $1 AND is_active = true",
+         `
+          SELECT id FROM clone_users_apprudnik
+          WHERE is_active = true
+            AND EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements(supervisors) AS elem
+              WHERE (elem->>'id')::int = $1
+            )
+          `,
           [usuario_id],
         )
         const childrenIdsOnly = childrenResult.rows.map((row) => row.id)
