@@ -45,6 +45,9 @@
           <p class="text-gray-500">Carregando metas...</p>
         </div>
         <div v-else>
+          <div v-if="errorMessage" class="mb-4 text-center text-red-600">
+            {{ errorMessage }}
+          </div>
           <!-- Team Goals Tab -->
           <div v-if="activeTab === 'team'">
             <div class="flex justify-between items-center mb-4">
@@ -290,6 +293,7 @@ import { goalsService, userService, teamLeaderService } from "../services/api"
 
 const loading = ref(true)
 const activeTab = ref("team")
+const errorMessage = ref("")
 const goals = ref({ generalGoals: [], individualGoals: [] })
 const allUsers = ref([])
 const teamLeaders = ref([])
@@ -497,19 +501,25 @@ const formatCurrency = (value) => {
 }
 
 const fetchGoals = async () => {
+  loading.value = true
+  errorMessage.value = ""
   try {
-    goals.value.generalGoals = await goalsService.getGeneralGoals()
-    goals.value.individualGoals = await goalsService.getIndividualGoals()
-    loading.value = false
+    const response = await goalsService.getGoals()
+    goals.value.generalGoals = response.data.generalGoals || []
+    goals.value.individualGoals = response.data.individualGoals || []
   } catch (error) {
     console.error("Erro ao buscar metas:", error)
+    errorMessage.value =
+    error.response?.data?.message || "Falha ao carregar metas."
+  } finally {
     loading.value = false
   }
 }
 
 const fetchAllData = async () => {
   try {
-    allUsers.value = await userService.getAllUsers()
+    const usersResponse = await userService.getUsers()
+    allUsers.value = usersResponse.data
     teamLeaders.value = allUsers.value.filter(u => u.role === "supervisor" || u.role === "parceiro")
     fetchGoals()
   } catch (error) {

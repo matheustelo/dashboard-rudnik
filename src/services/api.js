@@ -53,6 +53,14 @@ export const dashboardService = {
 // Goals service
 export const goalsService = {
   getGoals: (period) => api.get("/goals", { params: { period } }),
+  getGeneralGoals: async (period) => {
+    const response = await api.get("/goals", { params: { period } })
+    return response.data.generalGoals
+  },
+  getIndividualGoals: async (period) => {
+    const response = await api.get("/goals", { params: { period } })
+    return response.data.individualGoals
+  },
   saveGoal: (type, goalData) => api.post("/goals", { type, goalData }),
   deleteGoal: (type, id) => api.delete(`/goals/${type}/${id}`),
   getSellerTracking: (id, period) => api.get(`/goals/tracking/seller/${id}`, { params: { period } }),
@@ -77,6 +85,7 @@ export const teamLeaderService = {
 // Users service
 export const userService = {
   getUsers: () => api.get("/users"),
+  getAllUsers: () => api.get("/users"),
 }
 
 export default api
