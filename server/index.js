@@ -723,8 +723,9 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
 
       // 1. Insert the main team goal
       const teamGoalQuery = `
-        INSERT INTO metas_gerais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por, is_distributed)
-        VALUES ($1, $2, $3, $4, $5, $6, true) RETURNING *`
+        INSERT INTO metas_gerais (tipo_meta, valor_meta, data_inicio, data_fim, criado_por, is_distributed)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *`
       const teamGoalResult = await client.query(teamGoalQuery, [
         usuario_id,
         tipo_meta,
