@@ -130,49 +130,49 @@ app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_
     if (supervisorId && supervisorId !== "all") {
       // Filter by users who are children of the selected supervisor/parceiro
       supervisorFilter = `AND u.id IN (
-        SELECT jsonb_array_elements_text(children)::bigint
+        SELECT (jsonb_array_elements(children)->>'id')::bigint
         FROM clone_users_apprudnik
         WHERE id = $3
-      )`
-      queryParams.push(supervisorId)
+      )`;
+      queryParams.push(supervisorId);
     }
 
     const teamMembersQuery = `
-        SELECT 
-          u.id, u.name, u.email, u.role,
-          sup.name as supervisor_name,
-          COUNT(p.id) as total_propostas,
-          SUM(CASE WHEN p.has_generated_sale = true THEN 1 ELSE 0 END) as propostas_convertidas,
-          COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) ELSE 0 END), 0) as faturamento_total,
-          COALESCE(m_prop.valor_meta, 40) as meta_propostas,
-          COALESCE(m_vend.valor_meta, 12) as meta_vendas,
-          COALESCE(m_fat.valor_meta, 60000) as meta_faturamento
-        FROM clone_users_apprudnik u
-        LEFT JOIN clone_users_apprudnik sup 
-          ON (u.supervisor)::bigint = sup.id
-        LEFT JOIN clone_propostas_apprudnik p 
-          ON u.id = p.seller 
-          AND p.created_at BETWEEN $1 AND $2
-        LEFT JOIN metas_individuais m_prop 
-          ON u.id = m_prop.usuario_id 
-          AND m_prop.tipo_meta = 'propostas' 
-          AND m_prop.data_inicio <= $2 AND m_prop.data_fim >= $1
-        LEFT JOIN metas_individuais m_vend 
-          ON u.id = m_vend.usuario_id 
-          AND m_vend.tipo_meta = 'vendas' 
-          AND m_vend.data_inicio <= $2 AND m_vend.data_fim >= $1
-        LEFT JOIN metas_individuais m_fat 
-          ON u.id = m_fat.usuario_id 
-          AND m_fat.tipo_meta = 'faturamento' 
-          AND m_fat.data_inicio <= $2 AND m_fat.data_fim >= $1
-        WHERE u.role IN ('vendedor', 'representante') 
-          AND u.is_active = true
-          ${supervisorFilter}
-        GROUP BY 
-          u.id, u.name, u.email, u.role, sup.name, 
-          m_prop.valor_meta, m_vend.valor_meta, m_fat.valor_meta
-        ORDER BY faturamento_total DESC
-      `;
+      SELECT 
+        u.id, u.name, u.email, u.role,
+        sup.name AS supervisor_name,
+        COUNT(p.id) AS total_propostas,
+        SUM(CASE WHEN p.has_generated_sale = true THEN 1 ELSE 0 END) AS propostas_convertidas,
+        COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN p.total_price::DECIMAL ELSE 0 END), 0) AS faturamento_total,
+        COALESCE(m_prop.valor_meta, 40) AS meta_propostas,
+        COALESCE(m_vend.valor_meta, 12) AS meta_vendas,
+        COALESCE(m_fat.valor_meta, 60000) AS meta_faturamento
+      FROM clone_users_apprudnik u
+      LEFT JOIN clone_users_apprudnik sup 
+        ON (u.supervisor->>'id')::bigint = sup.id
+      LEFT JOIN clone_propostas_apprudnik p 
+        ON u.id = p.seller 
+      AND p.created_at BETWEEN $1 AND $2
+      LEFT JOIN metas_individuais m_prop 
+        ON u.id = m_prop.usuario_id 
+      AND m_prop.tipo_meta = 'propostas' 
+      AND m_prop.data_inicio <= $2 AND m_prop.data_fim >= $1
+      LEFT JOIN metas_individuais m_vend 
+        ON u.id = m_vend.usuario_id 
+      AND m_vend.tipo_meta = 'vendas' 
+      AND m_vend.data_inicio <= $2 AND m_vend.data_fim >= $1
+      LEFT JOIN metas_individuais m_fat 
+        ON u.id = m_fat.usuario_id 
+      AND m_fat.tipo_meta = 'faturamento' 
+      AND m_fat.data_inicio <= $2 AND m_fat.data_fim >= $1
+      WHERE u.role IN ('vendedor', 'representante') 
+        AND u.is_active = true
+        ${supervisorFilter}
+      GROUP BY 
+        u.id, u.name, u.email, u.role, sup.name, 
+        m_prop.valor_meta, m_vend.valor_meta, m_fat.valor_meta
+      ORDER BY faturamento_total DESC
+    `;
     const { rows: teamMembers } = await pool.query(teamMembersQuery, queryParams)
     // ... (processing logic remains the same as previous turn, it's correct)
     const formattedTeamMembers = teamMembers.map((member) => {
