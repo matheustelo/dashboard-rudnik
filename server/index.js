@@ -985,6 +985,32 @@ app.get("/api/users", authenticateToken, authorize("admin", "gerente_comercial")
   }
 })
 
+// Get user's team (for supervisors)
+app.get("/api/users/:id/team", authenticateToken, async (req, res) => {
+  console.log("--- Users API: GET /api/users/:id/team started ---")
+  try {
+    const { id } = req.params
+
+    /*if (req.user.role !== "gestor" && req.user.id !== Number.parseInt(id)) {
+      return res.status(403).json({ message: "Access denied" })
+    }*/
+
+    const teamQuery = `
+      SELECT id, name, email, role, is_active, created_at
+      FROM clone_users_apprudnik
+      WHERE supervisor = $1 AND is_active = true
+      ORDER BY name
+    `
+
+    const result = await pool.query(teamQuery, [id])
+    console.log("✅ Users: Fetched", result.rows.length, "team members")
+    res.json(result.rows)
+  } catch (error) {
+    console.error("❌ Users: Error fetching team:", error.message)
+    res.status(500).json({ message: "Erro ao buscar equipe", error: error.message })
+  }
+})
+
 // Dashboard endpoints (keeping existing ones)
 app.get("/api/dashboard/vendedor/:id", authenticateToken, async (req, res) => {
   try {
