@@ -964,11 +964,12 @@ const onLeaderChange = async () => {
 
 const getCurrentGoalValue = (userId) => {
   // Find current individual goal for this user
-  const currentGoal = goals.value.individualGoals.find(goal => 
-    goal.usuario_id === userId && 
+  const userIdNum = Number(userId)
+  const existingGoal = goals.value.individualGoals.find(goal =>
+    Number(goal.usuario_id) === userIdNum &&
     goal.tipo_meta === currentGoal.value.tipo_meta
   )
-  return currentGoal ? parseFloat(currentGoal.valor_meta) : 0
+  return existingGoal ? parseFloat(existingGoal.valor_meta) : 0
 }
 
 const updateMemberGoal = (memberId, value) => {
@@ -1300,15 +1301,6 @@ const getHierarchyClasses = (member) => {
   return ''
 }
 
-const getDetailHierarchyClasses = (member) => {
-  if (member.role === 'representante_premium') {
-    return 'bg-purple-100 font-medium'
-  } else if (member.isSubordinate) {
-    return 'bg-yellow-50 ml-4'
-  }
-  return ''
-}
-
 const hasPrepostos = (goal) => {
   if (!goal.team_members || !Array.isArray(goal.team_members)) return false
   return goal.team_members.some(member => member.role === 'preposto')
@@ -1317,31 +1309,6 @@ const hasPrepostos = (goal) => {
 const getPrepostosCount = (goal) => {
   if (!goal.team_members || !Array.isArray(goal.team_members)) return 0
   return goal.team_members.filter(member => member.role === 'preposto').length
-}
-
-const getHierarchicalTeamMembers = (teamMembers) => {
-  if (!Array.isArray(teamMembers)) return []
-  
-  // Sort to show hierarchy: representante_premium first, then their prepostos
-  const sorted = [...teamMembers].sort((a, b) => {
-    // representante_premium comes first
-    if (a.role === 'representante_premium' && b.role !== 'representante_premium') return -1
-    if (b.role === 'representante_premium' && a.role !== 'representante_premium') return 1
-    
-    // Then prepostos (marked as subordinates)
-    if (a.role === 'preposto' && b.role !== 'preposto') return 1
-    if (b.role === 'preposto' && a.role !== 'preposto') return -1
-    
-    // Within same category, sort by name
-    return a.name.localeCompare(b.name)
-  })
-  
-  // Mark prepostos as subordinates for display
-  return sorted.map(member => ({
-    ...member,
-    isSubordinate: member.role === 'preposto',
-    parentName: member.role === 'preposto' ? 'Representante Premium' : null
-  }))
 }
 
 // Goal value display helper functions
@@ -1366,16 +1333,10 @@ const getDistributionStatusClass = (goal) => {
 
 const getMemberGoalValue = (member, selectedGoal) => {
   if (!selectedGoal.child_goals || !Array.isArray(selectedGoal.child_goals)) return 0
-  const memberGoal = selectedGoal.child_goals.find(goal => goal.usuario_id === member.id)
-  return memberGoal ? parseFloat(memberGoal.valor_meta) : 0
-}
+  const memberId = Number(member.id)
 
-const getGoalValueClass = (member) => {
-  const goalValue = getMemberGoalValue(member, selectedGoal.value)
-  if (goalValue === 0) return 'text-gray-400'
-  if (member.role === 'representante_premium') return 'text-purple-600'
-  if (member.role === 'preposto') return 'text-yellow-600'
-  return 'text-blue-600'
+  const memberGoal = selectedGoal.child_goals.find(goal => Number(goal.usuario_id) === memberId)
+  return memberGoal ? parseFloat(memberGoal.valor_meta) : 0
 }
 
 const getDifferenceClass = (goal) => {
@@ -1428,15 +1389,6 @@ const getHierarchicalChildGoals = (childGoals) => {
   })
 }
 
-const getChildGoalHierarchyClass = (childGoal) => {
-  if (childGoal.user_role === 'representante_premium') {
-    return 'bg-purple-100 border border-purple-200 rounded p-2 font-medium'
-  } else if (childGoal.isSubordinate) {
-    return 'bg-yellow-50 border border-yellow-200 rounded p-2 ml-4'
-  }
-  return 'bg-white border border-gray-200 rounded p-2'
-}
-
 const getGoalValueColorClass = (role) => {
   const classes = {
     'representante_premium': 'text-purple-600',
@@ -1466,7 +1418,8 @@ const getEnhancedHierarchicalTeamMembers = (selectedGoal) => {
   
   // Combine team members with their goal values
   const membersWithGoals = selectedGoal.team_members.map(member => {
-    const memberGoal = selectedGoal.child_goals?.find(goal => goal.usuario_id === member.id)
+    const memberId = Number(member.id)
+    const memberGoal = selectedGoal.child_goals?.find(goal => Number(goal.usuario_id) === memberId)
     return {
       ...member,
       goalValue: memberGoal ? parseFloat(memberGoal.valor_meta) : 0,
