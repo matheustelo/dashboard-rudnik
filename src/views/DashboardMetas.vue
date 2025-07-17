@@ -115,14 +115,6 @@
                           {{ goal.child_goals.length }} metas distribuídas
                         </span>
                       </div>
-                      <!-- Show goal distribution summary -->
-                      <div v-if="goal.child_goals && goal.child_goals.length > 0" class="mt-2 text-xs text-gray-600">
-                        <span class="font-medium">Distribuição:</span>
-                        {{ formatCurrency(getTotalDistributedGoals(goal.child_goals)) }} de {{ formatCurrency(goal.valor_meta) }}
-                        <span class="ml-2" :class="getDistributionStatusClass(goal)">
-                          ({{ getDistributionPercentage(goal) }}%)
-                        </span>
-                      </div>
                       
                     </div>
                     <div class="ml-2 flex-shrink-0 flex space-x-4">
@@ -527,15 +519,6 @@
                     <dt class="text-sm font-medium text-gray-500">Período</dt>
                     <dd class="mt-1 text-sm text-gray-900">{{ formatDate(selectedGoal.data_inicio) }} a {{ formatDate(selectedGoal.data_fim) }}</dd>
                   </div>
-                  <div v-if="selectedGoal.child_goals && selectedGoal.child_goals.length > 0" class="sm:col-span-2">
-                    <dt class="text-sm font-medium text-gray-500">Distribuição de Metas</dt>
-                    <dd class="mt-1 text-sm text-gray-900">
-                      {{ formatCurrency(getTotalDistributedGoals(selectedGoal.child_goals)) }} distribuído de {{ formatCurrency(selectedGoal.valor_meta) }}
-                      <span class="ml-2" :class="getDistributionStatusClass(selectedGoal)">
-                        ({{ getDistributionPercentage(selectedGoal) }}%)
-                      </span>
-                    </dd>
-                  </div>
                 </dl>
                 
                 <div v-if="selectedGoal.team_members && selectedGoal.team_members.length > 0" class="mt-6">
@@ -632,17 +615,7 @@
                     
                     <!-- Enhanced Summary Section -->
                     <div class="mt-4 pt-4 border-t border-gray-200">
-                      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div class="text-center p-2 bg-white rounded border">
-                          <div class="font-semibold text-lg text-indigo-600">{{ formatCurrency(selectedGoal.valor_meta) }}</div>
-                          <div class="text-xs text-gray-500">Meta Total</div>
-                        </div>
-                        <div class="text-center p-2 bg-white rounded border">
-                          <div class="font-semibold text-lg" :class="getDistributionStatusClass(selectedGoal)">
-                            {{ formatCurrency(getTotalDistributedGoals(selectedGoal.child_goals)) }}
-                          </div>
-                          <div class="text-xs text-gray-500">Distribuído</div>
-                        </div>
+                      <div class="grid grid-cols-2 gap-4 text-sm">
                         <div v-if="selectedGoal.supervisor_role === 'representante_premium'" class="text-center p-2 bg-purple-50 rounded border">
                           <div class="font-semibold text-lg text-purple-600">
                             {{ formatCurrency(getRepresentantePremiumGoalTotal(selectedGoal.child_goals)) }}
@@ -654,16 +627,6 @@
                             {{ formatCurrency(getPrepostosGoalTotal(selectedGoal.child_goals)) }}
                           </div>
                           <div class="text-xs text-gray-500">Prepostos</div>
-                        </div>
-                      </div>
-                      
-                      <!-- Difference indicator -->
-                      <div class="mt-3 text-center">
-                        <div class="text-sm">
-                          <span class="text-gray-600">Diferença: </span>
-                          <span class="font-semibold" :class="getDifferenceClass(selectedGoal)">
-                            {{ formatCurrency(selectedGoal.valor_meta - getTotalDistributedGoals(selectedGoal.child_goals)) }}
-                          </span>
                         </div>
                       </div>
                     </div>

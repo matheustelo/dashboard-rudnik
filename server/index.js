@@ -883,6 +883,7 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
 
       // 4. Expand representante_premium to their preposto children
       const finalChildren = []
+      const repGoals = []
       for (const child of childrenIds) {
         const { rows } = await client.query(
           `SELECT role, children FROM clone_users_apprudnik WHERE id = $1 AND is_active = true`,
@@ -892,6 +893,7 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
         if (rows.length > 0 && rows[0].role === 'representante_premium') {
           const prepostos = parseJsonField(rows[0].children)
           if (prepostos && prepostos.length > 0) {
+            repGoals.push({ id: child.id, goalAmount: child.goalAmount })
             const ids = prepostos.map((p) => Number(p.id))
             const amount = Math.floor((child.goalAmount / ids.length) * 100) / 100
             const rem = Number.parseFloat((child.goalAmount - amount * ids.length).toFixed(2))
@@ -918,6 +920,18 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
           child.id,
           tipo_meta,
           child.goalAmount,
+          data_inicio,
+          data_fim,
+          created_by,
+        ])
+      }
+
+      // Also insert goals for representante_premium users themselves
+      for (const rep of repGoals) {
+        await client.query(individualGoalQuery, [
+          rep.id,
+          tipo_meta,
+          rep.goalAmount,
           data_inicio,
           data_fim,
           created_by,
