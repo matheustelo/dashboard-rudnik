@@ -969,40 +969,38 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
 
 // Delete goal
 app.delete("/api/goals/:type", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
-  console.log("--- Goals API: DELETE /api/goals started ---");
-  try {
-    const { type } = req.params;
-    const { usuario_id, tipo_meta } = req.body;
+    try {
+      console.log("🔄 API: Deleting goal:", type, id)
 
-    console.log("🗑️ Goals: Deleting goal:", { type, usuario_id, tipo_meta });
+      if (!type || !id) {
+        throw new Error("Tipo e ID da meta são obrigatórios")
+      }
 
-    if (!usuario_id || !tipo_meta) {
-      return res.status(400).json({ message: "usuario_id e tipo_meta são obrigatórios" });
+      if (!["general", "individual"].includes(type)) {
+        throw new Error("Tipo de meta deve ser 'general' ou 'individual'")
+      }
+
+      const goalId = Number.parseInt(id)
+      if (isNaN(goalId) || goalId <= 0) {
+        throw new Error("ID da meta deve ser um número válido")
+      }
+
+      const response = await api.delete(`/goals/${type}/${goalId}`)
+      console.log("✅ API: Goal deleted:", response.data)
+      return response
+    } catch (error) {
+      console.error("❌ API: Error deleting goal:", error)
+
+      if (error.response?.data?.error === "GOAL_NOT_FOUND") {
+        throw new Error("Meta não encontrada")
+      } else if (error.response?.data?.error === "INVALID_TYPE") {
+        throw new Error("Tipo de meta inválido")
+      } else if (error.response?.data?.error === "INVALID_ID") {
+        throw new Error("ID da meta inválido")
+      }
+
+      throw error
     }
-
-    if (type === "general") {
-      await pool.query(
-        `DELETE FROM metas_gerais WHERE usuario_id = $1 AND tipo_meta = $2`,
-        [usuario_id, tipo_meta]
-      );
-    } else if (type === "individual") {
-      await pool.query(
-        `DELETE FROM metas_individuais WHERE usuario_id = $1 AND tipo_meta = $2`,
-        [usuario_id, tipo_meta]
-      );
-    } else {
-      return res.status(400).json({ message: "Invalid goal type" });
-    }
-
-    console.log("✅ Goals: Goal deleted successfully");
-    res.status(204).send();
-  } catch (error) {
-    console.error("❌ Goals: Error deleting goal:", error.message);
-    res.status(500).json({
-      message: "Erro ao excluir meta",
-      error: error.message,
-    });
-  }
 });
 
 
