@@ -23,7 +23,7 @@
               'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm',
             ]"
           >
-            Metas por Equipe (Supervisores/Parceiros)
+            Metas por Equipe (Supervisores/Parceiros/Rep. Premium)
           </button>
           <button
             @click="activeTab = 'individual'"
@@ -34,7 +34,7 @@
               'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm',
             ]"
           >
-            Metas Individuais (Vendedores)
+            Metas Individuais (Vendedores/Representantes/Prepostos)
           </button>
         </nav>
       </div>
@@ -50,6 +50,7 @@
             Carregando metas...
           </div>
         </div>
+
         <div v-else-if="error" class="text-center py-10">
           <div class="bg-red-50 border border-red-200 rounded-md p-4">
             <div class="flex">
@@ -75,6 +76,7 @@
             </div>
           </div>
         </div>
+
         <div v-else>
           <!-- Team Goals Tab -->
           <div v-if="activeTab === 'team'">
@@ -84,26 +86,92 @@
                 + Nova Meta de Equipe
               </button>
             </div>
+
             <div class="bg-white shadow overflow-hidden sm:rounded-lg">
               <ul role="list" class="divide-y divide-gray-200">
                 <li v-for="goal in goals.generalGoals" :key="goal.id" class="px-4 py-4 sm:px-6">
                   <div class="flex items-center justify-between">
                     <div class="flex-1">
                       <p class="text-sm font-medium text-indigo-600 truncate">
-                        {{ goal.supervisor_name }} ({{ goal.supervisor_role }}) - Meta de {{ goal.tipo_meta }}
+                        {{ goal.supervisor_name }} 
+                        <span :class="getSupervisorRoleBadgeClass(goal.supervisor_role)" class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium">
+                          {{ getSupervisorRoleLabel(goal.supervisor_role) }}
+                        </span>
+                        - Meta de {{ goal.tipo_meta }}
                       </p>
-                      <div class="mt-1 text-xs text-gray-500">
+                      <div class="mt-1 text-xs text-gray-500 space-x-2">
                         <span v-if="goal.team_members_count > 0" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
                           {{ goal.team_members_count }} membro(s) na equipe
                         </span>
                         <span v-else class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
                           Sem membros na equipe
                         </span>
+                        <!-- Show hierarchy info for representante_premium -->
+                        <span v-if="goal.supervisor_role === 'representante_premium' && hasPrepostos(goal)" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                          Inclui {{ getPrepostosCount(goal) }} preposto(s)
+                        </span>
+                        <!-- Show distributed goals summary -->
+                        <span v-if="goal.child_goals && goal.child_goals.length > 0" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                          {{ goal.child_goals.length }} metas distribuídas
+                        </span>
+                      </div>
+                      <!-- Show goal distribution summary -->
+                      <div v-if="goal.child_goals && goal.child_goals.length > 0" class="mt-2 text-xs text-gray-600">
+                        <span class="font-medium">Distribuição:</span>
+                        {{ formatCurrency(getTotalDistributedGoals(goal.child_goals)) }} de {{ formatCurrency(goal.valor_meta) }}
+                        <span class="ml-2" :class="getDistributionStatusClass(goal)">
+                          ({{ getDistributionPercentage(goal) }}%)
+                        </span>
+                      </div>
+                      
+                      <!-- Enhanced Hierarchical Goal Display -->
+                      <div v-if="goal.child_goals && goal.child_goals.length > 0" class="mt-3 bg-gray-50 rounded-lg p-3 border">
+                        <h5 class="text-xs font-medium text-gray-700 mb-2">Distribuição Hierárquica de Metas:</h5>
+                        <div class="space-y-2">
+                          <div v-for="childGoal in getHierarchicalChildGoals(goal.child_goals)" :key="childGoal.id" 
+                               class="flex items-center justify-between text-xs"
+                               :class="getChildGoalHierarchyClass(childGoal)">
+                            <div class="flex items-center flex-1 min-w-0">
+                              <span v-if="childGoal.isSubordinate" class="text-gray-400 mr-2 flex-shrink-0">└─</span>
+                              <span class="font-medium truncate">{{ childGoal.user_name }}</span>
+                              <span :class="getUserRoleBadgeClass(childGoal.user_role)" class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium flex-shrink-0">
+                                {{ getUserRoleLabel(childGoal.user_role) }}
+                              </span>
+                              <span v-if="childGoal.user_role === 'preposto' && childGoal.parentName" class="ml-2 text-gray-500 flex-shrink-0">
+                                ({{ childGoal.parentName }})
+                              </span>
+                            </div>
+                            <div class="flex items-center space-x-2 flex-shrink-0">
+                              <span class="font-semibold" :class="getGoalValueColorClass(childGoal.user_role)">
+                                {{ formatCurrency(childGoal.valor_meta) }}
+                              </span>
+                              <span class="text-gray-500">{{ childGoal.tipo_meta }}</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <!-- Hierarchy Summary for representante_premium -->
+                        <div v-if="goal.supervisor_role === 'representante_premium'" class="mt-3 pt-2 border-t border-gray-200">
+                          <div class="grid grid-cols-2 gap-4 text-xs">
+                            <div>
+                              <span class="text-gray-600">Rep. Premium:</span>
+                              <div class="font-semibold text-purple-600">
+                                {{ formatCurrency(getRepresentantePremiumGoalTotal(goal.child_goals)) }}
+                              </div>
+                            </div>
+                            <div>
+                              <span class="text-gray-600">Prepostos:</span>
+                              <div class="font-semibold text-yellow-600">
+                                {{ formatCurrency(getPrepostosGoalTotal(goal.child_goals)) }}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                     <div class="ml-2 flex-shrink-0 flex space-x-4">
                       <button @click="viewGoalDetails(goal)" class="text-sm font-medium text-blue-500 hover:text-blue-700">Ver Detalhes</button>
-                      <button @click="deleteGoal('general', goal.usuario_id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
+                      <button @click="deleteGoal('general', goal.id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
                     </div>
                   </div>
                   <div class="mt-2 sm:flex sm:justify-between">
@@ -138,13 +206,18 @@
                 + Nova Meta Individual
               </button>
             </div>
+
             <div class="bg-white shadow overflow-hidden sm:rounded-lg">
               <ul role="list" class="divide-y divide-gray-200">
                 <li v-for="goal in goals.individualGoals" :key="goal.id" class="px-4 py-4 sm:px-6">
                   <div class="flex items-center justify-between">
                     <div class="flex-1">
                       <p class="text-sm font-medium text-indigo-600 truncate">
-                        {{ goal.user_name }} ({{ goal.user_role }}) - Meta de {{ goal.tipo_meta }}
+                        {{ goal.user_name }} 
+                        <span :class="getUserRoleBadgeClass(goal.user_role)" class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium">
+                          {{ getUserRoleLabel(goal.user_role) }}
+                        </span>
+                        - Meta de {{ goal.tipo_meta }}
                       </p>
                       <div class="mt-1 text-xs text-gray-500" v-if="goal.supervisors && goal.supervisors.length > 0">
                         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
@@ -153,16 +226,17 @@
                       </div>
                     </div>
                     <div class="ml-2 flex-shrink-0 flex space-x-4">
+                      <div class="text-right">
+                        <div class="text-sm font-medium text-gray-900">{{ formatCurrency(goal.valor_meta) }}</div>
+                        <div class="text-xs text-gray-500">{{ goal.tipo_meta }}</div>
+                      </div>
                       <button @click="openGoalModal('individual', goal)" class="text-sm font-medium text-gray-500 hover:text-gray-700">Editar</button>
-                      <button @click="deleteGoal('individual', goal.id || goal._id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
+                      <button @click="deleteGoal('individual', goal.id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
                     </div>
                   </div>
                   <div class="mt-2 sm:flex sm:justify-between">
                     <div class="sm:flex">
                       <p class="flex items-center text-sm text-gray-500">
-                        Valor: {{ formatCurrency(goal.valor_meta) }}
-                      </p>
-                      <p class="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
                         Período: {{ formatDate(goal.data_inicio) }} a {{ formatDate(goal.data_fim) }}
                       </p>
                     </div>
@@ -188,7 +262,7 @@
         <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
           <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" @click="closeModal"></div>
           <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-          <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+          <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
             <form @submit.prevent="saveGoal">
               <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                 <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">{{ modal.title }}</h3>
@@ -196,15 +270,18 @@
                   <div v-if="modal.type === 'team'">
                     <label for="leader" class="block text-sm font-medium text-gray-700">Líder de Equipe</label>
                     <select 
-                      id="leader" 
-                      v-model="currentGoal.usuario_id" 
-                      @change="onLeaderChange" 
-                      required 
+                      id="leader"
+                      v-model="currentGoal.usuario_id"
+                      @change="onLeaderChange"
+                      required
                       class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
                     >
                       <option disabled value="">Selecione um líder</option>
                       <option v-for="leader in teamLeaders" :key="leader.id" :value="leader.id">
-                        {{ leader.name }} ({{ leader.role }}) 
+                        {{ leader.name }} 
+                        <span :class="getSupervisorRoleBadgeClass(leader.role)" class="ml-1">
+                          ({{ getSupervisorRoleLabel(leader.role) }})
+                        </span>
                         <span v-if="leader.has_team">- {{ leader.team_members_count }} membro(s)</span>
                         <span v-else>- Sem equipe</span>
                       </option>
@@ -248,28 +325,49 @@
                         </div>
                       </div>
                       
-                      <!-- Team Members Goal Assignment -->
-                      <div class="space-y-3 max-h-60 overflow-y-auto">
-                        <div v-for="member in teamMembers" :key="member.id" class="flex items-center justify-between p-3 bg-white rounded border">
-                          <div class="flex-1">
-                            <div class="font-medium text-sm text-gray-900">{{ member.name }}</div>
-                            <div class="text-xs text-gray-500">{{ member.email }} ({{ member.role }})</div>
+                      <!-- Team Members Goal Assignment (Enhanced for representante_premium hierarchy) -->
+                      <div class="space-y-2 max-h-80 overflow-y-auto">
+                        <div v-for="member in sortedTeamMembers" :key="member.id" 
+                             class="flex items-center justify-between p-3 bg-white rounded border" 
+                             :class="getHierarchyClasses(member)">
+                          <div class="flex-1 min-w-0">
+                            <div class="font-medium text-sm text-gray-900 flex items-center">
+                              <!-- Hierarchy indicator -->
+                              <span v-if="member.isSubordinate" class="text-gray-400 mr-2 flex-shrink-0">└─</span>
+                              <span class="truncate">{{ member.name }}</span>
+                              <span :class="getUserRoleBadgeClass(member.role)" class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium flex-shrink-0">
+                                {{ getUserRoleLabel(member.role) }}
+                              </span>
+                              <!-- Show parent info for prepostos -->
+                              <span v-if="member.role === 'preposto' && member.parentName" class="ml-2 text-xs text-gray-500 flex-shrink-0">
+                                (sob {{ member.parentName }})
+                              </span>
+                            </div>
+                            <div class="text-xs text-gray-500 truncate">{{ member.email }}</div>
                           </div>
-                          <div class="flex items-center space-x-2">
-                            <span class="text-sm text-gray-600">Meta:</span>
-                            <div class="relative">
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                :value="member.goalAmount || 0"
-                                @input="updateMemberGoal(member.id, $event.target.value)"
-                                @blur="validateMemberGoal(member.id)"
-                                class="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
-                                :class="member.hasError ? 'border-red-500 bg-red-50' : ''"
-                              />
-                              <div v-if="member.hasError" class="absolute -bottom-5 left-0 text-xs text-red-600">
-                                {{ member.errorMessage }}
+                          <div class="flex items-center space-x-3 flex-shrink-0">
+                            <!-- Current Goal Display -->
+                            <div v-if="member.currentGoalValue" class="text-right">
+                              <div class="text-xs text-gray-500">Meta Atual:</div>
+                              <div class="text-sm font-medium text-blue-600">{{ formatCurrency(member.currentGoalValue) }}</div>
+                            </div>
+                            <!-- Goal Input -->
+                            <div class="flex items-center space-x-2">
+                              <span class="text-sm text-gray-600 flex-shrink-0">Nova Meta:</span>
+                              <div class="relative">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  :value="member.goalAmount || 0"
+                                  @input="updateMemberGoal(member.id, $event.target.value)"
+                                  @blur="validateMemberGoal(member.id)"
+                                  class="w-28 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+                                  :class="member.hasError ? 'border-red-500 bg-red-50' : ''"
+                                />
+                                <div v-if="member.hasError" class="absolute -bottom-5 left-0 text-xs text-red-600 whitespace-nowrap">
+                                  {{ member.errorMessage }}
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -277,7 +375,7 @@
                       </div>
                       
                       <!-- Quick Actions -->
-                      <div class="mt-4 flex space-x-2">
+                      <div class="mt-4 flex flex-wrap gap-2">
                         <button
                           type="button"
                           @click="distributeEqually"
@@ -290,7 +388,7 @@
                           @click="distributeByPerformance"
                           class="px-3 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-green-500"
                         >
-                          Distribuir por Performance
+                          Por Performance
                         </button>
                         <button
                           type="button"
@@ -328,12 +426,11 @@
                         <div class="ml-3">
                           <h3 class="text-sm font-medium text-red-800">Atenção</h3>
                           <div class="mt-2 text-sm text-red-700">
-                            <p>Este líder não possui vendedores, representantes, representantes premium ou prepostos na equipe. A meta não pode ser distribuída manualmente.</p>
+                            <p>Este líder não possui vendedores, representantes ou prepostos na equipe. A meta não pode ser distribuída manualmente.</p>
                           </div>
                         </div>
                       </div>
                     </div>
-
                     <div v-else-if="currentGoal.usuario_id && loadingTeamMembers" class="mt-2 text-sm text-blue-600 bg-blue-50 p-3 rounded-md border border-blue-200">
                       <div class="flex items-center">
                         <svg class="animate-spin -ml-1 mr-3 h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -346,16 +443,19 @@
                   </div>
 
                   <div v-if="modal.type === 'individual'">
-                    <label for="user" class="block text-sm font-medium text-gray-700">Vendedor/Representante</label>
+                    <label for="user" class="block text-sm font-medium text-gray-700">Vendedor/Representante/Preposto</label>
                     <select 
-                      id="user" 
-                      v-model="currentGoal.usuario_id" 
-                      required 
+                      id="user"
+                      v-model="currentGoal.usuario_id"
+                      required
                       class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
                     >
                       <option disabled value="">Selecione um usuário</option>
                       <option v-for="user in individualUsers" :key="user.id" :value="user.id">
-                        {{ user.name }} ({{ user.role }})
+                        {{ user.name }} 
+                        <span :class="getUserRoleBadgeClass(user.role)" class="ml-1">
+                          ({{ getUserRoleLabel(user.role) }})
+                        </span>
                         <span v-if="user.direct_supervisor_name"> - Supervisor: {{ user.direct_supervisor_name }}</span>
                       </option>
                     </select>
@@ -364,9 +464,9 @@
                   <div>
                     <label for="goal-type" class="block text-sm font-medium text-gray-700">Tipo de Meta</label>
                     <select 
-                      id="goal-type" 
-                      v-model="currentGoal.tipo_meta" 
-                      required 
+                      id="goal-type"
+                      v-model="currentGoal.tipo_meta"
+                      required
                       class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
                     >
                       <option value="faturamento">Faturamento (R$)</option>
@@ -377,11 +477,11 @@
                   <div>
                     <label for="value" class="block text-sm font-medium text-gray-700">Valor da Meta</label>
                     <input 
-                      type="number" 
-                      step="0.01" 
-                      id="value" 
-                      v-model="currentGoal.valor_meta" 
-                      required 
+                      type="number"
+                      step="0.01"
+                      id="value"
+                      v-model="currentGoal.valor_meta"
+                      required
                       class="mt-1 focus:ring-blue-500 focus:border-blue-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
                       @input="validateDistribution"
                     >
@@ -391,20 +491,20 @@
                     <div>
                       <label for="start-date" class="block text-sm font-medium text-gray-700">Data de Início</label>
                       <input 
-                        type="date" 
-                        id="start-date" 
-                        v-model="currentGoal.data_inicio" 
-                        required 
+                        type="date"
+                        id="start-date"
+                        v-model="currentGoal.data_inicio"
+                        required
                         class="mt-1 focus:ring-blue-500 focus:border-blue-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
                       >
                     </div>
                     <div>
                       <label for="end-date" class="block text-sm font-medium text-gray-700">Data de Fim</label>
                       <input 
-                        type="date" 
-                        id="end-date" 
-                        v-model="currentGoal.data_fim" 
-                        required 
+                        type="date"
+                        id="end-date"
+                        v-model="currentGoal.data_fim"
+                        required
                         class="mt-1 focus:ring-blue-500 focus:border-blue-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
                       >
                     </div>
@@ -413,7 +513,7 @@
               </div>
               <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
                 <button 
-                  type="submit" 
+                  type="submit"
                   :disabled="saving"
                   class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -424,8 +524,8 @@
                   {{ saving ? 'Salvando...' : 'Salvar' }}
                 </button>
                 <button 
-                  @click="closeModal" 
-                  type="button" 
+                  @click="closeModal"
+                  type="button"
                   class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                 >
                   Cancelar
@@ -441,14 +541,19 @@
         <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
           <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" @click="showDetailsModal = false"></div>
           <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-          <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+          <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
             <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
               <h3 class="text-lg leading-6 font-medium text-gray-900" id="details-modal-title">Detalhes da Meta</h3>
               <div v-if="selectedGoal" class="mt-4">
                 <dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
                   <div>
                     <dt class="text-sm font-medium text-gray-500">Líder</dt>
-                    <dd class="mt-1 text-sm text-gray-900">{{ selectedGoal.supervisor_name }}</dd>
+                    <dd class="mt-1 text-sm text-gray-900 flex items-center">
+                      {{ selectedGoal.supervisor_name }}
+                      <span :class="getSupervisorRoleBadgeClass(selectedGoal.supervisor_role)" class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium">
+                        {{ getSupervisorRoleLabel(selectedGoal.supervisor_role) }}
+                      </span>
+                    </dd>
                   </div>
                   <div>
                     <dt class="text-sm font-medium text-gray-500">Tipo</dt>
@@ -466,37 +571,154 @@
                     <dt class="text-sm font-medium text-gray-500">Período</dt>
                     <dd class="mt-1 text-sm text-gray-900">{{ formatDate(selectedGoal.data_inicio) }} a {{ formatDate(selectedGoal.data_fim) }}</dd>
                   </div>
+                  <div v-if="selectedGoal.child_goals && selectedGoal.child_goals.length > 0" class="sm:col-span-2">
+                    <dt class="text-sm font-medium text-gray-500">Distribuição de Metas</dt>
+                    <dd class="mt-1 text-sm text-gray-900">
+                      {{ formatCurrency(getTotalDistributedGoals(selectedGoal.child_goals)) }} distribuído de {{ formatCurrency(selectedGoal.valor_meta) }}
+                      <span class="ml-2" :class="getDistributionStatusClass(selectedGoal)">
+                        ({{ getDistributionPercentage(selectedGoal) }}%)
+                      </span>
+                    </dd>
+                  </div>
                 </dl>
                 
                 <div v-if="selectedGoal.team_members && selectedGoal.team_members.length > 0" class="mt-6">
-                  <h4 class="text-sm font-medium text-gray-900 mb-3">Membros da Equipe</h4>
-                  <div class="bg-gray-50 rounded-lg p-3">
-                    <ul class="space-y-2">
-                      <li v-for="member in selectedGoal.team_members" :key="member.id" class="flex justify-between items-center text-sm">
-                        <span>{{ member.name }} ({{ member.role }})</span>
-                        <span class="text-gray-500">{{ member.email }}</span>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
+                  <h4 class="text-sm font-medium text-gray-900 mb-3">Estrutura Hierárquica de Metas da Equipe</h4>
+                  <div class="bg-gray-50 rounded-lg p-4 border">
+                    <!-- Team Leader Goal -->
+                    <div class="mb-4 p-3 bg-white rounded-lg border-2 border-indigo-200">
+                      <div class="flex justify-between items-center">
+                        <div class="flex items-center">
+                          <div class="w-2 h-2 bg-indigo-500 rounded-full mr-3"></div>
+                          <div>
+                            <div class="font-semibold text-indigo-900">{{ selectedGoal.supervisor_name }}</div>
+                            <div class="flex items-center mt-1">
+                              <span :class="getSupervisorRoleBadgeClass(selectedGoal.supervisor_role)" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium">
+                                {{ getSupervisorRoleLabel(selectedGoal.supervisor_role) }}
+                              </span>
+                              <span class="ml-2 text-xs text-gray-500">Líder da Equipe</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="text-right">
+                          <div class="text-lg font-bold text-indigo-600">{{ formatCurrency(selectedGoal.valor_meta) }}</div>
+                          <div class="text-xs text-gray-500">Meta Total</div>
+                        </div>
+                      </div>
+                    </div>
 
-                <div v-if="selectedGoal.child_goals && selectedGoal.child_goals.length > 0" class="mt-6">
-                  <h4 class="text-sm font-medium text-gray-900 mb-3">Metas Individuais Distribuídas</h4>
-                  <div class="bg-gray-50 rounded-lg p-3">
-                    <ul class="space-y-2">
-                      <li v-for="cg in selectedGoal.child_goals" :key="cg.id" class="flex justify-between items-center text-sm">
-                        <span>{{ cg.user_name }} - {{ cg.tipo_meta }}</span>
-                        <span class="text-gray-500">{{ formatCurrency(cg.valor_meta) }}</span>
-                      </li>
-                    </ul>
+                    <!-- Team Members Hierarchical Structure -->
+                    <div class="space-y-2">
+                      <div v-for="member in getEnhancedHierarchicalTeamMembers(selectedGoal)" :key="member.id" 
+                           class="p-3 rounded-lg border"
+                           :class="getEnhancedDetailHierarchyClasses(member)">
+                        <div class="flex justify-between items-center">
+                          <div class="flex items-center flex-1 min-w-0">
+                            <!-- Hierarchy connector -->
+                            <div class="flex items-center mr-3">
+                              <div v-if="member.isSubordinate" class="flex flex-col items-center">
+                                <div class="w-px h-4 bg-gray-300"></div>
+                                <div class="w-4 h-px bg-gray-300"></div>
+                              </div>
+                              <div v-else class="w-2 h-2 rounded-full" :class="getRoleIndicatorClass(member.role)"></div>
+                            </div>
+                            
+                            <div class="flex-1 min-w-0">
+                              <div class="flex items-center">
+                                <span class="font-medium text-sm truncate">{{ member.name }}</span>
+                                <span :class="getUserRoleBadgeClass(member.role)" class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium flex-shrink-0">
+                                  {{ getUserRoleLabel(member.role) }}
+                                </span>
+                              </div>
+                              <div class="text-xs text-gray-500 truncate mt-1">
+                                {{ member.email }}
+                                <span v-if="member.role === 'preposto' && member.parentName" class="ml-2">
+                                  • Subordinado a {{ member.parentName }}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <!-- Goal Value Display -->
+                          <div class="flex items-center space-x-4 flex-shrink-0">
+                            <div class="text-right">
+                              <div class="text-sm font-bold" :class="getGoalValueColorClass(member.role)">
+                                {{ formatCurrency(getMemberGoalValue(member, selectedGoal)) }}
+                              </div>
+                              <div class="text-xs text-gray-500">{{ selectedGoal.tipo_meta }}</div>
+                            </div>
+                            <!-- Performance indicator if available -->
+                            <div v-if="member.performance" class="text-right">
+                              <div class="text-xs text-gray-600">Atual:</div>
+                              <div class="text-xs font-medium" :class="getPerformanceClass(member, selectedGoal)">
+                                {{ formatCurrency(member.performance.faturamentoTotal || 0) }}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <!-- Goal Progress Bar -->
+                        <div v-if="getMemberGoalValue(member, selectedGoal) > 0" class="mt-2">
+                          <div class="flex justify-between text-xs text-gray-600 mb-1">
+                            <span>Progresso da Meta</span>
+                            <span>{{ getMemberGoalProgress(member, selectedGoal) }}%</span>
+                          </div>
+                          <div class="w-full bg-gray-200 rounded-full h-1.5">
+                            <div 
+                              class="h-1.5 rounded-full transition-all duration-300"
+                              :class="getProgressBarClass(member, selectedGoal)"
+                              :style="{ width: Math.min(getMemberGoalProgress(member, selectedGoal), 100) + '%' }"
+                            ></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- Enhanced Summary Section -->
+                    <div class="mt-4 pt-4 border-t border-gray-200">
+                      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div class="text-center p-2 bg-white rounded border">
+                          <div class="font-semibold text-lg text-indigo-600">{{ formatCurrency(selectedGoal.valor_meta) }}</div>
+                          <div class="text-xs text-gray-500">Meta Total</div>
+                        </div>
+                        <div class="text-center p-2 bg-white rounded border">
+                          <div class="font-semibold text-lg" :class="getDistributionStatusClass(selectedGoal)">
+                            {{ formatCurrency(getTotalDistributedGoals(selectedGoal.child_goals)) }}
+                          </div>
+                          <div class="text-xs text-gray-500">Distribuído</div>
+                        </div>
+                        <div v-if="selectedGoal.supervisor_role === 'representante_premium'" class="text-center p-2 bg-purple-50 rounded border">
+                          <div class="font-semibold text-lg text-purple-600">
+                            {{ formatCurrency(getRepresentantePremiumGoalTotal(selectedGoal.child_goals)) }}
+                          </div>
+                          <div class="text-xs text-gray-500">Rep. Premium</div>
+                        </div>
+                        <div v-if="selectedGoal.supervisor_role === 'representante_premium'" class="text-center p-2 bg-yellow-50 rounded border">
+                          <div class="font-semibold text-lg text-yellow-600">
+                            {{ formatCurrency(getPrepostosGoalTotal(selectedGoal.child_goals)) }}
+                          </div>
+                          <div class="text-xs text-gray-500">Prepostos</div>
+                        </div>
+                      </div>
+                      
+                      <!-- Difference indicator -->
+                      <div class="mt-3 text-center">
+                        <div class="text-sm">
+                          <span class="text-gray-600">Diferença: </span>
+                          <span class="font-semibold" :class="getDifferenceClass(selectedGoal)">
+                            {{ formatCurrency(selectedGoal.valor_meta - getTotalDistributedGoals(selectedGoal.child_goals)) }}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
             <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
               <button 
-                @click="showDetailsModal = false" 
-                type="button" 
+                @click="showDetailsModal = false"
+                type="button"
                 class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 sm:w-auto sm:text-sm"
               >
                 Fechar
@@ -519,9 +741,9 @@ const error = ref(null)
 const saving = ref(false)
 const loadingTeamMembers = ref(false)
 const activeTab = ref("team")
-const goals = ref({ 
-  generalGoals: [], 
-  individualGoals: [] 
+const goals = ref({
+  generalGoals: [],
+  individualGoals: []
 })
 const allUsers = ref([]) // Initialize as empty array
 const teamLeaders = ref([]) // Initialize as empty array
@@ -564,6 +786,29 @@ const remainingAmount = computed(() => {
 const distributionProgress = computed(() => {
   const total = parseFloat(currentGoal.value.valor_meta) || 0
   return total > 0 ? (totalDistributed.value / total) * 100 : 0
+})
+
+// Enhanced computed property for hierarchical sorting
+const sortedTeamMembers = computed(() => {
+  if (!Array.isArray(teamMembers.value)) {
+    return []
+  }
+  
+  // Sort to show representante_premium first, then their prepostos, then others
+  const sorted = [...teamMembers.value].sort((a, b) => {
+    // representante_premium comes first
+    if (a.role === 'representante_premium' && b.role !== 'representante_premium') return -1
+    if (b.role === 'representante_premium' && a.role !== 'representante_premium') return 1
+    
+    // Then prepostos (marked as subordinates)
+    if (a.isSubordinate && !b.isSubordinate) return 1
+    if (b.isSubordinate && !a.isSubordinate) return -1
+    
+    // Within same category, sort by name
+    return a.name.localeCompare(b.name)
+  })
+  
+  return sorted
 })
 
 // Watch for changes in allUsers to update teamLeaders
@@ -690,17 +935,58 @@ const onLeaderChange = async () => {
       member.role === 'preposto'
     ) : []
     
-    teamMembers.value = filteredMembers.map(member => ({
-      id: member.id,
-      name: member.name,
-      email: member.email,
-      role: member.role,
-      goalAmount: 0,
-      hasError: false,
-      errorMessage: ''
-    }))
+    // Enhanced processing to handle representante_premium hierarchy
+    const processedMembers = []
+    const representantePremiumMap = new Map()
     
-    console.log('✅ Team members processed:', teamMembers.value.length)
+    // First pass: identify representante_premium members
+    filteredMembers.forEach(member => {
+      if (member.role === 'representante_premium') {
+        representantePremiumMap.set(member.id, member)
+        processedMembers.push({
+          id: member.id,
+          name: member.name,
+          email: member.email,
+          role: member.role,
+          goalAmount: 0,
+          hasError: false,
+          errorMessage: '',
+          isSubordinate: false,
+          currentGoalValue: getCurrentGoalValue(member.id)
+        })
+      }
+    })
+    
+    // Second pass: process other members and mark prepostos as subordinates
+    filteredMembers.forEach(member => {
+      if (member.role !== 'representante_premium') {
+        const isSubordinate = member.role === 'preposto'
+        let parentName = null
+        
+        // Try to find parent representante_premium for prepostos
+        if (isSubordinate) {
+          // This would need to be enhanced based on your data structure
+          // For now, we'll mark all prepostos as subordinates
+          parentName = 'Representante Premium' // Placeholder
+        }
+        
+        processedMembers.push({
+          id: member.id,
+          name: member.name,
+          email: member.email,
+          role: member.role,
+          goalAmount: 0,
+          hasError: false,
+          errorMessage: '',
+          isSubordinate,
+          parentName,
+          currentGoalValue: getCurrentGoalValue(member.id)
+        })
+      }
+    })
+    
+    teamMembers.value = processedMembers
+    console.log('✅ Team members processed with hierarchy:', teamMembers.value.length)
     
   } catch (err) {
     console.error('❌ Error in onLeaderChange:', err)
@@ -709,6 +995,15 @@ const onLeaderChange = async () => {
   } finally {
     loadingTeamMembers.value = false
   }
+}
+
+const getCurrentGoalValue = (userId) => {
+  // Find current individual goal for this user
+  const currentGoal = goals.value.individualGoals.find(goal => 
+    goal.usuario_id === userId && 
+    goal.tipo_meta === currentGoal.value.tipo_meta
+  )
+  return currentGoal ? parseFloat(currentGoal.valor_meta) : 0
 }
 
 const updateMemberGoal = (memberId, value) => {
@@ -814,15 +1109,12 @@ const distributeByPerformance = async () => {
       distributeEqually()
       return
     }
-
     const totalGoal = parseFloat(currentGoal.value.valor_meta) || 0
     const performances = data.teamMembers.reduce((acc, m) => acc + (m.performance?.faturamentoTotal || 0), 0)
-
     if (performances === 0) {
       distributeEqually()
       return
     }
-
     teamMembers.value.forEach(member => {
       const perfMember = data.teamMembers.find(tm => tm.id === member.id)
       const weight = perfMember ? (perfMember.performance?.faturamentoTotal || 0) : 0
@@ -992,9 +1284,305 @@ const formatCurrency = (value) => {
   }).format(numValue)
 }
 
+// Enhanced role handling functions for hierarchy support
+const getSupervisorRoleBadgeClass = (role) => {
+  const classes = {
+    'supervisor': 'bg-blue-100 text-blue-800',
+    'parceiro_comercial': 'bg-green-100 text-green-800',
+    'gerente_comercial': 'bg-purple-100 text-purple-800',
+    'representante_premium': 'bg-purple-100 text-purple-800'
+  }
+  return classes[role] || 'bg-gray-100 text-gray-800'
+}
+
+const getSupervisorRoleLabel = (role) => {
+  const labels = {
+    'supervisor': 'Supervisor',
+    'parceiro_comercial': 'Parceiro Comercial',
+    'gerente_comercial': 'Gerente Comercial',
+    'representante_premium': 'Rep. Premium'
+  }
+  return labels[role] || role
+}
+
+const getUserRoleBadgeClass = (role) => {
+  const classes = {
+    'vendedor': 'bg-blue-100 text-blue-800',
+    'representante': 'bg-green-100 text-green-800',
+    'representante_premium': 'bg-purple-100 text-purple-800',
+    'preposto': 'bg-yellow-100 text-yellow-800'
+  }
+  return classes[role] || 'bg-gray-100 text-gray-800'
+}
+
+const getUserRoleLabel = (role) => {
+  const labels = {
+    'vendedor': 'Vendedor',
+    'representante': 'Representante',
+    'representante_premium': 'Rep. Premium',
+    'preposto': 'Preposto'
+  }
+  return labels[role] || role
+}
+
+// Enhanced hierarchy helper functions
+const getHierarchyClasses = (member) => {
+  if (member.role === 'representante_premium') {
+    return 'border-purple-300 bg-purple-50'
+  } else if (member.isSubordinate) {
+    return 'border-yellow-300 bg-yellow-50 ml-4'
+  }
+  return ''
+}
+
+const getDetailHierarchyClasses = (member) => {
+  if (member.role === 'representante_premium') {
+    return 'bg-purple-100 font-medium'
+  } else if (member.isSubordinate) {
+    return 'bg-yellow-50 ml-4'
+  }
+  return ''
+}
+
+const hasPrepostos = (goal) => {
+  if (!goal.team_members || !Array.isArray(goal.team_members)) return false
+  return goal.team_members.some(member => member.role === 'preposto')
+}
+
+const getPrepostosCount = (goal) => {
+  if (!goal.team_members || !Array.isArray(goal.team_members)) return 0
+  return goal.team_members.filter(member => member.role === 'preposto').length
+}
+
+const getHierarchicalTeamMembers = (teamMembers) => {
+  if (!Array.isArray(teamMembers)) return []
+  
+  // Sort to show hierarchy: representante_premium first, then their prepostos
+  const sorted = [...teamMembers].sort((a, b) => {
+    // representante_premium comes first
+    if (a.role === 'representante_premium' && b.role !== 'representante_premium') return -1
+    if (b.role === 'representante_premium' && a.role !== 'representante_premium') return 1
+    
+    // Then prepostos (marked as subordinates)
+    if (a.role === 'preposto' && b.role !== 'preposto') return 1
+    if (b.role === 'preposto' && a.role !== 'preposto') return -1
+    
+    // Within same category, sort by name
+    return a.name.localeCompare(b.name)
+  })
+  
+  // Mark prepostos as subordinates for display
+  return sorted.map(member => ({
+    ...member,
+    isSubordinate: member.role === 'preposto',
+    parentName: member.role === 'preposto' ? 'Representante Premium' : null
+  }))
+}
+
+// Goal value display helper functions
+const getTotalDistributedGoals = (childGoals) => {
+  if (!Array.isArray(childGoals)) return 0
+  return childGoals.reduce((sum, goal) => sum + parseFloat(goal.valor_meta || 0), 0)
+}
+
+const getDistributionPercentage = (goal) => {
+  const total = parseFloat(goal.valor_meta) || 0
+  const distributed = getTotalDistributedGoals(goal.child_goals)
+  return total > 0 ? ((distributed / total) * 100).toFixed(1) : '0.0'
+}
+
+const getDistributionStatusClass = (goal) => {
+  const percentage = parseFloat(getDistributionPercentage(goal))
+  if (percentage > 100) return 'text-red-600 font-medium'
+  if (percentage === 100) return 'text-green-600 font-medium'
+  if (percentage >= 80) return 'text-yellow-600 font-medium'
+  return 'text-blue-600 font-medium'
+}
+
+const getMemberGoalValue = (member, selectedGoal) => {
+  if (!selectedGoal.child_goals || !Array.isArray(selectedGoal.child_goals)) return 0
+  const memberGoal = selectedGoal.child_goals.find(goal => goal.usuario_id === member.id)
+  return memberGoal ? parseFloat(memberGoal.valor_meta) : 0
+}
+
+const getGoalValueClass = (member) => {
+  const goalValue = getMemberGoalValue(member, selectedGoal.value)
+  if (goalValue === 0) return 'text-gray-400'
+  if (member.role === 'representante_premium') return 'text-purple-600'
+  if (member.role === 'preposto') return 'text-yellow-600'
+  return 'text-blue-600'
+}
+
+const getDifferenceClass = (goal) => {
+  const difference = goal.valor_meta - getTotalDistributedGoals(goal.child_goals)
+  if (difference < 0) return 'text-red-600 font-medium'
+  if (difference === 0) return 'text-green-600 font-medium'
+  return 'text-blue-600 font-medium'
+}
+
 // Initialize data on component mount
 onMounted(() => {
   console.log('🚀 Component mounted, fetching data with hierarchy support...')
   fetchAllData()
 })
+
+// Enhanced hierarchy helper functions for goal display
+const getHierarchicalChildGoals = (childGoals) => {
+  if (!Array.isArray(childGoals)) return []
+  
+  // Sort to show representante_premium first, then their prepostos
+  const sorted = [...childGoals].sort((a, b) => {
+    // representante_premium comes first
+    if (a.user_role === 'representante_premium' && b.user_role !== 'representante_premium') return -1
+    if (b.user_role === 'representante_premium' && a.user_role !== 'representante_premium') return 1
+    
+    // Then prepostos (marked as subordinates)
+    if (a.user_role === 'preposto' && b.user_role !== 'preposto') return 1
+    if (b.user_role === 'preposto' && a.user_role !== 'preposto') return -1
+    
+    // Within same category, sort by name
+    return a.user_name.localeCompare(b.user_name)
+  })
+  
+  // Mark prepostos as subordinates and find their parents
+  return sorted.map(goal => {
+    const isSubordinate = goal.user_role === 'preposto'
+    let parentName = null
+    
+    if (isSubordinate) {
+      // Find the representante_premium in the same goal set
+      const parent = sorted.find(g => g.user_role === 'representante_premium')
+      parentName = parent ? parent.user_name : 'Representante Premium'
+    }
+    
+    return {
+      ...goal,
+      isSubordinate,
+      parentName
+    }
+  })
+}
+
+const getChildGoalHierarchyClass = (childGoal) => {
+  if (childGoal.user_role === 'representante_premium') {
+    return 'bg-purple-100 border border-purple-200 rounded p-2 font-medium'
+  } else if (childGoal.isSubordinate) {
+    return 'bg-yellow-50 border border-yellow-200 rounded p-2 ml-4'
+  }
+  return 'bg-white border border-gray-200 rounded p-2'
+}
+
+const getGoalValueColorClass = (role) => {
+  const classes = {
+    'representante_premium': 'text-purple-600',
+    'preposto': 'text-yellow-600',
+    'representante': 'text-green-600',
+    'vendedor': 'text-blue-600'
+  }
+  return classes[role] || 'text-gray-600'
+}
+
+const getRepresentantePremiumGoalTotal = (childGoals) => {
+  if (!Array.isArray(childGoals)) return 0
+  return childGoals
+    .filter(goal => goal.user_role === 'representante_premium')
+    .reduce((sum, goal) => sum + parseFloat(goal.valor_meta || 0), 0)
+}
+
+const getPrepostosGoalTotal = (childGoals) => {
+  if (!Array.isArray(childGoals)) return 0
+  return childGoals
+    .filter(goal => goal.user_role === 'preposto')
+    .reduce((sum, goal) => sum + parseFloat(goal.valor_meta || 0), 0)
+}
+
+const getEnhancedHierarchicalTeamMembers = (selectedGoal) => {
+  if (!selectedGoal.team_members || !Array.isArray(selectedGoal.team_members)) return []
+  
+  // Combine team members with their goal values
+  const membersWithGoals = selectedGoal.team_members.map(member => {
+    const memberGoal = selectedGoal.child_goals?.find(goal => goal.usuario_id === member.id)
+    return {
+      ...member,
+      goalValue: memberGoal ? parseFloat(memberGoal.valor_meta) : 0,
+      goalType: memberGoal ? memberGoal.tipo_meta : selectedGoal.tipo_meta
+    }
+  })
+  
+  // Sort to show hierarchy: representante_premium first, then their prepostos
+  const sorted = membersWithGoals.sort((a, b) => {
+    // representante_premium comes first
+    if (a.role === 'representante_premium' && b.role !== 'representante_premium') return -1
+    if (b.role === 'representante_premium' && a.role !== 'representante_premium') return 1
+    
+    // Then prepostos (marked as subordinates)
+    if (a.role === 'preposto' && b.role !== 'preposto') return 1
+    if (b.role === 'preposto' && a.role !== 'preposto') return -1
+    
+    // Within same category, sort by name
+    return a.name.localeCompare(b.name)
+  })
+  
+  // Mark prepostos as subordinates and find their parents
+  return sorted.map(member => {
+    const isSubordinate = member.role === 'preposto'
+    let parentName = null
+    
+    if (isSubordinate) {
+      // Find the representante_premium in the same team
+      const parent = sorted.find(m => m.role === 'representante_premium')
+      parentName = parent ? parent.name : 'Representante Premium'
+    }
+    
+    return {
+      ...member,
+      isSubordinate,
+      parentName
+    }
+  })
+}
+
+const getEnhancedDetailHierarchyClasses = (member) => {
+  if (member.role === 'representante_premium') {
+    return 'bg-purple-50 border-purple-200 border-2'
+  } else if (member.isSubordinate) {
+    return 'bg-yellow-50 border-yellow-200 border ml-6'
+  }
+  return 'bg-white border-gray-200 border'
+}
+
+const getRoleIndicatorClass = (role) => {
+  const classes = {
+    'representante_premium': 'bg-purple-500',
+    'preposto': 'bg-yellow-500',
+    'representante': 'bg-green-500',
+    'vendedor': 'bg-blue-500'
+  }
+  return classes[role] || 'bg-gray-500'
+}
+
+const getMemberGoalProgress = (member, selectedGoal) => {
+  const goalValue = getMemberGoalValue(member, selectedGoal)
+  const currentValue = member.performance?.faturamentoTotal || 0
+  return goalValue > 0 ? ((currentValue / goalValue) * 100).toFixed(1) : 0
+}
+
+const getProgressBarClass = (member, selectedGoal) => {
+  const progress = parseFloat(getMemberGoalProgress(member, selectedGoal))
+  if (progress >= 100) return 'bg-green-500'
+  if (progress >= 80) return 'bg-yellow-500'
+  if (progress >= 50) return 'bg-blue-500'
+  return 'bg-red-500'
+}
+
+const getPerformanceClass = (member, selectedGoal) => {
+  const goalValue = getMemberGoalValue(member, selectedGoal)
+  const currentValue = member.performance?.faturamentoTotal || 0
+  const progress = goalValue > 0 ? (currentValue / goalValue) * 100 : 0
+  
+  if (progress >= 100) return 'text-green-600'
+  if (progress >= 80) return 'text-yellow-600'
+  if (progress >= 50) return 'text-blue-600'
+  return 'text-red-600'
+}
 </script>
