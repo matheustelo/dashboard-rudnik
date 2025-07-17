@@ -969,16 +969,28 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
 
 // Delete goal
 app.delete("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
-    console.log("--- Goals API: DELETE /api/goals/:type/:id started ---")
-    try {
-      console.log("🔄 API: Deleting goal:", type, id)
-      const response = await api.delete(`/goals/${type}/${id}`)
-      console.log("✅ API: Goal deleted:", response.data)
-      return response
-    } catch (error) {
-      console.error("❌ API: Error deleting goal:", error)
-      throw error
+  console.log("--- Goals API: DELETE /api/goals/:type/:id started ---");
+  try {
+    const { type, id } = req.params;
+    console.log("🗑️ Goals: Deleting goal:", { type, id });
+
+    if (type === "general") {
+      await pool.query("DELETE FROM metas_gerais WHERE usuario_id = $1", [id]);
+    } else if (type === "individual") {
+      await pool.query("DELETE FROM metas_individuais WHERE id = $1", [id]);
+    } else {
+      return res.status(400).json({ message: "Invalid goal type" });
     }
+
+    console.log("✅ Goals: Goal deleted successfully");
+    res.status(204).send();
+  } catch (error) {
+    console.error("❌ Goals: Error deleting goal:", error.message);
+    res.status(500).json({
+      message: "Erro ao excluir meta",
+      error: error.message,
+    });
+  }
 });
 
 // Get goal tracking for seller
