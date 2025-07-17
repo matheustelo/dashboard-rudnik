@@ -61,6 +61,7 @@ export const goalsService = {
     const response = await api.get("/goals", { params: { period } })
     return response.data.individualGoals
   },
+  getGeneralGoal: (id) => api.get(`/goals/general/${id}`),
   saveGoal: (type, goalData) => api.post("/goals", { type, goalData }),
   deleteGoal: (type, id) => api.delete(`/goals/${type}/${id}`),
   getSellerTracking: (id, period) => api.get(`/goals/tracking/seller/${id}`, { params: { period } }),

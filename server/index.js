@@ -139,6 +139,69 @@ app.post("/api/auth/login", async (req, res) => {
   }
 })
 
+// Get a single general goal with details
+app.get("/api/goals/general/:id", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
+  console.log("--- Goals API: GET /api/goals/general/:id started ---")
+  const goalId = Number.parseInt(req.params.id)
+
+  if (isNaN(goalId)) {
+    return res.status(400).json({ message: "ID da meta inválido" })
+  }
+
+  try {
+    const generalQuery = `
+      SELECT g.*, u.name AS supervisor_name, u.role AS supervisor_role, u.children
+      FROM metas_gerais g
+      JOIN clone_users_apprudnik u ON g.usuario_id = u.id
+      WHERE g.id = $1
+    `
+    const generalResult = await pool.query(generalQuery, [goalId])
+
+    if (generalResult.rows.length === 0) {
+      return res.status(404).json({ message: "Meta de equipe não encontrada" })
+    }
+
+    const goal = generalResult.rows[0]
+    const teamMembers = await getTeamMembers(goal.usuario_id)
+    const memberIds = teamMembers.map((m) => m.id)
+
+    for (const member of teamMembers) {
+      if (member.role === 'representante_premium') {
+        const prepostos = await getTeamMembers(member.id)
+        if (prepostos && prepostos.length > 0) {
+          prepostos
+            .filter((p) => p.role === 'preposto')
+            .forEach((p) => memberIds.push(p.id))
+        }
+      }
+    }
+
+    let childGoals = []
+    if (memberIds.length > 0) {
+      const childQuery = `
+        SELECT m.*, u.name as user_name, u.role as user_role
+        FROM metas_individuais m
+        JOIN clone_users_apprudnik u ON m.usuario_id = u.id
+        WHERE m.usuario_id = $1
+        ORDER BY u.name, m.data_inicio DESC
+      `
+      const { rows } = await pool.query(childQuery, [goalId])
+      childGoals = rows
+    }
+
+    res.json({
+      ...goal,
+      children: parseJsonField(goal.children),
+      team_members: teamMembers,
+      team_members_count: teamMembers.length,
+      child_goals: childGoals,
+    })
+  } catch (error) {
+    console.error("❌ Goals: Error fetching goal by id:", error.message)
+    res.status(500).json({ message: "Erro ao carregar meta", error: error.message })
+  }
+})
+
 // Get Team Leaders (Supervisors and Parceiros)
 app.get("/api/team-leaders", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
   try {
@@ -744,11 +807,10 @@ app.get("/api/goals", authenticateToken, authorize("admin", "gerente_comercial")
           SELECT m.*, u.name as user_name, u.role as user_role
           FROM metas_individuais m
           JOIN clone_users_apprudnik u ON m.usuario_id = u.id
-          WHERE m.usuario_id = ANY($1)
-            AND m.data_inicio <= $3 AND m.data_fim >= $2
+          WHERE m.usuario_id = $1
           ORDER BY u.name, m.data_inicio DESC
         `
-        const { rows } = await pool.query(childQuery, [memberIds, startDate, endDate])
+        const { rows } = await pool.query(childQuery, [goal.id])
         childGoals = rows
       }
 
@@ -921,6 +983,7 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
           data_inicio,
           data_fim,
           created_by,
+          teamGoal.id,
         ])
       }
 
@@ -984,7 +1047,7 @@ app.delete("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerent
       try {
         await client.query("BEGIN")
         // remove related individual goals when stored with meta_geral_id linkage
-        await client.query("DELETE FROM metas_individuais WHERE meta_geral_id = $1", [goalId])
+        await client.query("DELETE FROM metas_individuais WHERE usuario_id = $1", [goalId])
         const result = await client.query(
           "DELETE FROM metas_gerais WHERE id = $1 RETURNING id",
           [goalId],
