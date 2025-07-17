@@ -124,54 +124,10 @@
                         </span>
                       </div>
                       
-                      <!-- Enhanced Hierarchical Goal Display -->
-                      <div v-if="goal.child_goals && goal.child_goals.length > 0" class="mt-3 bg-gray-50 rounded-lg p-3 border">
-                        <h5 class="text-xs font-medium text-gray-700 mb-2">Distribuição Hierárquica de Metas:</h5>
-                        <div class="space-y-2">
-                          <div v-for="childGoal in getHierarchicalChildGoals(goal.child_goals)" :key="childGoal.id" 
-                               class="flex items-center justify-between text-xs"
-                               :class="getChildGoalHierarchyClass(childGoal)">
-                            <div class="flex items-center flex-1 min-w-0">
-                              <span v-if="childGoal.isSubordinate" class="text-gray-400 mr-2 flex-shrink-0">└─</span>
-                              <span class="font-medium truncate">{{ childGoal.user_name }}</span>
-                              <span :class="getUserRoleBadgeClass(childGoal.user_role)" class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium flex-shrink-0">
-                                {{ getUserRoleLabel(childGoal.user_role) }}
-                              </span>
-                              <span v-if="childGoal.user_role === 'preposto' && childGoal.parentName" class="ml-2 text-gray-500 flex-shrink-0">
-                                ({{ childGoal.parentName }})
-                              </span>
-                            </div>
-                            <div class="flex items-center space-x-2 flex-shrink-0">
-                              <span class="font-semibold" :class="getGoalValueColorClass(childGoal.user_role)">
-                                {{ formatCurrency(childGoal.valor_meta) }}
-                              </span>
-                              <span class="text-gray-500">{{ childGoal.tipo_meta }}</span>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <!-- Hierarchy Summary for representante_premium -->
-                        <div v-if="goal.supervisor_role === 'representante_premium'" class="mt-3 pt-2 border-t border-gray-200">
-                          <div class="grid grid-cols-2 gap-4 text-xs">
-                            <div>
-                              <span class="text-gray-600">Rep. Premium:</span>
-                              <div class="font-semibold text-purple-600">
-                                {{ formatCurrency(getRepresentantePremiumGoalTotal(goal.child_goals)) }}
-                              </div>
-                            </div>
-                            <div>
-                              <span class="text-gray-600">Prepostos:</span>
-                              <div class="font-semibold text-yellow-600">
-                                {{ formatCurrency(getPrepostosGoalTotal(goal.child_goals)) }}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
                     </div>
                     <div class="ml-2 flex-shrink-0 flex space-x-4">
                       <button @click="viewGoalDetails(goal)" class="text-sm font-medium text-blue-500 hover:text-blue-700">Ver Detalhes</button>
-                      <button @click="deleteGoal('general', goal.id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
+                      <button @click="deleteGoal('general', goal.usuario_id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
                     </div>
                   </div>
                   <div class="mt-2 sm:flex sm:justify-between">
@@ -231,7 +187,7 @@
                         <div class="text-xs text-gray-500">{{ goal.tipo_meta }}</div>
                       </div>
                       <button @click="openGoalModal('individual', goal)" class="text-sm font-medium text-gray-500 hover:text-gray-700">Editar</button>
-                      <button @click="deleteGoal('individual', goal.id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
+                      <button @click="deleteGoal('individual', goal.usuario_id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
                     </div>
                   </div>
                   <div class="mt-2 sm:flex sm:justify-between">
@@ -786,6 +742,15 @@ const remainingAmount = computed(() => {
 const distributionProgress = computed(() => {
   const total = parseFloat(currentGoal.value.valor_meta) || 0
   return total > 0 ? (totalDistributed.value / total) * 100 : 0
+})
+
+// Map of all users for quick lookup by ID
+const allUsersMap = computed(() => {
+  const map = new Map()
+  if (Array.isArray(allUsers.value)) {
+    allUsers.value.forEach(u => map.set(u.id, u))
+  }
+  return map
 })
 
 // Enhanced computed property for hierarchical sorting
