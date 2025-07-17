@@ -970,20 +970,52 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
 // Delete goal
 app.delete("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
   console.log("--- Goals API: DELETE /api/goals started ---")
+  const { type, id } = req.params
+  const goalId = Number.parseInt(id)
+
+  if (isNaN(goalId)) {
+    return res.status(400).json({ message: "ID da meta inválido" })
+  }
+
   try {
-    const { type, id } = req.params
-    console.log("🗑️ Goals: Deleting goal:", { type, id })
 
     if (type === "general") {
-      await pool.query("DELETE FROM metas_gerais WHERE id = $1", [id])
+      const client = await pool.connect()
+      try {
+        await client.query("BEGIN")
+        // remove related individual goals when stored with meta_geral_id linkage
+        await client.query("DELETE FROM metas_individuais WHERE meta_geral_id = $1", [goalId])
+        const result = await client.query(
+          "DELETE FROM metas_gerais WHERE id = $1 RETURNING id",
+          [goalId],
+        )
+
+        if (result.rowCount === 0) {
+          await client.query("ROLLBACK")
+          return res.status(404).json({ message: "Meta de equipe não encontrada" })
+        }
+
+        await client.query("COMMIT")
+      } catch (err) {
+        await client.query("ROLLBACK")
+        throw err
+      } finally {
+        client.release()
+      }
     } else if (type === "individual") {
-      await pool.query("DELETE FROM metas_individuais WHERE id = $1", [id])
+      const result = await pool.query(
+        "DELETE FROM metas_individuais WHERE id = $1 RETURNING id",
+        [goalId],
+      )
+      if (result.rowCount === 0) {
+        return res.status(404).json({ message: "Meta individual não encontrada" })
+      }
     } else {
       return res.status(400).json({ message: "Invalid goal type" })
     }
 
     console.log("✅ Goals: Goal deleted successfully")
-    res.status(204).send()
+     res.status(200).json({ success: true })
   } catch (error) {
     console.error("❌ Goals: Error deleting goal:", error.message)
     res.status(500).json({
