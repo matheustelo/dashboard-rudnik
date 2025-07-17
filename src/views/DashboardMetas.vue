@@ -287,6 +287,13 @@
                         </button>
                         <button
                           type="button"
+                          @click="distributeByPerformance"
+                          class="px-3 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-green-500"
+                        >
+                          Distribuir por Performance
+                        </button>
+                        <button
+                          type="button"
                           @click="clearAllGoals"
                           class="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500"
                         >
@@ -504,7 +511,7 @@
 
 <script setup>
 import { ref, onMounted, reactive, computed, watch } from "vue"
-import { goalsService, userService, teamLeaderService } from "../services/api"
+import { goalsService, userService, teamLeaderService, performanceService } from "../services/api"
 
 // Initialize all reactive variables with proper default values
 const loading = ref(true)
@@ -562,9 +569,13 @@ const distributionProgress = computed(() => {
 // Watch for changes in allUsers to update teamLeaders
 watch(allUsers, (newUsers) => {
   if (Array.isArray(newUsers)) {
-    teamLeaders.value = newUsers.filter(u => 
-      (u.role === "supervisor" || u.role === "parceiro_comercial" || u.role === "gerente_comercial") &&
-      u.is_active
+    teamLeaders.value = newUsers.filter(u =>
+      (
+        u.role === "supervisor" ||
+        u.role === "parceiro_comercial" ||
+        u.role === "gerente_comercial" ||
+        u.role === "representante_premium"
+      ) && u.is_active
     )
   }
 }, { immediate: true })
@@ -782,6 +793,39 @@ const distributeEqually = () => {
     })
     
     validateDistribution()
+  }
+}
+
+const distributeByPerformance = async () => {
+  if (!Array.isArray(teamMembers.value) || !currentGoal.value.usuario_id) {
+    return
+  }
+  try {
+    const { data } = await performanceService.getTeamPerformance({ supervisorId: currentGoal.value.usuario_id })
+    if (!data || !Array.isArray(data.teamMembers)) {
+      distributeEqually()
+      return
+    }
+
+    const totalGoal = parseFloat(currentGoal.value.valor_meta) || 0
+    const performances = data.teamMembers.reduce((acc, m) => acc + (m.performance?.faturamentoTotal || 0), 0)
+
+    if (performances === 0) {
+      distributeEqually()
+      return
+    }
+
+    teamMembers.value.forEach(member => {
+      const perfMember = data.teamMembers.find(tm => tm.id === member.id)
+      const weight = perfMember ? (perfMember.performance?.faturamentoTotal || 0) : 0
+      member.goalAmount = parseFloat(((weight / performances) * totalGoal).toFixed(2))
+      member.hasError = false
+      member.errorMessage = ''
+    })
+    validateDistribution()
+  } catch (err) {
+    console.error('❌ Error distributing by performance:', err)
+    alert('Falha ao obter dados de performance para distribuição.')
   }
 }
 

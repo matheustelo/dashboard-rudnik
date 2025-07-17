@@ -145,7 +145,8 @@ app.get("/api/team-leaders", authenticateToken, authorize("admin", "gerente_come
     const leadersQuery = `
       SELECT DISTINCT id, name, role, children
       FROM clone_users_apprudnik
-      WHERE role IN ('supervisor', 'parceiro_comercial') AND is_active = true
+      WHERE role IN ('supervisor', 'parceiro_comercial', 'representante_premium', 'gerente_comercial')
+        AND is_active = true
       ORDER BY name
     `
     const { rows } = await pool.query(leadersQuery)
@@ -821,40 +822,36 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
           goalAmount: Number.parseFloat(item.valor_meta) || 0,
         }))
 
-        // Validate that all users belong to the supervisor
-        const validationQuery = `
-          SELECT id FROM clone_users_apprudnik
-          WHERE id = ANY($1)
-            AND is_active = true
-            AND EXISTS (
-              SELECT 1
-              FROM jsonb_array_elements(supervisors) AS elem
-              WHERE (elem->>'id')::int = $2
-            )
-        `
-        const validationResult = await client.query(validationQuery, [childrenIds.map((child) => child.id), supervisorId])
+        const leaderData = await client.query(
+          "SELECT children FROM clone_users_apprudnik WHERE id = $1",
+          [supervisorId],
+        )
+        const leaderChildren =
+          leaderData.rows.length > 0
+            ? parseJsonField(leaderData.rows[0].children).map((c) => c.id)
+            : []
 
-        if (validationResult.rows.length !== childrenIds.length) {
+        if (
+          childrenIds.some((child) => !leaderChildren.includes(child.id)) ||
+          leaderChildren.length === 0
+        ) {
           await client.query("ROLLBACK")
           return res.status(400).json({
             message: "Alguns usuários selecionados não pertencem a este líder ou não estão ativos.",
           })
         }
       } else {
-        // Automatic equal distribution
-        const childrenResult = await client.query(
-         `
-          SELECT id FROM clone_users_apprudnik
-          WHERE is_active = true
-            AND EXISTS (
-              SELECT 1
-              FROM jsonb_array_elements(supervisors) AS elem
-              WHERE (elem->>'id')::int = $1
-            )
-          `,
+        const leaderData = await client.query(
+          "SELECT children FROM clone_users_apprudnik WHERE id = $1 AND is_active = true",
           [usuario_id],
         )
-        const childrenIdsOnly = childrenResult.rows.map((row) => row.id)
+        
+        const leaderChildren =
+          leaderData.rows.length > 0
+            ? parseJsonField(leaderData.rows[0].children).map((c) => c.id)
+            : []
+
+        const childrenIdsOnly = leaderChildren
 
         if (!childrenIdsOnly || childrenIdsOnly.length === 0) {
           await client.query("ROLLBACK")
@@ -1076,21 +1073,47 @@ app.get("/api/users/:id/team", authenticateToken, async (req, res) => {
       return res.status(403).json({ message: "Access denied" })
     }*/
 
-    const teamQuery = `
-      SELECT id, name, email, role, is_active, created_at
-      FROM clone_users_apprudnik
-      WHERE is_active = true
-        AND EXISTS (
-          SELECT 1
-          FROM jsonb_array_elements(supervisors) AS sup
-          WHERE (sup->>'id')::int = $1
-        )
-      ORDER BY name
-    `
+    // First check children field for direct relationships
+    const leaderRes = await pool.query(
+      "SELECT children FROM clone_users_apprudnik WHERE id = $1 AND is_active = true",
+      [id],
+    )
 
-    const result = await pool.query(teamQuery, [id])
-    console.log("✅ Users: Fetched", result.rows.length, "team members")
-    res.json(result.rows)
+    let teamMembers = []
+    if (leaderRes.rows.length > 0) {
+      const children = parseJsonField(leaderRes.rows[0].children)
+      if (children.length > 0) {
+        const childIds = children.map((c) => c.id)
+        const childQuery = `
+          SELECT id, name, email, role, is_active, created_at
+          FROM clone_users_apprudnik
+          WHERE id = ANY($1) AND is_active = true
+          ORDER BY name
+        `
+        const childResult = await pool.query(childQuery, [childIds])
+        teamMembers = childResult.rows
+      }
+    }
+
+    // Fallback to supervisor relationship if no children found
+    if (teamMembers.length === 0) {
+      const teamQuery = `
+        SELECT id, name, email, role, is_active, created_at
+        FROM clone_users_apprudnik
+        WHERE is_active = true
+          AND EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(supervisors) AS sup
+            WHERE (sup->>'id')::int = $1
+          )
+        ORDER BY name
+      `
+      const result = await pool.query(teamQuery, [id])
+      teamMembers = result.rows
+    }
+
+    console.log("✅ Users: Fetched", teamMembers.length, "team members")
+    res.json(teamMembers)
   } catch (error) {
     console.error("❌ Users: Error fetching team:", error.message)
     res.status(500).json({ message: "Erro ao buscar equipe", error: error.message })
