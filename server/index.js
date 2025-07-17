@@ -139,69 +139,6 @@ app.post("/api/auth/login", async (req, res) => {
   }
 })
 
-// Get a single general goal with details
-app.get("/api/goals/general/:id", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
-  console.log("--- Goals API: GET /api/goals/general/:id started ---")
-  const goalId = Number.parseInt(req.params.id)
-
-  if (isNaN(goalId)) {
-    return res.status(400).json({ message: "ID da meta inválido" })
-  }
-
-  try {
-    const generalQuery = `
-      SELECT g.*, u.name AS supervisor_name, u.role AS supervisor_role, u.children
-      FROM metas_gerais g
-      JOIN clone_users_apprudnik u ON g.usuario_id = u.id
-      WHERE g.id = $1
-    `
-    const generalResult = await pool.query(generalQuery, [goalId])
-
-    if (generalResult.rows.length === 0) {
-      return res.status(404).json({ message: "Meta de equipe não encontrada" })
-    }
-
-    const goal = generalResult.rows[0]
-    const teamMembers = await getTeamMembers(goal.usuario_id)
-    const memberIds = teamMembers.map((m) => m.id)
-
-    for (const member of teamMembers) {
-      if (member.role === 'representante_premium') {
-        const prepostos = await getTeamMembers(member.id)
-        if (prepostos && prepostos.length > 0) {
-          prepostos
-            .filter((p) => p.role === 'preposto')
-            .forEach((p) => memberIds.push(p.id))
-        }
-      }
-    }
-
-    let childGoals = []
-    if (memberIds.length > 0) {
-      const childQuery = `
-        SELECT m.*, u.name as user_name, u.role as user_role
-        FROM metas_individuais m
-        JOIN clone_users_apprudnik u ON m.usuario_id = u.id
-        WHERE m.usuario_id = $1
-        ORDER BY u.name, m.data_inicio DESC
-      `
-      const { rows } = await pool.query(childQuery, [goalId])
-      childGoals = rows
-    }
-
-    res.json({
-      ...goal,
-      children: parseJsonField(goal.children),
-      team_members: teamMembers,
-      team_members_count: teamMembers.length,
-      child_goals: childGoals,
-    })
-  } catch (error) {
-    console.error("❌ Goals: Error fetching goal by id:", error.message)
-    res.status(500).json({ message: "Erro ao carregar meta", error: error.message })
-  }
-})
-
 // Get Team Leaders (Supervisors and Parceiros)
 app.get("/api/team-leaders", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
   try {
@@ -807,10 +744,11 @@ app.get("/api/goals", authenticateToken, authorize("admin", "gerente_comercial")
           SELECT m.*, u.name as user_name, u.role as user_role
           FROM metas_individuais m
           JOIN clone_users_apprudnik u ON m.usuario_id = u.id
-          WHERE m.usuario_id = $1
+          WHERE m.usuario_id = ANY($1)
+            AND m.data_inicio <= $3 AND m.data_fim >= $2
           ORDER BY u.name, m.data_inicio DESC
         `
-        const { rows } = await pool.query(childQuery, [goal.id])
+        const { rows } = await pool.query(childQuery, [memberIds, startDate, endDate])
         childGoals = rows
       }
 
@@ -983,7 +921,6 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
           data_inicio,
           data_fim,
           created_by,
-          teamGoal.id,
         ])
       }
 
@@ -1031,62 +968,43 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
 })
 
 // Delete goal
-app.delete("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
-  console.log("--- Goals API: DELETE /api/goals started ---")
-  const { type, id } = req.params
-  const goalId = Number.parseInt(id)
-
-  if (isNaN(goalId)) {
-    return res.status(400).json({ message: "ID da meta inválido" })
-  }
-
+app.delete("/api/goals/:type", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
+  console.log("--- Goals API: DELETE /api/goals started ---");
   try {
+    const { type } = req.params;
+    const { usuario_id, tipo_meta } = req.body;
 
-    if (type === "general") {
-      const client = await pool.connect()
-      try {
-        await client.query("BEGIN")
-        // remove related individual goals when stored with meta_geral_id linkage
-        await client.query("DELETE FROM metas_individuais WHERE usuario_id = $1", [goalId])
-        const result = await client.query(
-          "DELETE FROM metas_gerais WHERE id = $1 RETURNING id",
-          [goalId],
-        )
+    console.log("🗑️ Goals: Deleting goal:", { type, usuario_id, tipo_meta });
 
-        if (result.rowCount === 0) {
-          await client.query("ROLLBACK")
-          return res.status(404).json({ message: "Meta de equipe não encontrada" })
-        }
-
-        await client.query("COMMIT")
-      } catch (err) {
-        await client.query("ROLLBACK")
-        throw err
-      } finally {
-        client.release()
-      }
-    } else if (type === "individual") {
-      const result = await pool.query(
-        "DELETE FROM metas_individuais WHERE id = $1 RETURNING id",
-        [goalId],
-      )
-      if (result.rowCount === 0) {
-        return res.status(404).json({ message: "Meta individual não encontrada" })
-      }
-    } else {
-      return res.status(400).json({ message: "Invalid goal type" })
+    if (!usuario_id || !tipo_meta) {
+      return res.status(400).json({ message: "usuario_id e tipo_meta são obrigatórios" });
     }
 
-    console.log("✅ Goals: Goal deleted successfully")
-     res.status(200).json({ success: true })
+    if (type === "general") {
+      await pool.query(
+        `DELETE FROM metas_gerais WHERE usuario_id = $1 AND tipo_meta = $2`,
+        [usuario_id, tipo_meta]
+      );
+    } else if (type === "individual") {
+      await pool.query(
+        `DELETE FROM metas_individuais WHERE usuario_id = $1 AND tipo_meta = $2`,
+        [usuario_id, tipo_meta]
+      );
+    } else {
+      return res.status(400).json({ message: "Invalid goal type" });
+    }
+
+    console.log("✅ Goals: Goal deleted successfully");
+    res.status(204).send();
   } catch (error) {
-    console.error("❌ Goals: Error deleting goal:", error.message)
+    console.error("❌ Goals: Error deleting goal:", error.message);
     res.status(500).json({
       message: "Erro ao excluir meta",
       error: error.message,
-    })
+    });
   }
-})
+});
+
 
 // Get goal tracking for seller
 app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) => {
