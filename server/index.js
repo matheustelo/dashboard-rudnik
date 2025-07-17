@@ -968,41 +968,18 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
 })
 
 // Delete goal
-app.delete("/api/goals/:type", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
+app.delete("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
+    console.log("--- Goals API: DELETE /api/goals/:type/:id started ---")
     try {
       console.log("🔄 API: Deleting goal:", type, id)
-
-      if (!type || !id) {
-        throw new Error("Tipo e ID da meta são obrigatórios")
-      }
-
-      if (!["general", "individual"].includes(type)) {
-        throw new Error("Tipo de meta deve ser 'general' ou 'individual'")
-      }
-
-      const goalId = Number.parseInt(id)
-      if (isNaN(goalId) || goalId <= 0) {
-        throw new Error("ID da meta deve ser um número válido")
-      }
-
-      const response = await api.delete(`/goals/${type}/${goalId}`)
+      const response = await api.delete(`/goals/${type}/${id}`)
       console.log("✅ API: Goal deleted:", response.data)
       return response
     } catch (error) {
       console.error("❌ API: Error deleting goal:", error)
-
-      if (error.response?.data?.error === "GOAL_NOT_FOUND") {
-        throw new Error("Meta não encontrada")
-      } else if (error.response?.data?.error === "INVALID_TYPE") {
-        throw new Error("Tipo de meta inválido")
-      } else if (error.response?.data?.error === "INVALID_ID") {
-        throw new Error("ID da meta inválido")
-      }
-
       throw error
     }
 });
-
 
 // Get goal tracking for seller
 app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) => {
