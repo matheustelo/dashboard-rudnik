@@ -727,6 +727,17 @@ app.get("/api/goals", authenticateToken, authorize("admin", "gerente_comercial")
     for (const goal of generalResult.rows) {
       const teamMembers = await getTeamMembers(goal.usuario_id)
       const memberIds = teamMembers.map((m) => m.id)
+
+      for (const member of teamMembers) {
+        if (member.role === 'representante_premium') {
+          const prepostos = await getTeamMembers(member.id)
+          if (prepostos && prepostos.length > 0) {
+            prepostos
+              .filter((p) => p.role === 'preposto')
+              .forEach((p) => memberIds.push(p.id))
+          }
+        }
+      }
       let childGoals = []
       if (memberIds.length > 0) {
         const childQuery = `
@@ -818,7 +829,7 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
         // Manual distribution provided
         distributionMethod = "manual"
         childrenIds = manualDistribution.map((item) => ({
-          id: item.usuario_id,
+          id: Number(item.usuario_id),
           goalAmount: Number.parseFloat(item.valor_meta) || 0,
         }))
 
@@ -828,11 +839,11 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
         )
         const leaderChildren =
           leaderData.rows.length > 0
-            ? parseJsonField(leaderData.rows[0].children).map((c) => c.id)
+            ? parseJsonField(leaderData.rows[0].children).map((c) => Number(c.id))
             : []
 
         if (
-          childrenIds.some((child) => !leaderChildren.includes(child.id)) ||
+          childrenIds.some((child) => !leaderChildren.includes(Number(child.id))) ||
           leaderChildren.length === 0
         ) {
           await client.query("ROLLBACK")
@@ -848,7 +859,7 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
         
         const leaderChildren =
           leaderData.rows.length > 0
-            ? parseJsonField(leaderData.rows[0].children).map((c) => c.id)
+            ? parseJsonField(leaderData.rows[0].children).map((c) => Number(c.id))
             : []
 
         const childrenIdsOnly = leaderChildren
@@ -870,12 +881,39 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
         }))
       }
 
-      // 4. Insert individual goals for each child
+      // 4. Expand representante_premium to their preposto children
+      const finalChildren = []
+      for (const child of childrenIds) {
+        const { rows } = await client.query(
+          `SELECT role, children FROM clone_users_apprudnik WHERE id = $1 AND is_active = true`,
+          [child.id],
+        )
+
+        if (rows.length > 0 && rows[0].role === 'representante_premium') {
+          const prepostos = parseJsonField(rows[0].children)
+          if (prepostos && prepostos.length > 0) {
+            const ids = prepostos.map((p) => Number(p.id))
+            const amount = Math.floor((child.goalAmount / ids.length) * 100) / 100
+            const rem = Number.parseFloat((child.goalAmount - amount * ids.length).toFixed(2))
+            ids.forEach((pid, idx) => {
+              finalChildren.push({
+                id: Number(pid),
+                goalAmount: idx === 0 ? amount + rem : amount,
+              })
+            })
+            continue
+          }
+        }
+
+        finalChildren.push(child)
+      }
+
+      // Insert individual goals for each resolved child
       const individualGoalQuery = `
         INSERT INTO metas_individuais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por)
         VALUES ($1, $2, $3, $4, $5, $6)`
 
-      for (const child of childrenIds) {
+      for (const child of finalChildren) {
         await client.query(individualGoalQuery, [
           child.id,
           tipo_meta,
@@ -888,16 +926,16 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
 
       await client.query("COMMIT")
 
-      const totalDistributed = childrenIds.reduce((sum, child) => sum + child.goalAmount, 0)
+      const totalDistributed = finalChildren.reduce((sum, child) => sum + child.goalAmount, 0)
 
       res.status(201).json({
-        message: `Meta de equipe criada e distribuída para ${childrenIds.length} vendedores usando distribuição ${distributionMethod === "manual" ? "manual" : "automática"}.`,
+        message: `Meta de equipe criada e distribuída para ${finalChildren.length} vendedores usando distribuição ${distributionMethod === "manual" ? "manual" : "automática"}.`,
         teamGoal: teamGoal,
         distribution: {
           method: distributionMethod,
           totalGoal: Number.parseFloat(valor_meta),
           totalDistributed: totalDistributed,
-          childrenCount: childrenIds.length,
+          childrenCount: finalChildren.length,
         },
       })
     } catch (error) {
@@ -1083,7 +1121,7 @@ app.get("/api/users/:id/team", authenticateToken, async (req, res) => {
     if (leaderRes.rows.length > 0) {
       const children = parseJsonField(leaderRes.rows[0].children)
       if (children.length > 0) {
-        const childIds = children.map((c) => c.id)
+        const childIds = children.map((c) => Number(c.id))
         const childQuery = `
           SELECT id, name, email, role, is_active, created_at
           FROM clone_users_apprudnik
