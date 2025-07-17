@@ -103,7 +103,7 @@
                     </div>
                     <div class="ml-2 flex-shrink-0 flex space-x-4">
                       <button @click="viewGoalDetails(goal)" class="text-sm font-medium text-blue-500 hover:text-blue-700">Ver Detalhes</button>
-                      <button @click="deleteGoal('general', goal.id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
+                      <button @click="deleteGoal('general', goal.usuario_id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
                     </div>
                   </div>
                   <div class="mt-2 sm:flex sm:justify-between">
@@ -154,7 +154,7 @@
                     </div>
                     <div class="ml-2 flex-shrink-0 flex space-x-4">
                       <button @click="openGoalModal('individual', goal)" class="text-sm font-medium text-gray-500 hover:text-gray-700">Editar</button>
-                      <button @click="deleteGoal('individual', goal.id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
+                      <button @click="deleteGoal('individual', goal.id || goal._id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
                     </div>
                   </div>
                   <div class="mt-2 sm:flex sm:justify-between">
@@ -607,10 +607,18 @@ const fetchGoals = async () => {
     const { data } = await goalsService.getGoals()
     console.log('✅ Goals fetched with hierarchy:', data)
     
-    // Ensure the response has the expected structure
+    // Normalize goal IDs in case the backend returns `_id`
+    const normalizeGoals = (goalArray) =>
+      Array.isArray(goalArray)
+        ? goalArray.map((g) => ({
+            id: g.id ?? g._id,
+            ...g,
+          }))
+        : []
+
     goals.value = {
-      generalGoals: Array.isArray(data.generalGoals) ? data.generalGoals : [],
-      individualGoals: Array.isArray(data.individualGoals) ? data.individualGoals : []
+      generalGoals: normalizeGoals(data.generalGoals),
+      individualGoals: normalizeGoals(data.individualGoals),
     }
   } catch (err) {
     console.error('❌ Error fetching goals:', err)
