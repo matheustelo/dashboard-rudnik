@@ -42,10 +42,16 @@ export const authService = {
 
 // Dashboard service
 export const dashboardService = {
-  getVendedorDashboard: (id, period) => api.get(`/dashboard/vendedor/${id}`, { params: { period } }),
-  getRepresentanteDashboard: (id, period) => api.get(`/dashboard/representante/${id}`, { params: { period } }),
-  getSupervisorDashboard: (id, period) => api.get(`/dashboard/supervisor/${id}`, { params: { period } }),
-  getGerenteComercialDashboard: (period) => api.get("/dashboard/gerente_comercial", { params: { period } }),
+  getVendedorDashboard: (id, period, startDate, endDate) =>
+    api.get(`/dashboard/vendedor/${id}`, { params: { period, startDate, endDate } }),
+  getRepresentanteDashboard: (id, period, startDate, endDate) =>
+    api.get(`/dashboard/representante/${id}`, { params: { period, startDate, endDate } }),
+  getSupervisorDashboard: (id, period, startDate, endDate) =>
+    api.get(`/dashboard/supervisor/${id}`, { params: { period, startDate, endDate } }),
+  getGerenteComercialDashboard: (period, startDate, endDate) =>
+    api.get("/dashboard/gerente_comercial", { params: { period, startDate, endDate } }),
+  getGestorDashboard: (period, startDate, endDate) =>
+    api.get("/dashboard/gerente_comercial", { params: { period, startDate, endDate } }),
   getRevenueVsTarget: (filters) => api.get("/dashboard/revenue-vs-target", { params: filters }),
   getRevenueBySupervisor: (filters) => api.get("/dashboard/revenue-by-supervisor", { params: filters }),
 }
@@ -64,7 +70,9 @@ export const goalsService = {
   getGeneralGoal: (id) => api.get(`/goals/general/${id}`),
   saveGoal: (type, goalData) => api.post("/goals", { type, goalData }),
   deleteGoal: (type, id) => api.delete(`/goals/${type}/${id}`),
-  getSellerTracking: (id, period) => api.get(`/goals/tracking/seller/${id}`, { params: { period } }),
+  getSellerTracking: (id, period, startDate, endDate) =>
+    api.get(`/goals/tracking/seller/${id}`, { params: { period, startDate, endDate } }),
+  getGoalPeriods: (id) => api.get(`/goals/periods/${id}`),
 }
 
 // Performance service

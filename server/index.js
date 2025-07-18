@@ -685,8 +685,10 @@ app.get(
 app.get("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
   console.log("--- Goals API: GET /api/goals started ---")
   try {
-    const { period } = req.query
-    const { startDate, endDate } = getDateRange(period)
+    const { period, startDate: start, endDate: end } = req.query
+    
+    const { startDate, endDate } = getDateRange(period, start, end)
+
     console.log("📅 Goals: Date range:", { startDate, endDate })
 
     // Check if tables exist first
@@ -985,23 +987,89 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
 app.delete("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
   console.log("--- Goals API: DELETE /api/goals/:type/:id started ---");
   try {
-    const { type, id } = req.params;
-    console.log("🗑️ Goals: Deleting goal:", { type, id });
+    const { type, id } = req.params
+    console.log("🗑️ Goals: Deleting goal:", { type, id })
 
     if (type === "general") {
-      await pool.query("DELETE FROM metas_gerais WHERE usuario_id = $1", [id]);
+            // Fetch goal periods for this leader so we can remove individual goals
+      const { rows } = await pool.query(
+        "SELECT tipo_meta, data_inicio, data_fim FROM metas_gerais WHERE usuario_id = $1",
+        [id],
+      )
+
+      // Resolve all team member ids including prepostos and representante_premium themselves
+      const teamMembers = await getTeamMembers(id)
+      const childIds = []
+      const premiumIds = []
+      for (const member of teamMembers) {
+        if (member.role === "representante_premium") {
+          const result = await pool.query(
+            `SELECT children FROM clone_users_apprudnik WHERE id = $1 AND is_active = true`,
+            [member.id],
+          )
+          const prepostos = result.rows.length > 0 ? parseJsonField(result.rows[0].children) : []
+          if (prepostos && prepostos.length > 0) {
+            premiumIds.push(Number(member.id))
+            prepostos.forEach((p) => childIds.push(Number(p.id)))
+          } else {
+            childIds.push(Number(member.id))
+          }
+        } else {
+          childIds.push(Number(member.id))
+        }
+      }
+      const allIds = Array.from(new Set([...childIds, ...premiumIds]))
+
+      for (const goal of rows) {
+        await pool.query(
+          `DELETE FROM metas_individuais
+           WHERE usuario_id = ANY($1)
+             AND tipo_meta = $2
+             AND data_inicio = $3
+             AND data_fim = $4`,
+          [allIds, goal.tipo_meta, goal.data_inicio, goal.data_fim],
+        )
+      }
+
+      await pool.query("DELETE FROM metas_gerais WHERE usuario_id = $1", [id])
     } else if (type === "individual") {
-      await pool.query("DELETE FROM metas_individuais WHERE id = $1", [id]);
+       await pool.query("DELETE FROM metas_individuais WHERE id = $1", [id])
     } else {
-      return res.status(400).json({ message: "Invalid goal type" });
+      return res.status(400).json({ message: "Invalid goal type" })
     }
 
-    console.log("✅ Goals: Goal deleted successfully");
-    res.status(204).send();
+    console.log("✅ Goals: Goal deleted successfully")
+    res.status(204).send()
   } catch (error) {
-    console.error("❌ Goals: Error deleting goal:", error.message);
+    console.error("❌ Goals: Error deleting goal:", error.message)
     res.status(500).json({
       message: "Erro ao excluir meta",
+      error: error.message,
+    })
+  }
+});
+
+// Get available goal periods for a user
+app.get("/api/goals/periods/:userId", authenticateToken, async (req, res) => {
+  console.log("--- Goals API: GET /api/goals/periods started ---");
+  try {
+    const { userId } = req.params;
+    const query = `
+      SELECT DISTINCT TO_CHAR(data_inicio, 'YYYY-MM') AS period
+      FROM metas_individuais
+      WHERE usuario_id = $1
+      UNION
+      SELECT DISTINCT TO_CHAR(data_inicio, 'YYYY-MM') AS period
+      FROM metas_gerais
+      WHERE usuario_id = $1
+      ORDER BY period DESC
+    `;
+    const { rows } = await pool.query(query, [userId]);
+    res.json(rows.map((r) => r.period));
+  } catch (error) {
+    console.error("❌ Goals: Error fetching periods:", error.message);
+    res.status(500).json({
+      message: "Erro ao buscar períodos de metas",
       error: error.message,
     });
   }
@@ -1012,8 +1080,8 @@ app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) =>
   console.log("--- Goals API: GET /api/goals/tracking/seller started ---")
   try {
     const { id } = req.params
-    const { period } = req.query
-    const { startDate, endDate } = getDateRange(period)
+    const { period, startDate: start, endDate: end } = req.query
+    const { startDate, endDate } = getDateRange(period, start, end)
 
     console.log("📊 Goals Tracking: User ID:", id, "Period:", period)
 
@@ -1175,11 +1243,12 @@ app.get("/api/users/:id/team", authenticateToken, async (req, res) => {
 // Dashboard endpoints (keeping existing ones)
 app.get("/api/dashboard/vendedor/:id", authenticateToken, async (req, res) => {
   try {
-    console.log("📊 Vendedor dashboard request:", { id: req.params.id, period: req.query.period })
+    console.log("📊 Vendedor dashboard request:", { id: req.params.id, ...req.query })
     const { id } = req.params
-    const { period } = req.query
+    const { period, startDate: start, endDate: end } = req.query
 
-    const { startDate, endDate } = getDateRange(period)
+
+    const { startDate, endDate } = getDateRange(period, start, end)
     console.log("📅 Date range:", { startDate, endDate })
 
     // Check if user can access this data
@@ -1249,9 +1318,9 @@ app.get("/api/dashboard/vendedor/:id", authenticateToken, async (req, res) => {
 app.get("/api/dashboard/representante/:id", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
-    const { period } = req.query
+    const { period, startDate: start, endDate: end } = req.query
 
-    const { startDate, endDate } = getDateRange(period)
+    const { startDate, endDate } = getDateRange(period, start, end)
 
     if (req.user.role === "representante" && req.user.id !== Number.parseInt(id)) {
       return res.status(403).json({ message: "Access denied" })
@@ -1316,9 +1385,9 @@ app.get("/api/dashboard/representante/:id", authenticateToken, async (req, res) 
 app.get("/api/dashboard/supervisor/:id", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
-    const { period } = req.query
+    const { period, startDate: start, endDate: end } = req.query
 
-    const { startDate, endDate } = getDateRange(period)
+    const { startDate, endDate } = getDateRange(period, start, end)
 
     if (req.user.role === "supervisor" && req.user.id !== Number.parseInt(id)) {
       return res.status(403).json({ message: "Access denied" })
@@ -1391,9 +1460,9 @@ app.get("/api/dashboard/supervisor/:id", authenticateToken, async (req, res) => 
 
 app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) => {
   try {
-    const { period } = req.query
+    const { period, startDate: start, endDate: end } = req.query
 
-    const { startDate, endDate } = getDateRange(period)
+    const { startDate, endDate } = getDateRange(period, start, end)
 
     const globalQuery = `
   SELECT 

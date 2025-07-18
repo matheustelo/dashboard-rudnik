@@ -15,14 +15,26 @@
               @change="loadDashboard"
               class="border border-gray-300 rounded-md px-3 py-2"
             >
-              <option value="2025-01">Janeiro 2025</option>
-              <option value="2025-02">Fevereiro 2025</option>
-              <option value="2025-03">Março 2025</option>
-              <option value="2025-04">Abril 2025</option>
-              <option value="2025-05">Maio 2025</option>
-              <option value="2025-06">Junho 2025</option>
-              <option value="2025-07">Julho 2025</option>
+              <option v-for="p in periods" :key="p" :value="p">
+                {{ formatPeriodLabel(p) }}
+              </option>
+              <option value="">Período Personalizado</option>
             </select>
+            <input
+              type="date"
+              v-model="customStart"
+              :disabled="selectedPeriod"
+              class="border border-gray-300 rounded-md px-2 py-1"
+              @change="loadDashboard"
+            />
+            <span class="text-gray-500">até</span>
+            <input
+              type="date"
+              v-model="customEnd"
+              :disabled="selectedPeriod"
+              class="border border-gray-300 rounded-md px-2 py-1"
+              @change="loadDashboard"
+            />
             <button
               @click="logout"
               class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
@@ -201,7 +213,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { dashboardService } from '../services/api'
+import { dashboardService, goalsService } from '../services/api'
 import BarChart from '../components/BarChart.vue'
 import Navbar from '../components/Navbar.vue'
 
@@ -210,7 +222,10 @@ const authStore = useAuthStore()
 
 const loading = ref(true)
 const dashboardData = ref(null)
-const selectedPeriod = ref('2025-07')
+const periods = ref([])
+const selectedPeriod = ref('')
+const customStart = ref('')
+const customEnd = ref('')
 
 const chartData = computed(() => {
   if (!dashboardData.value?.rankingVendedores) return null
@@ -249,9 +264,14 @@ const chartOptions = {
 const loadDashboard = async () => {
   loading.value = true
   try {
+    const periodParam = selectedPeriod.value ? selectedPeriod.value : undefined
+    const start = selectedPeriod.value ? undefined : customStart.value || undefined
+    const end = selectedPeriod.value ? undefined : customEnd.value || undefined
     const response = await dashboardService.getSupervisorDashboard(
       authStore.user.id,
-      selectedPeriod.value
+      periodParam,
+      start,
+      end
     )
     dashboardData.value = response.data
   } catch (error) {
@@ -273,8 +293,27 @@ const logout = () => {
   router.push('/login')
 }
 
-onMounted(() => {
+const loadPeriods = async () => {
+  try {
+    const response = await goalsService.getGoalPeriods(authStore.user.id)
+    periods.value = response.data
+    if (periods.value.length && !selectedPeriod.value) {
+      selectedPeriod.value = periods.value[0]
+    }
+  } catch (error) {
+    console.error('Erro ao carregar períodos de metas:', error)
+  }
+}
+
+const formatPeriodLabel = (p) => {
+  const [y, m] = p.split('-')
+  const date = new Date(y, Number(m) - 1, 1)
+  return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+}
+
+onMounted(async () => {
   authStore.initializeAuth()
+  await loadPeriods()
   loadDashboard()
 })
 </script>

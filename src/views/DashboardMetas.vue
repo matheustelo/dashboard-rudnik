@@ -115,7 +115,6 @@
                           {{ goal.child_goals.length }} metas distribuídas
                         </span>
                       </div>
-                      
                     </div>
                     <div class="ml-2 flex-shrink-0 flex space-x-4">
                       <button @click="viewGoalDetails(goal)" class="text-sm font-medium text-blue-500 hover:text-blue-700">Ver Detalhes</button>
@@ -231,7 +230,6 @@
                           ({{ getSupervisorRoleLabel(leader.role) }})
                         </span>
                         <span v-if="leader.has_team">- {{ leader.team_members_count }} membro(s)</span>
-                        <span v-else>- Sem equipe</span>
                       </option>
                     </select>
                     
