@@ -836,7 +836,7 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
         }))
 
         const leaderData = await client.query(
-          "SELECT id, role, children FROM clone_users_apprudnik WHERE id = $1",
+          "SELECT children FROM clone_users_apprudnik WHERE id = $1 AND is_active = true",
           [supervisorId],
         )
         const leaderChildren =
@@ -845,7 +845,9 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
             : []
 
         // Allow prepostos of representante_premium children
-        const allowedIds = [...leaderChildren]
+        const allowedIds = new Set()
+        leaderChildren.forEach((id) => allowedIds.add(id))
+
         for (const childId of leaderChildren) {
           const { rows } = await client.query(
             `SELECT role, children FROM clone_users_apprudnik WHERE id = $1 AND is_active = true`,
@@ -853,17 +855,25 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
           )
           if (rows.length && rows[0].role === 'representante_premium') {
             const prepostos = parseJsonField(rows[0].children)
-            prepostos.forEach((p) => allowedIds.push(Number(p.id)))
+            prepostos.forEach((p) => allowedIds.add(Number(p.id)))
           }
         }
 
-        if (
-          childrenIds.some((child) => !leaderChildren.includes(Number(child.id))) ||
-          leaderChildren.length === 0
-        ) {
+        const { rows: activeRows } = await client.query(
+          `SELECT id FROM clone_users_apprudnik WHERE id = ANY($1) AND is_active = true`,
+          [childrenIds.map((c) => c.id)],
+        )
+        const activeIds = activeRows.map((r) => Number(r.id))
+
+        const invalidUsers = childrenIds.filter(
+          (child) => !allowedIds.has(child.id) || !activeIds.includes(child.id),
+        )
+
+        if (invalidUsers.length > 0 || leaderChildren.length === 0) {
           await client.query("ROLLBACK")
           return res.status(400).json({
             message: "Alguns usuários selecionados não pertencem a este líder ou não estão ativos.",
+            invalidUsers: invalidUsers.map((u) => u.id),
           })
         }
       } else {

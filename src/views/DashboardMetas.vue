@@ -1165,8 +1165,12 @@ const saveGoal = async () => {
     console.log('✅ Goal saved successfully with hierarchy support')
   } catch (err) {
     console.error("❌ Error saving goal:", err)
-    const errorMessage = err.response?.data?.message || "Falha ao salvar a meta."
-    alert(errorMessage)
+    const base = err.response?.data?.message || 'Falha ao salvar a meta.'
+    const invalid = err.response?.data?.invalidUsers
+    const msg = invalid && invalid.length
+      ? `${base}\nUsuários inválidos: ${invalid.join(', ')}`
+      : base
+    alert(msg)
   } finally {
     saving.value = false
   }
