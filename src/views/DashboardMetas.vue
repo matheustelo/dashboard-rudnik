@@ -749,9 +749,7 @@ watch(allUsers, (newUsers) => {
     teamLeaders.value = newUsers.filter(u =>
       (
         u.role === "supervisor" ||
-        u.role === "parceiro_comercial" ||
-        u.role === "gerente_comercial" ||
-        u.role === "representante_premium"
+        u.role === "parceiro_comercial"
       ) && u.is_active
     )
   }
@@ -832,7 +830,9 @@ const fetchTeamLeaders = async () => {
     
     // Ensure data is an array
     if (Array.isArray(data)) {
-      teamLeaders.value = data
+      teamLeaders.value = data.filter(u =>
+        u.role === "supervisor" || u.role === "parceiro_comercial"
+      )
     } else {
       console.warn('⚠️ Team leaders data is not an array:', data)
       teamLeaders.value = []
