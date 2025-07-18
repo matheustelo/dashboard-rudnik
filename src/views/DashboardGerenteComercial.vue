@@ -25,8 +25,10 @@
             <option v-for="leader in teamLeaders" :key="leader.id" :value="leader.id">{{ leader.name }} ({{ leader.role }})</option>
           </select>
           <select v-model="filters.period" @change="applyFilters" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+            <option v-for="p in periods" :key="p" :value="p">
+              {{ formatPeriodLabel(p) }}
+            </option>
             <option value="">Período Personalizado</option>
-            <option v-for="p in periods" :key="p.value" :value="p.value">{{ p.label }}</option>
           </select>
         </div>
         <div class="flex items-center space-x-2">
@@ -151,7 +153,7 @@
 import { ref, onMounted, reactive, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { dashboardService, performanceService, teamLeaderService } from '../services/api'
+import { dashboardService, performanceService, teamLeaderService, goalsService } from '../services/api'
 import PerformanceTable from '../components/PerformanceTable.vue'
 import RepresentativeDetailModal from '../components/RepresentativeDetailModal.vue'
 import LineChart from '../components/LineChart.vue'
@@ -171,17 +173,10 @@ const selectedRepresentative = ref(null)
 const representativeDetails = ref(null)
 const detailLoading = ref(false)
 
-const periods = Array.from({ length: 12 }, (_, i) => {
-  const d = new Date()
-  d.setMonth(d.getMonth() - i)
-  return {
-    label: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
-    value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-  }
-})
+const periods = ref([])
 
 const filters = reactive({
-  period: periods[0].value,
+  period: '',
   startDate: '',
   endDate: '',
   supervisorId: 'all',
@@ -273,6 +268,23 @@ const logout = () => {
   router.push('/login')
 }
 
+const loadPeriods = async () => {
+  try {
+    const response = await goalsService.getGoalPeriods(authStore.user.id)
+    periods.value = response.data
+    if (periods.value.length && !filters.period) {
+      filters.period = periods.value[0]
+    }
+  } catch (error) {
+    console.error('Erro ao carregar períodos de metas:', error)
+  }
+}
+
+const formatPeriodLabel = (p) => {
+  const [y, m] = p.split('-')
+  const date = new Date(y, Number(m) - 1, 1)
+  return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+}
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -287,8 +299,9 @@ const faturamentoProgress = computed(() => {
   return (atual / meta) * 100
 })
 
-onMounted(() => {
+onMounted(async () => {
   authStore.initializeAuth()
+  await loadPeriods()
   loadInitialData()
 })
 </script>
