@@ -720,20 +720,26 @@ const sortedTeamMembers = computed(() => {
     return []
   }
   
-  // Sort to show representante_premium first, then their prepostos, then others
-  const sorted = [...teamMembers.value].sort((a, b) => {
-    // representante_premium comes first
-    if (a.role === 'representante_premium' && b.role !== 'representante_premium') return -1
-    if (b.role === 'representante_premium' && a.role !== 'representante_premium') return 1
-    
-    // Then prepostos (marked as subordinates)
-    if (a.isSubordinate && !b.isSubordinate) return 1
-    if (b.isSubordinate && !a.isSubordinate) return -1
-    
-    // Within same category, sort by name
-    return a.name.localeCompare(b.name)
+  const byName = (x, y) => x.name.localeCompare(y.name)
+
+  const reps = teamMembers.value
+    .filter((m) => m.role === 'representante_premium')
+    .sort(byName)
+  const direct = teamMembers.value
+    .filter((m) => !m.isSubordinate && m.role !== 'representante_premium')
+    .sort(byName)
+  const prepostos = teamMembers.value
+    .filter((m) => m.isSubordinate)
+    .sort(byName)
+
+  const sorted = []
+  reps.forEach((rep) => {
+    sorted.push(rep)
+    sorted.push(...prepostos.filter((p) => p.parent_id === rep.id))
   })
   
+    sorted.push(...direct)
+  sorted.push(...prepostos.filter((p) => !reps.some((r) => r.id === p.parent_id)))
   return sorted
 })
 
@@ -865,50 +871,37 @@ const onLeaderChange = async () => {
     const processedMembers = []
     const representantePremiumMap = new Map()
     
-    // First pass: identify representante_premium members
-    filteredMembers.forEach(member => {
+    // First pass to map representante_premium members
+    filteredMembers.forEach((member) => {
       if (member.role === 'representante_premium') {
         representantePremiumMap.set(member.id, member)
-        processedMembers.push({
-          id: member.id,
-          name: member.name,
-          email: member.email,
-          role: member.role,
-          goalAmount: 0,
-          hasError: false,
-          errorMessage: '',
-          isSubordinate: false,
-          currentGoalValue: getCurrentGoalValue(member.id)
-        })
       }
     })
     
-    // Second pass: process other members and mark prepostos as subordinates
-    filteredMembers.forEach(member => {
-      if (member.role !== 'representante_premium') {
-        const isSubordinate = member.role === 'preposto'
-        let parentName = null
-        
-        // Try to find parent representante_premium for prepostos
-        if (isSubordinate) {
-          // This would need to be enhanced based on your data structure
-          // For now, we'll mark all prepostos as subordinates
-          parentName = 'Representante Premium' // Placeholder
-        }
-        
-        processedMembers.push({
-          id: member.id,
-          name: member.name,
-          email: member.email,
-          role: member.role,
-          goalAmount: 0,
-          hasError: false,
-          errorMessage: '',
-          isSubordinate,
-          parentName,
-          currentGoalValue: getCurrentGoalValue(member.id)
-        })
+    // Build processed list including prepostos with parent info
+    filteredMembers.forEach((member) => {
+      const isSubordinate = member.role === 'preposto'
+      let parentName = null
+
+      if (isSubordinate) {
+        parentName =
+          member.parent_name ||
+          representantePremiumMap.get(member.parent_id)?.name ||
+          'Representante Premium'
       }
+      processedMembers.push({
+        id: member.id,
+        name: member.name,
+        email: member.email,
+        role: member.role,
+        goalAmount: 0,
+        hasError: false,
+        errorMessage: '',
+        isSubordinate,
+        parentName,
+        parent_id: isSubordinate ? member.parent_id : undefined,
+        currentGoalValue: getCurrentGoalValue(member.id),
+      })
     })
     
     teamMembers.value = processedMembers

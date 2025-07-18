@@ -836,13 +836,26 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
         }))
 
         const leaderData = await client.query(
-          "SELECT children FROM clone_users_apprudnik WHERE id = $1",
+          "SELECT id, role, children FROM clone_users_apprudnik WHERE id = $1",
           [supervisorId],
         )
         const leaderChildren =
           leaderData.rows.length > 0
             ? parseJsonField(leaderData.rows[0].children).map((c) => Number(c.id))
             : []
+
+        // Allow prepostos of representante_premium children
+        const allowedIds = [...leaderChildren]
+        for (const childId of leaderChildren) {
+          const { rows } = await client.query(
+            `SELECT role, children FROM clone_users_apprudnik WHERE id = $1 AND is_active = true`,
+            [childId],
+          )
+          if (rows.length && rows[0].role === 'representante_premium') {
+            const prepostos = parseJsonField(rows[0].children)
+            prepostos.forEach((p) => allowedIds.push(Number(p.id)))
+          }
+        }
 
         if (
           childrenIds.some((child) => !leaderChildren.includes(Number(child.id))) ||
@@ -1232,8 +1245,29 @@ app.get("/api/users/:id/team", authenticateToken, async (req, res) => {
       teamMembers = result.rows
     }
 
-    console.log("✅ Users: Fetched", teamMembers.length, "team members")
-    res.json(teamMembers)
+    // Include prepostos of any representante_premium members
+    const enhancedMembers = [...teamMembers]
+    for (const member of teamMembers) {
+      if (member.role === "representante_premium") {
+        const prepostos = await getTeamMembers(member.id)
+        prepostos
+          .filter((p) => p.role === "preposto")
+          .forEach((p) =>
+            enhancedMembers.push({
+              ...p,
+              parent_id: member.id,
+              parent_name: member.name,
+            }),
+          )
+      }
+    }
+
+    console.log(
+      "✅ Users: Fetched",
+      enhancedMembers.length,
+      "team members including hierarchy",
+    )
+    res.json(enhancedMembers) 
   } catch (error) {
     console.error("❌ Users: Error fetching team:", error.message)
     res.status(500).json({ message: "Erro ao buscar equipe", error: error.message })
