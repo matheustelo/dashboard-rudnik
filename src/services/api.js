@@ -69,6 +69,8 @@ export const goalsService = {
   },
   getGeneralGoal: (id) => api.get(`/goals/general/${id}`),
   saveGoal: (type, goalData) => api.post("/goals", { type, goalData }),
+  updateGoal: (type, id, goalData) =>
+    api.put(`/goals/${type}/${id}`, { goalData }),
   deleteGoal: (type, id) => api.delete(`/goals/${type}/${id}`),
   getSellerTracking: (id, period, startDate, endDate) =>
     api.get(`/goals/tracking/seller/${id}`, { params: { period, startDate, endDate } }),

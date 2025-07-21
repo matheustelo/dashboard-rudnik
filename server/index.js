@@ -262,12 +262,12 @@ app.get(
       const { startDate: dateStart, endDate: dateEnd } = getDateRange(period, startDate, endDate)
 
       const revenueQuery = `
-  SELECT to_char(date_trunc('month', p.created_at), 'YYYY-MM') as month, 
-         SUM(CAST(p.total_price AS DECIMAL)) as revenue
-  FROM clone_propostas_apprudnik p
-  WHERE p.has_generated_sale = true AND p.created_at BETWEEN $1 AND $2
-  GROUP BY 1 ORDER BY 1;
-`
+        SELECT to_char(date_trunc('month', p.created_at), 'YYYY-MM') as month, 
+               SUM(CAST(p.total_price AS DECIMAL)) as revenue
+          FROM clone_propostas_apprudnik p
+         WHERE p.has_generated_sale = true AND p.created_at BETWEEN $1 AND $2
+         GROUP BY 1 ORDER BY 1;
+      `
       const revenueResult = await pool.query(revenueQuery, [dateStart, dateEnd])
 
       const targetQuery = `
@@ -311,20 +311,24 @@ app.get(
       );
 
       const query = `
-        SELECT 
-          sup.name AS supervisor_name, 
+      SELECT 
+          sup.name AS supervisor_name,
           COALESCE(SUM(p.total_price::DECIMAL), 0) AS total_revenue
-        FROM clone_users_apprudnik sup
-        LEFT JOIN clone_users_apprudnik u 
-          ON (u.supervisor)::bigint = sup.id
-        LEFT JOIN clone_propostas_apprudnik p 
-          ON u.id = p.seller 
-         AND p.has_generated_sale = true 
-         AND p.created_at BETWEEN $1 AND $2
-        WHERE sup.role IN ('supervisor', 'parceiro_comercial') 
-          AND sup.is_active = true
-        GROUP BY sup.id, sup.name
-        ORDER BY total_revenue DESC;
+      FROM clone_users_apprudnik sup
+      LEFT JOIN clone_users_apprudnik u
+        ON EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(u.supervisors::jsonb) AS elem
+            WHERE (elem->>'id')::bigint = sup.id
+        )
+      LEFT JOIN clone_propostas_apprudnik p
+        ON u.id = p.seller
+      AND p.has_generated_sale = true
+      AND p.created_at BETWEEN $1 AND $2
+      WHERE sup.role IN ('supervisor', 'parceiro_comercial')
+        AND sup.is_active = true
+      GROUP BY sup.id, sup.name
+      ORDER BY total_revenue DESC;
       `;
 
       const { rows } = await pool.query(query, [dateStart, dateEnd]);
@@ -388,37 +392,51 @@ app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_
 
     // Get all active sales representatives with targets
     const teamMembersQuery = `
+    WITH usuarios_com_supervisor AS (
       SELECT 
-        u.id, u.name, u.email, u.role, u.supervisor,
-        s.name as supervisor_name,
-        COUNT(p.*) as total_propostas,
-        COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) as propostas_convertidas,
-        COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN p.total_price END), 0) as faturamento_total,
-        COALESCE(AVG(CASE WHEN p.has_generated_sale = true THEN p.total_price END), 0) as ticket_medio,
-        -- Default targets (can be customized per user)
-        CASE 
-          WHEN u.role = 'vendedor' THEN 50
-          WHEN u.role = 'representante' THEN 30
-          ELSE 40
-        END as meta_propostas,
-        CASE 
-          WHEN u.role = 'vendedor' THEN 15
-          WHEN u.role = 'representante' THEN 10
-          ELSE 12
-        END as meta_vendas,
-        CASE 
-          WHEN u.role = 'vendedor' THEN 75000
-          WHEN u.role = 'representante' THEN 50000
-          ELSE 60000
-        END as meta_faturamento
+        u.*, 
+        s.id AS supervisor_id,
+        s.name AS supervisor_name
       FROM clone_users_apprudnik u
-      LEFT JOIN clone_users_apprudnik s ON u.supervisor = s.id
-      LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
-        AND p.created_at >= $1 AND p.created_at <= $2
-      WHERE u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium') AND u.is_active = true
+      LEFT JOIN LATERAL (
+          SELECT (elem->>'id')::bigint AS id, (elem->>'name') AS name
+          FROM jsonb_array_elements(u.supervisors::jsonb) elem
+      ) s ON TRUE
+    )
+    SELECT 
+      u.id, 
+      u.name, 
+      u.email, 
+      u.role, 
+      u.supervisor, 
+      u.supervisor_name,
+      COUNT(p.*) AS total_propostas,
+      COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) AS propostas_convertidas,
+      COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) END), 0) AS faturamento_total,
+      COALESCE(AVG(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) END), 0) AS ticket_medio,
+      CASE 
+        WHEN u.role = 'vendedor' THEN 50
+        WHEN u.role = 'representante' THEN 30
+        ELSE 40
+      END AS meta_propostas,
+      CASE 
+        WHEN u.role = 'vendedor' THEN 15
+        WHEN u.role = 'representante' THEN 10
+        ELSE 12
+      END AS meta_vendas,
+      CASE 
+        WHEN u.role = 'vendedor' THEN 75000
+        WHEN u.role = 'representante' THEN 50000
+        ELSE 60000
+      END AS meta_faturamento
+    FROM usuarios_com_supervisor u
+    LEFT JOIN clone_propostas_apprudnik p 
+      ON u.id = p.seller 
+    WHERE u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium') 
+      AND u.is_active = true
       ${supervisorFilter}
-      GROUP BY u.id, u.name, u.email, u.role, u.supervisor, s.name
-      ORDER BY faturamento_total DESC
+    GROUP BY u.id, u.name, u.email, u.role, u.supervisor, u.supervisor_name
+    ORDER BY faturamento_total DESC;
     `
 
     const teamMembers = await pool.query(teamMembersQuery, queryParams)
@@ -799,6 +817,20 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
   if (type === "general") {
     // This is now a Team Goal
     const { usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, manualDistribution } = goalData
+
+    // Prevent overlapping goals for the same month
+    const overlapCheck = await pool.query(
+      `SELECT id FROM metas_gerais
+       WHERE usuario_id = $1
+         AND NOT (data_fim < $2 OR data_inicio > $3)`,
+      [usuario_id, data_inicio, data_fim],
+    )
+    if (overlapCheck.rows.length > 0) {
+      return res.status(400).json({
+        message: "Já existe uma meta de equipe cadastrada para este período",
+      })
+    }
+
     const supervisorId = usuario_id
     if (!usuario_id) {
       return res.status(400).json({ message: "Líder de equipe é obrigatório para metas de equipe." })
@@ -1003,6 +1035,56 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
     res.status(201).json(result.rows[0])
   } else {
     return res.status(400).json({ message: "Invalid goal type" })
+  }
+})
+
+// Update existing goal
+app.put("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
+  const { type, id } = req.params
+  const { goalData } = req.body
+
+  if (type === "general") {
+    const { usuario_id, tipo_meta, valor_meta, data_inicio, data_fim } = goalData
+
+    try {
+      const conflict = await pool.query(
+        `SELECT id FROM metas_gerais WHERE usuario_id = $1 AND id <> $2 AND NOT (data_fim < $3 OR data_inicio > $4)`,
+        [usuario_id, id, data_inicio, data_fim],
+      )
+      if (conflict.rows.length > 0) {
+        return res.status(400).json({ message: "Já existe uma meta de equipe cadastrada para este período" })
+      }
+
+      await pool.query(
+        `UPDATE metas_gerais SET usuario_id=$1, tipo_meta=$2, valor_meta=$3, data_inicio=$4, data_fim=$5 WHERE id=$6`,
+        [usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, id],
+      )
+      res.json({ success: true })
+    } catch (error) {
+      console.error("❌ Goals: Error updating general goal:", error)
+      res.status(500).json({ message: "Erro ao atualizar meta" })
+    }
+  } else if (type === "individual") {
+    const { usuario_id, tipo_meta, valor_meta, data_inicio, data_fim } = goalData
+    try {
+      const conflict = await pool.query(
+        `SELECT id FROM metas_individuais WHERE usuario_id=$1 AND id<>$2 AND NOT (data_fim < $3 OR data_inicio > $4)`,
+        [usuario_id, id, data_inicio, data_fim],
+      )
+      if (conflict.rows.length > 0) {
+        return res.status(400).json({ message: "Já existe uma meta cadastrada para este período" })
+      }
+      await pool.query(
+        `UPDATE metas_individuais SET usuario_id=$1, tipo_meta=$2, valor_meta=$3, data_inicio=$4, data_fim=$5 WHERE id=$6`,
+        [usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, id],
+      )
+      res.json({ success: true })
+    } catch (error) {
+      console.error("❌ Goals: Error updating individual goal:", error)
+      res.status(500).json({ message: "Erro ao atualizar meta" })
+    }
+  } else {
+    res.status(400).json({ message: "Invalid goal type" })
   }
 })
 
