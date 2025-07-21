@@ -8,6 +8,13 @@
           &larr; Voltar ao Dashboard
         </router-link>
       </div>
+      <div class="mt-4 flex items-center space-x-4">
+        <label class="text-sm text-gray-700">Mês:</label>
+        <select v-model="selectedPeriod" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+          <option v-for="p in periods" :key="p" :value="p">{{ formatPeriodLabel(p) }}</option>
+          <option value="">Todos</option>
+        </select>
+      </div>
     </header>
 
     <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
@@ -201,6 +208,26 @@
               </ul>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Summary by Month -->
+      <div class="mt-10">
+        <h2 class="text-xl font-semibold mb-4">Resumo de Metas por Mês</h2>
+        <div v-for="(items, month) in groupedGeneralGoals" :key="month" class="mb-6">
+          <h3 class="text-md font-medium text-gray-800 mb-2">{{ formatPeriodLabel(month) }}</h3>
+          <ul class="bg-white shadow overflow-hidden sm:rounded-lg divide-y divide-gray-200">
+            <li v-for="goal in items" :key="goal.id" class="px-4 py-4 sm:px-6 flex justify-between items-center">
+              <div>
+                <p class="text-sm font-medium text-indigo-600">{{ goal.supervisor_name }} - {{ goal.tipo_meta }}</p>
+                <p class="text-xs text-gray-500">Valor: {{ formatCurrency(goal.valor_meta) }}</p>
+              </div>
+              <div class="space-x-4">
+                <button @click="openGoalModal('team', goal)" class="text-sm font-medium text-blue-500 hover:text-blue-700">Editar</button>
+                <button @click="deleteGoal('general', goal.usuario_id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
+              </div>
+            </li>
+          </ul>
         </div>
       </div>
 
@@ -433,6 +460,16 @@
                     >
                   </div>
 
+                  <div>
+                    <label for="month" class="block text-sm font-medium text-gray-700">Mês da Meta</label>
+                    <input
+                      type="month"
+                      id="month"
+                      v-model="currentGoal.target_month"
+                      class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    >
+                  </div>
+
                   <div class="grid grid-cols-2 gap-4">
                     <div>
                       <label for="start-date" class="block text-sm font-medium text-gray-700">Data de Início</label>
@@ -651,6 +688,7 @@
 <script setup>
 import { ref, onMounted, reactive, computed, watch } from "vue"
 import { goalsService, userService, teamLeaderService, performanceService } from "../services/api"
+import { useAuthStore } from "../stores/auth"
 
 // Initialize all reactive variables with proper default values
 const loading = ref(true)
@@ -671,6 +709,25 @@ const modal = reactive({ title: "", type: "" })
 const currentGoal = ref({})
 const teamMembers = ref([]) // Initialize as empty array
 const validationErrors = ref([]) // Initialize as empty array
+const periods = ref([])
+const selectedPeriod = ref("")
+const authStore = useAuthStore()
+
+watch(selectedPeriod, () => {
+  fetchGoals()
+})
+
+watch(
+  () => currentGoal.value.target_month,
+  (newMonth) => {
+    if (newMonth) {
+      const [y, m] = newMonth.split('-')
+      currentGoal.value.data_inicio = `${newMonth}-01`
+      const end = new Date(y, Number(m), 0)
+      currentGoal.value.data_fim = end.toISOString().split('T')[0]
+    }
+  }
+)
 
 // Computed properties with proper null checks
 const individualUsers = computed(() => {
@@ -703,6 +760,17 @@ const remainingAmount = computed(() => {
 const distributionProgress = computed(() => {
   const total = parseFloat(currentGoal.value.valor_meta) || 0
   return total > 0 ? (totalDistributed.value / total) * 100 : 0
+})
+
+
+const groupedGeneralGoals = computed(() => {
+  if (!Array.isArray(goals.value.generalGoals)) return {}
+  return goals.value.generalGoals.reduce((acc, g) => {
+    const month = g.data_inicio?.slice(0,7) || 'unknown'
+    if (!acc[month]) acc[month] = []
+    acc[month].push(g)
+    return acc
+  }, {})
 })
 
 // Map of all users for quick lookup by ID
@@ -763,6 +831,7 @@ const fetchAllData = async () => {
   
   try {
     await Promise.all([
+      loadPeriods(),
       fetchGoals(),
       fetchUsers(),
       fetchTeamLeaders(),
@@ -779,7 +848,7 @@ const fetchAllData = async () => {
 const fetchGoals = async () => {
   console.log('🔄 Fetching goals with hierarchy support...')
   try {
-    const { data } = await goalsService.getGoals()
+    const { data } = await goalsService.getGoals(selectedPeriod.value)
     console.log('✅ Goals fetched with hierarchy:', data)
     
     // Normalize goal IDs in case the backend returns `_id`
@@ -1093,11 +1162,12 @@ const openGoalModal = (type, goal = null) => {
     currentGoal.value = { 
       ...goal,
       data_inicio: goal.data_inicio.split('T')[0],
-      data_fim: goal.data_fim.split('T')[0]
+      data_fim: goal.data_fim.split('T')[0],
+      target_month: goal.data_inicio.slice(0,7)
     }
   } else {
     modal.title = `Nova Meta ${type === "individual" ? "Individual" : "de Equipe"}`
-    currentGoal.value = { tipo_meta: "faturamento", usuario_id: "" }
+    currentGoal.value = { tipo_meta: "faturamento", usuario_id: "", target_month: selectedPeriod.value }
   }
   
   // Reset team members when opening modal
@@ -1146,6 +1216,14 @@ const saveGoal = async () => {
         }
       }
       
+      const month = currentGoal.value.target_month
+      if (month) {
+        const [y, m] = month.split('-')
+        currentGoal.value.data_inicio = `${month}-01`
+        const end = new Date(y, Number(m), 0)
+        currentGoal.value.data_fim = end.toISOString().split('T')[0]
+      }
+
       // Prepare goal data with manual distribution
       const goalDataWithDistribution = {
         ...currentGoal.value,
@@ -1157,6 +1235,13 @@ const saveGoal = async () => {
       
       await goalsService.saveGoal('general', goalDataWithDistribution)
     } else {
+      const month = currentGoal.value.target_month
+      if (month) {
+        const [y, m] = month.split('-')
+        currentGoal.value.data_inicio = `${month}-01`
+        const end = new Date(y, Number(m), 0)
+        currentGoal.value.data_fim = end.toISOString().split('T')[0]
+      }
       await goalsService.saveGoal('individual', currentGoal.value)
     }
     
@@ -1193,6 +1278,18 @@ const deleteGoal = async (type, id) => {
   }
 }
 
+const loadPeriods = async () => {
+  try {
+    const response = await goalsService.getGoalPeriods(authStore.user.id)
+    periods.value = response.data
+    if (periods.value.length && !selectedPeriod.value) {
+      selectedPeriod.value = periods.value[0]
+    }
+  } catch (error) {
+    console.error('Erro ao carregar períodos de metas:', error)
+  }
+}
+
 const formatDate = (dateString) => {
   if (!dateString) return ""
   return new Date(dateString).toLocaleDateString("pt-BR", { timeZone: "UTC" })
@@ -1206,6 +1303,12 @@ const formatCurrency = (value) => {
     style: "currency",
     currency: "BRL",
   }).format(numValue)
+}
+
+const formatPeriodLabel = (p) => {
+  const [y, m] = p.split('-')
+  const date = new Date(y, Number(m) - 1, 1)
+  return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
 }
 
 // Enhanced role handling functions for hierarchy support

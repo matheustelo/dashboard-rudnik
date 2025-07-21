@@ -820,9 +820,10 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
 
     // Prevent overlapping goals for the same month
     const overlapCheck = await pool.query(
-      `SELECT id FROM metas_gerais
+      `SELECT 1 FROM metas_gerais
        WHERE usuario_id = $1
-         AND NOT (data_fim < $2 OR data_inicio > $3)`,
+         AND NOT (data_fim < $2 OR data_inicio > $3)
+       LIMIT 1`,
       [usuario_id, data_inicio, data_fim],
     )
     if (overlapCheck.rows.length > 0) {
@@ -1048,7 +1049,7 @@ app.put("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerente_c
 
     try {
       const conflict = await pool.query(
-        `SELECT id FROM metas_gerais WHERE usuario_id = $1 AND id <> $2 AND NOT (data_fim < $3 OR data_inicio > $4)`,
+        `SELECT 1 FROM metas_gerais WHERE usuario_id = $1 AND id <> $2 AND NOT (data_fim < $3 OR data_inicio > $4) LIMIT 1`,
         [usuario_id, id, data_inicio, data_fim],
       )
       if (conflict.rows.length > 0) {
@@ -1068,7 +1069,7 @@ app.put("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerente_c
     const { usuario_id, tipo_meta, valor_meta, data_inicio, data_fim } = goalData
     try {
       const conflict = await pool.query(
-        `SELECT id FROM metas_individuais WHERE usuario_id=$1 AND id<>$2 AND NOT (data_fim < $3 OR data_inicio > $4)`,
+        `SELECT 1 FROM metas_individuais WHERE usuario_id=$1 AND id<>$2 AND NOT (data_fim < $3 OR data_inicio > $4) LIMIT 1`,
         [usuario_id, id, data_inicio, data_fim],
       )
       if (conflict.rows.length > 0) {
