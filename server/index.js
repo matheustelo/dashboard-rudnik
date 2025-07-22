@@ -818,6 +818,12 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
     // This is now a Team Goal
     const { usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, manualDistribution } = goalData
 
+    if (new Date(data_inicio) > new Date(data_fim)) {
+      return res.status(400).json({
+        message: "Data de início não pode ser maior que a data de fim",
+      })
+    }
+
     // Prevent overlapping goals for the same month
     const overlapCheck = await pool.query(
       `SELECT 1 FROM metas_gerais
@@ -1019,6 +1025,12 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
     }
   } else if (type === "individual") {
     const { id, tipo_meta, valor_meta, data_inicio, data_fim, usuario_id } = goalData
+
+    if (new Date(data_inicio) > new Date(data_fim)) {
+      return res.status(400).json({
+        message: "Data de início não pode ser maior que a data de fim",
+      })
+    }
     let result
     if (id) {
       result = await pool.query(
@@ -1047,6 +1059,12 @@ app.put("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerente_c
   if (type === "general") {
     const { usuario_id, tipo_meta, valor_meta, data_inicio, data_fim } = goalData
 
+    if (new Date(data_inicio) > new Date(data_fim)) {
+      return res.status(400).json({
+        message: "Data de início não pode ser maior que a data de fim",
+      })
+    }
+
     try {
       const conflict = await pool.query(
         `SELECT 1 FROM metas_gerais WHERE usuario_id = $1 AND id <> $2 AND NOT (data_fim < $3 OR data_inicio > $4) LIMIT 1`,
@@ -1067,6 +1085,12 @@ app.put("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerente_c
     }
   } else if (type === "individual") {
     const { usuario_id, tipo_meta, valor_meta, data_inicio, data_fim } = goalData
+
+    if (new Date(data_inicio) > new Date(data_fim)) {
+      return res.status(400).json({
+        message: "Data de início não pode ser maior que a data de fim",
+      })
+    }
     try {
       const conflict = await pool.query(
         `SELECT 1 FROM metas_individuais WHERE usuario_id=$1 AND id<>$2 AND NOT (data_fim < $3 OR data_inicio > $4) LIMIT 1`,

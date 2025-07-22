@@ -479,6 +479,14 @@
                   </div>
 
                   <div>
+                    <label class="block text-sm font-medium text-gray-700" for="period-type">Tipo de Período</label>
+                    <select id="period-type" v-model="currentGoal.periodType" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                      <option value="month">Mensal</option>
+                      <option value="custom">Personalizado</option>
+                    </select>
+                  </div>
+
+                  <div v-if="currentGoal.periodType === 'month'">
                     <label for="month" class="block text-sm font-medium text-gray-700">Mês da Meta</label>
                     <input
                       type="month"
@@ -495,6 +503,7 @@
                         type="date"
                         id="start-date"
                         v-model="currentGoal.data_inicio"
+                        :disabled="currentGoal.periodType === 'month'"
                         required
                         class="mt-1 focus:ring-blue-500 focus:border-blue-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
                       >
@@ -510,6 +519,9 @@
                       >
                     </div>
                   </div>
+                  <p v-if="currentGoal.data_inicio && currentGoal.data_fim" class="text-xs text-gray-500">
+                    Período selecionado: {{ formatDate(currentGoal.data_inicio) }} a {{ formatDate(currentGoal.data_fim) }}
+                  </p>
                 </div>
               </div>
               <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
@@ -739,19 +751,22 @@ watch(selectedPeriod, () => {
 
 
 watch([customStart, customEnd], () => {
-  if (!selectedPeriod.value) {
+  if (!selectedPeriod.value && customStart.value && customEnd.value) {
     fetchGoals()
   }
 })
 
 watch(
-  () => currentGoal.value.target_month,
-  (newMonth) => {
-    if (newMonth) {
+  () => [currentGoal.value.target_month, currentGoal.value.periodType],
+  ([newMonth, type]) => {
+    if (type === 'month' && newMonth) {
       const [y, m] = newMonth.split('-')
       currentGoal.value.data_inicio = `${newMonth}-01`
       const end = new Date(y, Number(m), 0)
       currentGoal.value.data_fim = end.toISOString().split('T')[0]
+    } else if (type === 'month' && !newMonth) {
+      currentGoal.value.data_inicio = ''
+      currentGoal.value.data_fim = ''
     }
   }
 )
@@ -1189,15 +1204,36 @@ const openGoalModal = (type, goal = null) => {
   modal.type = type
   if (goal) {
     modal.title = `Editar Meta ${type === "individual" ? "Individual" : "de Equipe"}`
+    const start = goal.data_inicio.split('T')[0]
+    const end = goal.data_fim.split('T')[0]
+    const startDate = new Date(start)
+    const endDate = new Date(end)
+    const lastOfMonth = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0)
+    const isMonthly =
+      startDate.getDate() === 1 &&
+      startDate.getMonth() === endDate.getMonth() &&
+      startDate.getFullYear() === endDate.getFullYear() &&
+      lastOfMonth.toISOString().split('T')[0] === end
+
     currentGoal.value = { 
       ...goal,
-      data_inicio: goal.data_inicio.split('T')[0],
-      data_fim: goal.data_fim.split('T')[0],
-      target_month: goal.data_inicio.slice(0,7)
+      data_inicio: start,
+      data_fim: end,
+      target_month: isMonthly ? start.slice(0,7) : '',
+      periodType: isMonthly ? 'month' : 'custom'
     }
   } else {
     modal.title = `Nova Meta ${type === "individual" ? "Individual" : "de Equipe"}`
-    currentGoal.value = { tipo_meta: "faturamento", usuario_id: "", target_month: selectedPeriod.value }
+    currentGoal.value = { tipo_meta: "faturamento", usuario_id: "", target_month: selectedPeriod.value, periodType: 'month' }
+    if (selectedPeriod.value) {
+      const [y,m] = selectedPeriod.value.split('-')
+      currentGoal.value.data_inicio = `${selectedPeriod.value}-01`
+      const end = new Date(y, Number(m), 0)
+      currentGoal.value.data_fim = end.toISOString().split('T')[0]
+    } else {
+      currentGoal.value.data_inicio = ''
+      currentGoal.value.data_fim = ''
+    }
   }
   
   // Reset team members when opening modal
@@ -1246,12 +1282,23 @@ const saveGoal = async () => {
         }
       }
       
-      const month = currentGoal.value.target_month
-      if (month) {
-        const [y, m] = month.split('-')
-        currentGoal.value.data_inicio = `${month}-01`
-        const end = new Date(y, Number(m), 0)
-        currentGoal.value.data_fim = end.toISOString().split('T')[0]
+      if (currentGoal.value.periodType === 'month') {
+        const month = currentGoal.value.target_month
+        if (month) {
+          const [y, m] = month.split('-')
+          currentGoal.value.data_inicio = `${month}-01`
+          const end = new Date(y, Number(m), 0)
+          currentGoal.value.data_fim = end.toISOString().split('T')[0]
+        }
+      } else {
+        if (!currentGoal.value.data_inicio || !currentGoal.value.data_fim) {
+          alert('Defina o período da meta.')
+          return
+        }
+        if (new Date(currentGoal.value.data_inicio) > new Date(currentGoal.value.data_fim)) {
+          alert('Data de fim deve ser posterior à data de início.')
+          return
+        }
       }
 
       // Prepare goal data with manual distribution
@@ -1265,12 +1312,23 @@ const saveGoal = async () => {
       
       await goalsService.saveGoal('general', goalDataWithDistribution)
     } else {
-      const month = currentGoal.value.target_month
-      if (month) {
-        const [y, m] = month.split('-')
-        currentGoal.value.data_inicio = `${month}-01`
-        const end = new Date(y, Number(m), 0)
-        currentGoal.value.data_fim = end.toISOString().split('T')[0]
+      if (currentGoal.value.periodType === 'month') {
+        const month = currentGoal.value.target_month
+        if (month) {
+          const [y, m] = month.split('-')
+          currentGoal.value.data_inicio = `${month}-01`
+          const end = new Date(y, Number(m), 0)
+          currentGoal.value.data_fim = end.toISOString().split('T')[0]
+        }
+      } else {
+        if (!currentGoal.value.data_inicio || !currentGoal.value.data_fim) {
+          alert('Defina o período da meta.')
+          return
+        }
+        if (new Date(currentGoal.value.data_inicio) > new Date(currentGoal.value.data_fim)) {
+          alert('Data de fim deve ser posterior à data de início.')
+          return
+        }
       }
       await goalsService.saveGoal('individual', currentGoal.value)
     }
