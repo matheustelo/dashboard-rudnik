@@ -1099,12 +1099,19 @@ app.delete("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerent
     if (type === "general") {
             // Fetch goal periods for this leader so we can remove individual goals
       const { rows } = await pool.query(
-        "SELECT tipo_meta, data_inicio, data_fim FROM metas_gerais WHERE usuario_id = $1",
+        "SELECT usuario_id, tipo_meta, data_inicio, data_fim FROM metas_gerais WHERE id = $1",
         [id],
       )
+      if (rows.length === 0) {
+        return res.status(404).json({ message: 'Meta não encontrada' })
+      }
+      const goalInfo = rows[0]
+
+      // Fetch goal periods for this leader so we can remove individual goals
+      const userId = goalInfo.usuario_id
 
       // Resolve all team member ids including prepostos and representante_premium themselves
-      const teamMembers = await getTeamMembers(id)
+      const teamMembers = await getTeamMembers(userId)
       const childIds = []
       const premiumIds = []
       for (const member of teamMembers) {
@@ -1126,18 +1133,16 @@ app.delete("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerent
       }
       const allIds = Array.from(new Set([...childIds, ...premiumIds]))
 
-      for (const goal of rows) {
-        await pool.query(
-          `DELETE FROM metas_individuais
-           WHERE usuario_id = ANY($1)
-             AND tipo_meta = $2
-             AND data_inicio = $3
-             AND data_fim = $4`,
-          [allIds, goal.tipo_meta, goal.data_inicio, goal.data_fim],
-        )
-      }
+      await pool.query(
+        `DELETE FROM metas_individuais
+         WHERE usuario_id = ANY($1)
+           AND tipo_meta = $2
+           AND data_inicio = $3
+           AND data_fim = $4`,
+        [allIds, goalInfo.tipo_meta, goalInfo.data_inicio, goalInfo.data_fim],
+      )
 
-      await pool.query("DELETE FROM metas_gerais WHERE usuario_id = $1", [id])
+      await pool.query("DELETE FROM metas_gerais WHERE id = $1", [id])
     } else if (type === "individual") {
        await pool.query("DELETE FROM metas_individuais WHERE id = $1", [id])
     } else {

@@ -125,7 +125,7 @@
                     </div>
                     <div class="ml-2 flex-shrink-0 flex space-x-4">
                       <button @click="viewGoalDetails(goal)" class="text-sm font-medium text-blue-500 hover:text-blue-700">Ver Detalhes</button>
-                      <button @click="deleteGoal('general', goal.usuario_id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
+                      <button @click="deleteGoal('general', goal.id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
                     </div>
                   </div>
                   <div class="mt-2 sm:flex sm:justify-between">
@@ -185,7 +185,7 @@
                         <div class="text-xs text-gray-500">{{ goal.tipo_meta }}</div>
                       </div>
                       <button @click="openGoalModal('individual', goal)" class="text-sm font-medium text-gray-500 hover:text-gray-700">Editar</button>
-                      <button @click="deleteGoal('individual', goal.usuario_id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
+                      <button @click="deleteGoal('individual', goal.id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
                     </div>
                   </div>
                   <div class="mt-2 sm:flex sm:justify-between">
@@ -224,7 +224,7 @@
               </div>
               <div class="space-x-4">
                 <button @click="openGoalModal('team', goal)" class="text-sm font-medium text-blue-500 hover:text-blue-700">Editar</button>
-                <button @click="deleteGoal('general', goal.usuario_id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
+                <button @click="deleteGoal('general', goal.id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
               </div>
             </li>
           </ul>
