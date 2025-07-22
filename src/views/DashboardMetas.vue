@@ -10,10 +10,25 @@
       </div>
       <div class="mt-4 flex items-center space-x-4">
         <label class="text-sm text-gray-700">Mês:</label>
-        <select v-model="selectedPeriod" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+        <select v-model="selectedPeriod" @change="fetchGoals" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
           <option v-for="p in periods" :key="p" :value="p">{{ formatPeriodLabel(p) }}</option>
-          <option value="">Todos</option>
+           <option value="">Período Personalizado</option>
         </select>
+        <input
+          type="date"
+          v-model="customStart"
+          :disabled="selectedPeriod"
+          @change="fetchGoals"
+          class="border border-gray-300 rounded-md px-2 py-1"
+        />
+        <span class="text-gray-500">até</span>
+        <input
+          type="date"
+          v-model="customEnd"
+          :disabled="selectedPeriod"
+          @change="fetchGoals"
+          class="border border-gray-300 rounded-md px-2 py-1"
+        />
       </div>
     </header>
 
@@ -214,6 +229,9 @@
       <!-- Summary by Month -->
       <div class="mt-10">
         <h2 class="text-xl font-semibold mb-4">Resumo de Metas por Mês</h2>
+        <div v-if="Object.keys(groupedGeneralGoals).length === 0" class="text-center text-gray-500">
+          Nenhuma meta encontrada para o período selecionado
+        </div>
         <div v-for="(items, month) in groupedGeneralGoals" :key="month" class="mb-6">
           <h3 class="text-md font-medium text-gray-800 mb-2">{{ formatPeriodLabel(month) }}</h3>
           <ul class="bg-white shadow overflow-hidden sm:rounded-lg divide-y divide-gray-200">
@@ -712,9 +730,18 @@ const validationErrors = ref([]) // Initialize as empty array
 const periods = ref([])
 const selectedPeriod = ref("")
 const authStore = useAuthStore()
+const customStart = ref("")
+const customEnd = ref("")
 
 watch(selectedPeriod, () => {
   fetchGoals()
+})
+
+
+watch([customStart, customEnd], () => {
+  if (!selectedPeriod.value) {
+    fetchGoals()
+  }
 })
 
 watch(
@@ -848,7 +875,10 @@ const fetchAllData = async () => {
 const fetchGoals = async () => {
   console.log('🔄 Fetching goals with hierarchy support...')
   try {
-    const { data } = await goalsService.getGoals(selectedPeriod.value)
+    const periodParam = selectedPeriod.value || undefined
+    const start = selectedPeriod.value ? undefined : customStart.value || undefined
+    const end = selectedPeriod.value ? undefined : customEnd.value || undefined
+    const { data } = await goalsService.getGoals(periodParam, start, end)
     console.log('✅ Goals fetched with hierarchy:', data)
     
     // Normalize goal IDs in case the backend returns `_id`
