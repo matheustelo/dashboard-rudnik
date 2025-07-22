@@ -8,31 +8,34 @@
           &larr; Voltar ao Dashboard
         </router-link>
       </div>
-      <div class="mt-4 flex items-center space-x-4">
-        <label class="text-sm text-gray-700">Mês:</label>
-        <select v-model="selectedPeriod" @change="fetchGoals" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+    </header>
+
+    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <div class="bg-white shadow rounded-lg p-4 mb-6 flex items-center space-x-4">
+        <label class="text-sm font-medium text-gray-700">Mês:</label>
+        <select
+          v-model="selectedPeriod"
+          @change="handlePeriodChange"
+          class="border border-gray-300 rounded-md px-3 py-2 text-sm"
+        >
           <option v-for="p in periods" :key="p" :value="p">{{ formatPeriodLabel(p) }}</option>
            <option value="">Período Personalizado</option>
         </select>
         <input
           type="date"
           v-model="customStart"
-          :disabled="selectedPeriod"
-          @change="fetchGoals"
+          @change="handleCustomDateChange"
           class="border border-gray-300 rounded-md px-2 py-1"
         />
         <span class="text-gray-500">até</span>
         <input
           type="date"
           v-model="customEnd"
-          :disabled="selectedPeriod"
-          @change="fetchGoals"
+          @change="handleCustomDateChange"
           class="border border-gray-300 rounded-md px-2 py-1"
         />
       </div>
-    </header>
 
-    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <!-- Tabs -->
       <div class="border-b border-gray-200">
         <nav class="-mb-px flex space-x-8" aria-label="Tabs">
@@ -241,7 +244,6 @@
                 <p class="text-xs text-gray-500">Valor: {{ formatCurrency(goal.valor_meta) }}</p>
               </div>
               <div class="space-x-4">
-                <button @click="openGoalModal('team', goal)" class="text-sm font-medium text-blue-500 hover:text-blue-700">Editar</button>
                 <button @click="deleteGoal('general', goal.id)" class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
               </div>
             </li>
@@ -745,16 +747,19 @@ const authStore = useAuthStore()
 const customStart = ref("")
 const customEnd = ref("")
 
-watch(selectedPeriod, () => {
+const handlePeriodChange = () => {
+  customStart.value = ''
+  customEnd.value = ''
   fetchGoals()
-})
+}
 
 
-watch([customStart, customEnd], () => {
-  if (!selectedPeriod.value && customStart.value && customEnd.value) {
+const handleCustomDateChange = () => {
+  selectedPeriod.value = ''
+  if (customStart.value && customEnd.value) {
     fetchGoals()
   }
-})
+}
 
 watch(
   () => [currentGoal.value.target_month, currentGoal.value.periodType],
