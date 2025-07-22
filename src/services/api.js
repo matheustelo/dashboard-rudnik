@@ -76,6 +76,7 @@ export const goalsService = {
   getSellerTracking: (id, period, startDate, endDate) =>
     api.get(`/goals/tracking/seller/${id}`, { params: { period, startDate, endDate } }),
   getGoalPeriods: (id) => api.get(`/goals/periods/${id}`),
+  getTeamGoals: (id, params) => api.get(`/goals/team/${id}`, { params }),
 }
 
 // Performance service

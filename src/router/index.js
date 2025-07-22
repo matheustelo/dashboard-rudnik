@@ -5,7 +5,8 @@ import DashboardVendedor from "../views/DashboardVendedor.vue"
 import DashboardSupervisor from "../views/DashboardSupervisor.vue"
 import DashboardGerenteComercial from "../views/DashboardGerenteComercial.vue"
 import DashboardRepresentante from "../views/DashboardRepresentante.vue"
-import DashboardMetas from "../views/DashboardMetas.vue" // New
+import DashboardMetas from "../views/DashboardMetas.vue"
+import TeamGoalsHistory from "../views/TeamGoalsHistory.vue"
 
 const routes = [
   {
@@ -46,6 +47,12 @@ const routes = [
     name: "DashboardMetas",
     component: DashboardMetas,
     meta: { requiresAuth: true, roles: ["admin", "gerente_comercial"] }, // New
+  },
+  {
+    path: "/dashboard/team-goals-history",
+    name: "TeamGoalsHistory",
+    component: TeamGoalsHistory,
+    meta: { requiresAuth: true, roles: ["admin", "gerente_comercial"] },
   },
 ]
 

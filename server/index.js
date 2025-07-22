@@ -1270,6 +1270,100 @@ app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) =>
   }
 })
 
+// Get all goals for a specific team with progress metrics
+app.get(
+  "/api/goals/team/:id",
+  authenticateToken,
+  authorize("admin", "gerente_comercial"),
+  async (req, res) => {
+    console.log("--- Goals API: GET /api/goals/team/:id started ---")
+    try {
+      const { id } = req.params
+      const { period, startDate: start, endDate: end, status } = req.query
+      const { startDate, endDate } = getDateRange(period, start, end)
+
+      const goalsQuery = `
+        SELECT g.*, u.name AS supervisor_name
+          FROM metas_gerais g
+          JOIN clone_users_apprudnik u ON g.usuario_id = u.id
+         WHERE g.usuario_id = $1
+           AND g.data_inicio <= $3 AND g.data_fim >= $2
+         ORDER BY g.data_inicio ASC`
+
+      const { rows } = await pool.query(goalsQuery, [id, startDate, endDate])
+
+      const teamMembers = await getTeamMembers(id)
+      const memberIds = teamMembers.map((m) => m.id)
+
+      const goalsWithMetrics = []
+      for (const goal of rows) {
+        let actual = 0
+        if (memberIds.length > 0) {
+          let metricQuery = null
+          if (goal.tipo_meta === "faturamento") {
+            metricQuery = `
+              SELECT COALESCE(SUM(p.total_price::DECIMAL),0) AS value
+                FROM clone_propostas_apprudnik p
+               WHERE p.seller = ANY($1)
+                 AND p.has_generated_sale = true
+                 AND p.created_at BETWEEN $2 AND $3`
+          } else if (goal.tipo_meta === "propostas") {
+            metricQuery = `
+              SELECT COUNT(*) AS value
+                FROM clone_propostas_apprudnik p
+               WHERE p.seller = ANY($1)
+                 AND p.created_at BETWEEN $2 AND $3`
+          } else if (goal.tipo_meta === "vendas") {
+            metricQuery = `
+              SELECT COUNT(*) AS value
+                FROM clone_propostas_apprudnik p
+               WHERE p.seller = ANY($1)
+                 AND p.has_generated_sale = true
+                 AND p.created_at BETWEEN $2 AND $3`
+          }
+
+          if (metricQuery) {
+            const result = await pool.query(metricQuery, [
+              memberIds,
+              goal.data_inicio,
+              goal.data_fim,
+            ])
+            actual = parseFloat(result.rows[0].value)
+          }
+        }
+
+        const target = parseFloat(goal.valor_meta)
+        const progress = target > 0 ? (actual / target) * 100 : 0
+
+        const now = new Date()
+        const startGoal = new Date(goal.data_inicio)
+        const endGoal = new Date(goal.data_fim)
+        let goalStatus = "active"
+        if (endGoal < now) goalStatus = progress >= 100 ? "completed" : "overdue"
+        else if (startGoal > now) goalStatus = "upcoming"
+
+        if (status && status !== goalStatus) continue
+
+        goalsWithMetrics.push({
+          ...goal,
+          achieved: actual,
+          progress,
+          status: goalStatus,
+          team_members: teamMembers,
+        })
+      }
+
+      res.json(goalsWithMetrics)
+    } catch (error) {
+      console.error("❌ Goals Team: Error:", error.message)
+      res.status(500).json({
+        message: "Erro ao carregar metas da equipe",
+        error: error.message,
+      })
+    }
+  },
+)
+
 // Get users for goal assignment
 app.get("/api/users", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
   console.log("--- Users API: GET /api/users started ---")

@@ -9,6 +9,7 @@
           </div>
           <div class="flex items-center space-x-4">
             <router-link to="/dashboard/metas" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 text-sm font-medium">Gerenciar Metas</router-link>
+            <router-link to="/dashboard/team-goals-history" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium">Histórico de Metas</router-link>
             <button @click="logout" class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700">Sair</button>
           </div>
         </div>
