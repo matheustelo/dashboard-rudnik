@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-white p-6 rounded-lg shadow">
+  <div class="bg-white p-8 rounded-lg">
     <h3 class="text-lg font-medium text-gray-900 mb-4">{{ title }}</h3>
     <div class="h-64">
       <component 
