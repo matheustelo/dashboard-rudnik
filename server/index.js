@@ -556,31 +556,42 @@ app.get(
 
       const representative = userResult.rows[0]
 
-      // Get detailed proposals
+      // Get child users for proposal listing
+      const childMembers = await getTeamMembers(id)
+      const childIds = childMembers.map((m) => m.id)
+      const sellerIds = [Number(id), ...childIds]
+
+      // Get detailed proposals including child users
       const proposalsQuery = `
-        SELECT 
-            p.id, 
-            c.name AS client_name, 
-            p.total_price, 
-            p.has_generated_sale, 
+        SELECT DISTINCT ON (c.phone)
+            p.id,
+            c.name AS client_name,
+            c.phone AS client_phone,
+            u.name AS proposer_name,
+            u.role AS proposer_role,
+            p.seller AS seller_id,
+            CASE WHEN p.seller = $2 THEN 'self' ELSE 'child' END AS origin,
+            p.total_price,
+            p.has_generated_sale,
             p.created_at,
             CASE 
                 WHEN p.has_generated_sale = true THEN 'Convertida'
                 ELSE 'Pendente'
             END AS status
-        FROM 
+        FROM
             clone_propostas_apprudnik p
-        JOIN 
-            clone_contatos_apprudnik c 
-            ON p.lead = c.id
-        WHERE 
-            p.seller = $1 
-            AND p.created_at >= $2 
-            AND p.created_at <= $3
-        ORDER BY 
-            p.created_at DESC;
+        JOIN
+            clone_contatos_apprudnik c ON p.lead = c.id
+        JOIN
+            clone_users_apprudnik u ON p.seller = u.id
+        WHERE
+            p.seller = ANY($1)
+            AND p.created_at >= $3
+            AND p.created_at <= $4
+        ORDER BY
+            c.phone, p.created_at DESC;
       `
-      const proposals = await pool.query(proposalsQuery, [id, dateStart, dateEnd])
+      const proposals = await pool.query(proposalsQuery, [sellerIds, id, dateStart, dateEnd])
 
       // Get monthly performance trend
       const monthlyTrendQuery = `
@@ -664,6 +675,11 @@ app.get(
         proposals: proposals.rows.map((proposal) => ({
           id: proposal.id,
           clientName: proposal.client_name,
+          clientPhone: proposal.client_phone,
+          proposerName: proposal.proposer_name,
+          proposerRole: proposal.proposer_role,
+          origin: proposal.origin,
+          sellerId: proposal.seller_id,
           totalPrice: Number.parseFloat(proposal.total_price),
           status: proposal.status,
           createdAt: proposal.created_at,

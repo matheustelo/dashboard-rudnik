@@ -205,14 +205,29 @@
             <div class="bg-white shadow rounded-lg">
               <div class="px-4 py-5 sm:p-6">
                 <h4 class="text-lg leading-6 font-medium text-gray-900 mb-4">
-                  Propostas Detalhadas ({{ details.proposals.length }})
+                  Propostas Detalhadas ({{ filteredProposals.length }})
                 </h4>
+                <div class="mb-4 flex items-center space-x-2">
+                  <label class="text-sm font-medium text-gray-700">Origem:</label>
+                  <select v-model="originFilter" class="border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    <option value="all">Todos</option>
+                    <option value="self">{{ selfLabel }}</option>
+                    <option value="child">Usuários Filhos</option>
+                    <option value="converted">Convertida</option>
+                  </select>
+                </div>
                 <div class="overflow-hidden">
                   <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                       <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Cliente
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Telefone
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Origem
                         </th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Valor
@@ -226,10 +241,17 @@
                       </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
-                      <tr v-for="proposal in details.proposals" :key="proposal.id">
+                      <tr v-for="proposal in sortedProposals" :key="proposal.id">
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {{ proposal.clientName }}
+                          {{ proposal.clientName + ' ' +  proposal.id}}
                         </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {{ formatPhone(proposal.clientPhone) }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {{ proposal.proposerName }}
+                        </td>
+
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           R$ {{ formatCurrency(proposal.totalPrice) }}
                         </td>
@@ -269,7 +291,7 @@
 </template>
 
 <script setup>
-import { computed, watch } from 'vue'
+import { computed, watch, ref } from 'vue'
 import LineChart from './LineChart.vue'
 import BarChart from './BarChart.vue'
 
@@ -293,6 +315,39 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close'])
+
+const uniqueProposals = computed(() => {
+  if (!props.details?.proposals) return []
+  const seen = new Set()
+  return props.details.proposals.filter((p) => {
+    if (seen.has(p.clientPhone)) return false
+    seen.add(p.clientPhone)
+    return true
+  })
+})
+
+const originFilter = ref('all')
+
+const selfLabel = computed(() => {
+  const role = props.representative?.role || 'supervisor'
+  return role === 'parceiro_comercial' ? 'Parceiro' : 'Supervisor'
+})
+
+const filteredProposals = computed(() => {
+  if (originFilter.value === 'all') return uniqueProposals.value
+  if (originFilter.value === 'converted') {
+    return uniqueProposals.value.filter((p) => p.status === 'Convertida')
+  }
+  return uniqueProposals.value.filter((p) =>
+    originFilter.value === 'self' ? p.origin === 'self' : p.origin === 'child'
+  )
+})
+
+const sortedProposals = computed(() => {
+  return [...filteredProposals.value].sort(
+    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+  )
+})
 
 const monthlyChartData = computed(() => {
   if (!props.details?.monthlyTrend) return null
@@ -375,6 +430,18 @@ const formatCurrency = (value) => {
 
 const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString('pt-BR')
+}
+
+const formatPhone = (phone) => {
+  if (!phone) return ''
+  const clean = phone.replace(/[^\d]/g, '')
+  if (clean.length === 10) {
+    return clean.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3')
+  }
+  if (clean.length === 11) {
+    return clean.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
+  }
+  return phone
 }
 
 // Close modal on Escape key
