@@ -947,8 +947,8 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
       }
 
       // 4. Expand representante_premium to their preposto children
-      const finalChildren = []
-      const repGoals = []
+      let finalChildren = []
+      let repGoals = []
       for (const child of childrenIds) {
         const { rows } = await client.query(
           `SELECT role, children FROM clone_users_apprudnik WHERE id = $1 AND is_active = true`,
@@ -975,12 +975,46 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
         finalChildren.push(child)
       }
 
+      // Merge duplicates that may appear after manual distribution
+      const mergeById = (arr) => {
+        const map = new Map()
+        for (const item of arr) {
+          if (map.has(item.id)) {
+            map.get(item.id).goalAmount += item.goalAmount
+          } else {
+            map.set(item.id, { ...item })
+          }
+        }
+        return Array.from(map.values())
+      }
+
+      finalChildren = mergeById(finalChildren)
+      repGoals = mergeById(repGoals)
+
       // Insert individual goals for each resolved child
       const individualGoalQuery = `
         INSERT INTO metas_individuais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por)
         VALUES ($1, $2, $3, $4, $5, $6)`
 
+        const hasDup = async (uid) => {
+        const { rows } = await client.query(
+          `SELECT 1 FROM metas_individuais
+            WHERE usuario_id = $1
+              AND tipo_meta = $2
+              AND date_trunc('month', data_inicio) = date_trunc('month', $3::date)
+            LIMIT 1`,
+          [uid, tipo_meta, data_inicio],
+        )
+        return rows.length > 0
+      }
+
       for (const child of finalChildren) {
+        if (await hasDup(child.id)) {
+          await client.query('ROLLBACK')
+          return res.status(400).json({
+            message: `Usuário ${child.id} já possui meta cadastrada para este período e tipo`,
+          })
+        }
         await client.query(individualGoalQuery, [
           child.id,
           tipo_meta,
@@ -993,6 +1027,12 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
 
       // Also insert goals for representante_premium users themselves
       for (const rep of repGoals) {
+        if (await hasDup(rep.id)) {
+          await client.query('ROLLBACK')
+          return res.status(400).json({
+            message: `Usuário ${rep.id} já possui meta cadastrada para este período e tipo`,
+          })
+        }
         await client.query(individualGoalQuery, [
           rep.id,
           tipo_meta,
@@ -1048,6 +1088,19 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
     }
     res.status(201).json(result.rows[0])
   } else {
+      const conflict = await pool.query(
+        `SELECT 1 FROM metas_individuais
+          WHERE usuario_id=$1
+            AND tipo_meta=$2
+            AND NOT (data_fim < $3 OR data_inicio > $4)
+          LIMIT 1`,
+        [usuario_id, tipo_meta, data_inicio, data_fim],
+      )
+      if (conflict.rows.length > 0) {
+        return res.status(400).json({
+          message: 'Já existe uma meta cadastrada para este período e tipo',
+        })
+      }
     return res.status(400).json({ message: "Invalid goal type" })
   }
 })
