@@ -575,8 +575,12 @@
                     <dd class="mt-1 text-sm text-gray-900">{{ selectedGoal.tipo_meta }}</dd>
                   </div>
                   <div>
-                    <dt class="text-sm font-medium text-gray-500">Valor Total</dt>
-                    <dd class="mt-1 text-sm text-gray-900">{{ formatCurrency(selectedGoal.valor_meta) }}</dd>
+                    <dt class="text-sm font-medium text-gray-500">
+                      {{ selectedGoal.tipo_meta === 'propostas' ? 'Quantidade Total' : 'Valor Total' }}
+                    </dt>
+                    <dd class="mt-1 text-sm text-gray-900">
+                      {{ formatGoalValue(selectedGoal.valor_meta, selectedGoal.tipo_meta) }}
+                    </dd>
                   </div>
                   <div>
                     <dt class="text-sm font-medium text-gray-500">Membros da Equipe</dt>
@@ -607,7 +611,9 @@
                           </div>
                         </div>
                         <div class="text-right">
-                          <div class="text-lg font-bold text-indigo-600">{{ formatCurrency(selectedGoal.valor_meta) }}</div>
+                          <div class="text-lg font-bold text-indigo-600">
+                            {{ formatGoalValue(selectedGoal.valor_meta, selectedGoal.tipo_meta) }}
+                          </div>
                           <div class="text-xs text-gray-500">Meta Total</div>
                         </div>
                       </div>
@@ -649,7 +655,7 @@
                           <div class="flex items-center space-x-4 flex-shrink-0">
                             <div class="text-right">
                               <div class="text-sm font-bold" :class="getGoalValueColorClass(member.role)">
-                                {{ formatCurrency(getMemberGoalValue(member, selectedGoal)) }}
+                                 {{ formatGoalValue(getMemberGoalValue(member, selectedGoal), selectedGoal.tipo_meta) }}
                               </div>
                               <div class="text-xs text-gray-500">{{ selectedGoal.tipo_meta }}</div>
                             </div>
@@ -657,7 +663,7 @@
                             <div v-if="member.performance" class="text-right">
                               <div class="text-xs text-gray-600">Atual:</div>
                               <div class="text-xs font-medium" :class="getPerformanceClass(member, selectedGoal)">
-                                {{ formatCurrency(member.performance.faturamentoTotal || 0) }}
+                                {{ formatGoalValue(getMemberCurrentValue(member, selectedGoal.tipo_meta), selectedGoal.tipo_meta) }}
                               </div>
                             </div>
                           </div>
@@ -685,13 +691,13 @@
                       <div class="grid grid-cols-2 gap-4 text-sm">
                         <div v-if="selectedGoal.supervisor_role === 'representante_premium'" class="text-center p-2 bg-purple-50 rounded border">
                           <div class="font-semibold text-lg text-purple-600">
-                            {{ formatCurrency(getRepresentantePremiumGoalTotal(selectedGoal.child_goals)) }}
+                             {{ formatGoalValue(getRepresentantePremiumGoalTotal(selectedGoal.child_goals, selectedGoal.tipo_meta), selectedGoal.tipo_meta) }}
                           </div>
                           <div class="text-xs text-gray-500">Rep. Premium</div>
                         </div>
                         <div v-if="selectedGoal.supervisor_role === 'representante_premium'" class="text-center p-2 bg-yellow-50 rounded border">
                           <div class="font-semibold text-lg text-yellow-600">
-                            {{ formatCurrency(getPrepostosGoalTotal(selectedGoal.child_goals)) }}
+                             {{ formatGoalValue(getPrepostosGoalTotal(selectedGoal.child_goals, selectedGoal.tipo_meta), selectedGoal.tipo_meta) }}
                           </div>
                           <div class="text-xs text-gray-500">Prepostos</div>
                         </div>
@@ -1398,6 +1404,12 @@ const formatCurrency = (value) => {
   }).format(numValue)
 }
 
+const formatGoalValue = (value, type) => {
+  if (type === 'faturamento') return formatCurrency(value)
+  const num = parseFloat(value) || 0
+  return num.toLocaleString('pt-BR')
+}
+
 const formatPeriodLabel = (p) => {
   const [y, m] = p.split('-')
   const date = new Date(y, Number(m) - 1, 1)
@@ -1466,14 +1478,16 @@ const getPrepostosCount = (goal) => {
 }
 
 // Goal value display helper functions
-const getTotalDistributedGoals = (childGoals) => {
+const getTotalDistributedGoals = (childGoals, tipo) => {
   if (!Array.isArray(childGoals)) return 0
-  return childGoals.reduce((sum, goal) => sum + parseFloat(goal.valor_meta || 0), 0)
+  return childGoals
+    .filter(g => g.tipo_meta === tipo)
+    .reduce((sum, goal) => sum + parseFloat(goal.valor_meta || 0), 0)
 }
 
 const getDistributionPercentage = (goal) => {
   const total = parseFloat(goal.valor_meta) || 0
-  const distributed = getTotalDistributedGoals(goal.child_goals)
+  const distributed = getTotalDistributedGoals(goal.child_goals, goal.tipo_meta)
   return total > 0 ? ((distributed / total) * 100).toFixed(1) : '0.0'
 }
 
@@ -1489,12 +1503,21 @@ const getMemberGoalValue = (member, selectedGoal) => {
   if (!selectedGoal.child_goals || !Array.isArray(selectedGoal.child_goals)) return 0
   const memberId = Number(member.id)
 
-  const memberGoal = selectedGoal.child_goals.find(goal => Number(goal.usuario_id) === memberId)
+  const memberGoal = selectedGoal.child_goals.find(
+    goal => Number(goal.usuario_id) === memberId && goal.tipo_meta === selectedGoal.tipo_meta,
+  )
   return memberGoal ? parseFloat(memberGoal.valor_meta) : 0
 }
 
+const getMemberCurrentValue = (member, goalType) => {
+  if (!member.performance) return 0
+  if (goalType === 'propostas') return member.performance.totalPropostas || 0
+  if (goalType === 'vendas') return member.performance.propostasConvertidas || 0
+  return member.performance.faturamentoTotal || 0
+}
+
 const getDifferenceClass = (goal) => {
-  const difference = goal.valor_meta - getTotalDistributedGoals(goal.child_goals)
+  const difference = goal.valor_meta - getTotalDistributedGoals(goal.child_goals, goal.tipo_meta)
   if (difference < 0) return 'text-red-600 font-medium'
   if (difference === 0) return 'text-green-600 font-medium'
   return 'text-blue-600 font-medium'
@@ -1553,17 +1576,17 @@ const getGoalValueColorClass = (role) => {
   return classes[role] || 'text-gray-600'
 }
 
-const getRepresentantePremiumGoalTotal = (childGoals) => {
+const getRepresentantePremiumGoalTotal = (childGoals, tipo) => {
   if (!Array.isArray(childGoals)) return 0
   return childGoals
-    .filter(goal => goal.user_role === 'representante_premium')
+    .filter(goal => goal.user_role === 'representante_premium' && goal.tipo_meta === tipo)
     .reduce((sum, goal) => sum + parseFloat(goal.valor_meta || 0), 0)
 }
 
-const getPrepostosGoalTotal = (childGoals) => {
+const getPrepostosGoalTotal = (childGoals, tipo) => {
   if (!Array.isArray(childGoals)) return 0
   return childGoals
-    .filter(goal => goal.user_role === 'preposto')
+    .filter(goal => goal.user_role === 'preposto' && goal.tipo_meta === tipo)
     .reduce((sum, goal) => sum + parseFloat(goal.valor_meta || 0), 0)
 }
 
@@ -1573,7 +1596,9 @@ const getEnhancedHierarchicalTeamMembers = (selectedGoal) => {
   // Combine team members with their goal values
   const membersWithGoals = selectedGoal.team_members.map(member => {
     const memberId = Number(member.id)
-    const memberGoal = selectedGoal.child_goals?.find(goal => Number(goal.usuario_id) === memberId)
+    const memberGoal = selectedGoal.child_goals?.find(
+      goal => Number(goal.usuario_id) === memberId && goal.tipo_meta === selectedGoal.tipo_meta,
+    )
     return {
       ...member,
       goalValue: memberGoal ? parseFloat(memberGoal.valor_meta) : 0,
@@ -1635,7 +1660,7 @@ const getRoleIndicatorClass = (role) => {
 
 const getMemberGoalProgress = (member, selectedGoal) => {
   const goalValue = getMemberGoalValue(member, selectedGoal)
-  const currentValue = member.performance?.faturamentoTotal || 0
+  const currentValue = getMemberCurrentValue(member, selectedGoal.tipo_meta)
   return goalValue > 0 ? ((currentValue / goalValue) * 100).toFixed(1) : 0
 }
 
@@ -1649,7 +1674,7 @@ const getProgressBarClass = (member, selectedGoal) => {
 
 const getPerformanceClass = (member, selectedGoal) => {
   const goalValue = getMemberGoalValue(member, selectedGoal)
-  const currentValue = member.performance?.faturamentoTotal || 0
+  const currentValue = getMemberCurrentValue(member, selectedGoal.tipo_meta)
   const progress = goalValue > 0 ? (currentValue / goalValue) * 100 : 0
   
   if (progress >= 100) return 'text-green-600'

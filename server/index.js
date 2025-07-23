@@ -766,9 +766,10 @@ app.get("/api/goals", authenticateToken, authorize("admin", "gerente_comercial")
           JOIN clone_users_apprudnik u ON m.usuario_id = u.id
           WHERE m.usuario_id = ANY($1)
             AND m.data_inicio <= $3 AND m.data_fim >= $2
+            AND m.tipo_meta = $4
           ORDER BY u.name, m.data_inicio DESC
         `
-        const { rows } = await pool.query(childQuery, [memberIds, startDate, endDate])
+        const { rows } = await pool.query(childQuery, [memberIds, startDate, endDate, goal.tipo_meta])
         childGoals = rows
       }
 

@@ -306,3 +306,8 @@ onMounted(async () => {
   loadInitialData()
 })
 </script>
+<style>
+.max-w-7xl {
+    max-width: 100rem;
+}
+</style>
