@@ -60,7 +60,16 @@
             <td class="px-2 py-1">{{ g.tipo_meta }}</td>
             <td class="px-2 py-1">{{ formatCurrency(g.valor_meta) }}</td>
             <td class="px-2 py-1">{{ formatValue(g.achieved, g.tipo_meta) }}</td>
-            <td class="px-2 py-1">{{ g.progress.toFixed(1) }}%</td>
+            <td class="px-2 py-1">
+              <div class="w-32 bg-gray-200 rounded-full h-2">
+                <div
+                  class="h-2 rounded-full"
+                  :class="progressColor(g.progress)"
+                  :style="{ width: Math.min(g.progress, 100) + '%' }"
+                ></div>
+              </div>
+              <div class="text-xs text-gray-600 mt-1">{{ g.progress.toFixed(1) }}%</div>
+            </td>
             <td class="px-2 py-1">{{ g.status }}</td>
           </tr>
           <tr v-if="!sortedGoals.length">
@@ -114,6 +123,13 @@ const sortedGoals = computed(() => {
 const formatDate = (d) => new Date(d).toLocaleDateString('pt-BR')
 const formatCurrency = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
 const formatValue = (v, type) => type === 'faturamento' ? formatCurrency(v) : v
+
+const progressColor = (p) => {
+  if (p >= 100) return 'bg-green-500'
+  if (p >= 75) return 'bg-yellow-500'
+  if (p >= 50) return 'bg-orange-500'
+  return 'bg-red-500'
+}
 
 const chartData = computed(() => {
   const labels = sortedGoals.value.map(g => g.data_inicio.slice(0,7))

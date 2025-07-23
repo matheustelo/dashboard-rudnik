@@ -828,9 +828,10 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
     const overlapCheck = await pool.query(
       `SELECT 1 FROM metas_gerais
        WHERE usuario_id = $1
+         AND tipo_meta = $4
          AND NOT (data_fim < $2 OR data_inicio > $3)
        LIMIT 1`,
-      [usuario_id, data_inicio, data_fim],
+      [usuario_id, data_inicio, data_fim, tipo_meta],
     )
     if (overlapCheck.rows.length > 0) {
       return res.status(400).json({
@@ -1067,8 +1068,13 @@ app.put("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerente_c
 
     try {
       const conflict = await pool.query(
-        `SELECT 1 FROM metas_gerais WHERE usuario_id = $1 AND id <> $2 AND NOT (data_fim < $3 OR data_inicio > $4) LIMIT 1`,
-        [usuario_id, id, data_inicio, data_fim],
+        `SELECT 1 FROM metas_gerais
+         WHERE usuario_id = $1
+           AND tipo_meta = $5
+           AND id <> $2
+           AND NOT (data_fim < $3 OR data_inicio > $4)
+         LIMIT 1`,
+        [usuario_id, id, data_inicio, data_fim, tipo_meta],
       )
       if (conflict.rows.length > 0) {
         return res.status(400).json({ message: "Já existe uma meta de equipe cadastrada para este período" })
@@ -1093,8 +1099,13 @@ app.put("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerente_c
     }
     try {
       const conflict = await pool.query(
-        `SELECT 1 FROM metas_individuais WHERE usuario_id=$1 AND id<>$2 AND NOT (data_fim < $3 OR data_inicio > $4) LIMIT 1`,
-        [usuario_id, id, data_inicio, data_fim],
+        `SELECT 1 FROM metas_individuais
+         WHERE usuario_id=$1
+           AND tipo_meta = $5
+           AND id<>$2
+           AND NOT (data_fim < $3 OR data_inicio > $4)
+         LIMIT 1`,
+        [usuario_id, id, data_inicio, data_fim, tipo_meta],
       )
       if (conflict.rows.length > 0) {
         return res.status(400).json({ message: "Já existe uma meta cadastrada para este período" })
