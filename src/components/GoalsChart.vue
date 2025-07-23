@@ -19,6 +19,24 @@
     </div>
     
     <div v-else class="space-y-4">
+        <div v-if="summary" class="border rounded-lg p-4 bg-gray-50">
+        <div class="flex justify-between items-center">
+          <div class="text-sm text-gray-600">Progresso Total</div>
+          <div class="text-right">
+            <div class="text-lg font-semibold text-gray-900">{{ summary.progress.toFixed(1) }}%</div>
+            <div class="text-sm text-gray-500">
+              {{ formatValue(summary.achieved, 'faturamento') }} / {{ formatValue(summary.target, 'faturamento') }}
+            </div>
+          </div>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-3 mt-2">
+          <div
+            class="h-3 rounded-full transition-all duration-300"
+            :class="getProgressColor(summary.progress)"
+            :style="{ width: Math.min(summary.progress, 100) + '%' }"
+          ></div>
+        </div>
+      </div>
       <div 
         v-for="goal in goals" 
         :key="goal.id"
@@ -75,13 +93,15 @@ const props = defineProps({
 })
 
 const goals = ref([])
+const summary = ref(null)
 const loading = ref(false)
 
 const loadGoals = async () => {
   loading.value = true
   try {
     const response = await goalsService.getSellerTracking(props.userId, props.period)
-    goals.value = response.data
+    goals.value = response.data.goals
+    summary.value = response.data.summary
   } catch (error) {
     console.error('Erro ao carregar metas:', error)
   } finally {

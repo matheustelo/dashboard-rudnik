@@ -799,9 +799,11 @@ app.get("/api/goals", authenticateToken, authorize("admin", "gerente_comercial")
     }
 
     const individualGoalsQuery = `
-      SELECT m.*, u.name as user_name, u.email as user_email, u.role as user_role, u.supervisors
+      SELECT m.*, u.name as user_name, u.email as user_email, u.role as user_role, u.supervisors,
+             s.name AS supervisor_name, s.role AS supervisor_role
       FROM metas_individuais m
       JOIN clone_users_apprudnik u ON m.usuario_id = u.id
+      LEFT JOIN clone_users_apprudnik s ON m.supervisor_id = s.id
       WHERE m.data_inicio <= $2 AND m.data_fim >= $1
       ORDER BY u.name, m.data_inicio DESC
     `
@@ -811,6 +813,8 @@ app.get("/api/goals", authenticateToken, authorize("admin", "gerente_comercial")
     const enhancedIndividual = individualResult.rows.map((goal) => ({
       ...goal,
       supervisors: parseJsonField(goal.supervisors),
+      supervisor_name: goal.supervisor_name,
+      supervisor_role: goal.supervisor_role,
     }))
 
     res.json({
@@ -1010,17 +1014,18 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
 
       // Insert individual goals for each resolved child
       const individualGoalQuery = `
-        INSERT INTO metas_individuais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por)
-        VALUES ($1, $2, $3, $4, $5, $6)`
+        INSERT INTO metas_individuais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por, supervisor_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)`
 
         const hasDup = async (uid) => {
         const { rows } = await client.query(
           `SELECT 1 FROM metas_individuais
             WHERE usuario_id = $1
-              AND tipo_meta = $2
-              AND date_trunc('month', data_inicio) = date_trunc('month', $3::date)
+              AND supervisor_id = $2
+              AND tipo_meta = $3
+              AND date_trunc('month', data_inicio) = date_trunc('month', $4::date)
             LIMIT 1`,
-          [uid, tipo_meta, data_inicio],
+          [uid, supervisorId, tipo_meta, data_inicio],
         )
         return rows.length > 0
       }
@@ -1039,6 +1044,7 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
           data_inicio,
           data_fim,
           created_by,
+          supervisorId,
         ])
       }
 
@@ -1057,6 +1063,7 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
           data_inicio,
           data_fim,
           created_by,
+          supervisorId,
         ])
       }
 
@@ -1090,17 +1097,34 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
       })
     }
     let result
+    const duplicateCheck = await pool.query(
+      `SELECT 1 FROM metas_individuais
+         WHERE usuario_id = $1
+           AND supervisor_id = $2
+           AND tipo_meta = $3
+           AND NOT (data_fim < $4 OR data_inicio > $5)
+           ${id ? 'AND id <> $6' : ''}
+         LIMIT 1`,
+      id
+        ? [usuario_id, goalData.supervisor_id, tipo_meta, data_inicio, data_fim, id]
+        : [usuario_id, goalData.supervisor_id, tipo_meta, data_inicio, data_fim],
+    )
+    if (duplicateCheck.rows.length > 0) {
+      return res.status(400).json({
+        message: `Usuário ${usuario_id} já possui meta cadastrada para este período e tipo`,
+      })
+    }
     if (id) {
       result = await pool.query(
-        `UPDATE metas_individuais SET tipo_meta = $1, valor_meta = $2, data_inicio = $3, data_fim = $4, usuario_id = $5, atualizado_em = NOW()
-         WHERE id = $6 RETURNING *`,
-        [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, id],
+        `UPDATE metas_individuais SET tipo_meta = $1, valor_meta = $2, data_inicio = $3, data_fim = $4, usuario_id = $5, supervisor_id = $6, atualizado_em = NOW()
+         WHERE id = $7 RETURNING *`,
+        [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, goalData.supervisor_id, id],
       )
     } else {
       result = await pool.query(
-        `INSERT INTO metas_individuais (tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, criado_por)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-        [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, created_by],
+        `INSERT INTO metas_individuais (tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, criado_por, supervisor_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, created_by, goalData.supervisor_id],
       )
     }
     res.status(201).json(result.rows[0])
@@ -1171,18 +1195,19 @@ app.put("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerente_c
       const conflict = await pool.query(
         `SELECT 1 FROM metas_individuais
          WHERE usuario_id=$1
+           AND supervisor_id=$6
            AND tipo_meta = $5
            AND id<>$2
            AND NOT (data_fim < $3 OR data_inicio > $4)
          LIMIT 1`,
-        [usuario_id, id, data_inicio, data_fim, tipo_meta],
+        [usuario_id, id, data_inicio, data_fim, tipo_meta, goalData.supervisor_id],
       )
       if (conflict.rows.length > 0) {
         return res.status(400).json({ message: "Já existe uma meta cadastrada para este período" })
       }
       await pool.query(
-        `UPDATE metas_individuais SET usuario_id=$1, tipo_meta=$2, valor_meta=$3, data_inicio=$4, data_fim=$5 WHERE id=$6`,
-        [usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, id],
+        `UPDATE metas_individuais SET usuario_id=$1, tipo_meta=$2, valor_meta=$3, data_inicio=$4, data_fim=$5, supervisor_id=$6 WHERE id=$7`,
+        [usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, goalData.supervisor_id, id],
       )
       res.json({ success: true })
     } catch (error) {
@@ -1363,9 +1388,19 @@ app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) =>
 
     const allGoals = [...individualGoalsWithProgress, ...generalGoalsWithProgress]
 
+    const totalTarget = allGoals.reduce((s, g) => s + parseFloat(g.valor_meta), 0)
+    const totalAchieved = allGoals.reduce((s, g) => s + (g.achieved || 0), 0)
+    const overallProgress = totalTarget > 0 ? (totalAchieved / totalTarget) * 100 : 0
     console.log("✅ Goals Tracking: Processed", allGoals.length, "goals")
 
-    res.json(allGoals)
+    res.json({
+      goals: allGoals,
+      summary: {
+        target: totalTarget,
+        achieved: totalAchieved,
+        progress: overallProgress,
+      },
+    })
   } catch (error) {
     console.error("❌ Goals Tracking: Error:", error.message)
     res.status(500).json({
