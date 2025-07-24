@@ -912,30 +912,7 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
 
       // 4. Expand representante_premium to their preposto children
       let finalChildren = []
-      let repGoals = []
       for (const child of childrenIds) {
-        const { rows } = await client.query(
-          `SELECT role, children FROM clone_users_apprudnik WHERE id = $1 AND is_active = true`,
-          [child.id],
-        )
-
-        if (rows.length > 0 && rows[0].role === 'representante_premium') {
-          const prepostos = parseJsonField(rows[0].children)
-          if (prepostos && prepostos.length > 0) {
-            repGoals.push({ id: child.id, goalAmount: child.goalAmount })
-            const ids = prepostos.map((p) => Number(p.id))
-            const amount = Math.floor((child.goalAmount / ids.length) * 100) / 100
-            const rem = Number.parseFloat((child.goalAmount - amount * ids.length).toFixed(2))
-            ids.forEach((pid, idx) => {
-              finalChildren.push({
-                id: Number(pid),
-                goalAmount: idx === 0 ? amount + rem : amount,
-              })
-            })
-            continue
-          }
-        }
-
         finalChildren.push(child)
       }
 
@@ -953,7 +930,6 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
       }
 
       finalChildren = mergeById(finalChildren)
-      repGoals = mergeById(repGoals)
 
       // Insert individual goals for each resolved child
       const individualGoalQuery = `
@@ -984,25 +960,6 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
           child.id,
           tipo_meta,
           child.goalAmount,
-          data_inicio,
-          data_fim,
-          created_by,
-          supervisorId,
-        ])
-      }
-
-      // Also insert goals for representante_premium users themselves
-      for (const rep of repGoals) {
-        if (await hasDup(rep.id)) {
-          await client.query('ROLLBACK')
-          return res.status(400).json({
-            message: `Usuário ${rep.id} já possui meta cadastrada para este período e tipo`,
-          })
-        }
-        await client.query(individualGoalQuery, [
-          rep.id,
-          tipo_meta,
-          rep.goalAmount,
           data_inicio,
           data_fim,
           created_by,
