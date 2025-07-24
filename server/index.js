@@ -112,6 +112,21 @@ async function getTeamMembers(leaderId) {
   return teamResult.rows
 }
 
+// Helper to fetch a leader's team including prepostos of representante_premium members
+async function getTeamHierarchyIds(leaderId) {
+  const baseTeam = await getTeamMembers(leaderId)
+  const ids = baseTeam.map((m) => m.id)
+  for (const member of baseTeam) {
+    if (member.role === "representante_premium") {
+      const prepostos = await getTeamMembers(member.id)
+      prepostos
+        .filter((p) => p.role === "preposto")
+        .forEach((p) => ids.push(p.id))
+    }
+  }
+  return ids
+}
+
 // API Endpoints
 
 // Login
@@ -298,12 +313,18 @@ app.get(
 
     // Build supervisor filter
     let supervisorFilter = ""
-     const queryParams = [dateStart, dateEnd]
+    const queryParams = [dateStart, dateEnd]
 
       if (supervisor && supervisor !== "all") {
-        supervisorFilter = "AND u.supervisor = $3"
-        queryParams.push(supervisor)
-      }
+        const teamIds = await getTeamHierarchyIds(supervisor)
+        if (teamIds.length > 0) {
+          supervisorFilter = "AND u.id = ANY($3)"
+          queryParams.push(teamIds)
+        } else {
+          supervisorFilter = "AND u.supervisor_id = $3"
+          queryParams.push(supervisor)
+        }
+      } 
 
     // Get all active sales representatives with targets
     const teamMembersQuery = `
@@ -340,17 +361,17 @@ app.get(
       COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) END), 0) AS faturamento_total,
       COALESCE(AVG(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) END), 0) AS ticket_medio,
       COALESCE(m.meta_propostas,
-        CASE WHEN u.role = 'vendedor' THEN 50
-             WHEN u.role = 'representante' THEN 30
-             ELSE 40 END) AS meta_propostas,
+        CASE WHEN u.role = 'vendedor' THEN 0
+             WHEN u.role = 'representante' THEN 0
+             ELSE 0 END) AS meta_propostas,
       COALESCE(m.meta_vendas,
-        CASE WHEN u.role = 'vendedor' THEN 15
-             WHEN u.role = 'representante' THEN 10
-             ELSE 12 END) AS meta_vendas,
+        CASE WHEN u.role = 'vendedor' THEN 0
+             WHEN u.role = 'representante' THEN 0
+             ELSE 0 END) AS meta_vendas,
       COALESCE(m.meta_faturamento,
-        CASE WHEN u.role = 'vendedor' THEN 75000
-             WHEN u.role = 'representante' THEN 50000
-             ELSE 60000 END) AS meta_faturamento
+        CASE WHEN u.role = 'vendedor' THEN 0
+             WHEN u.role = 'representante' THEN 0
+             ELSE 0 END) AS meta_faturamento
     FROM usuarios_com_supervisor u
     LEFT JOIN metas_agg m ON m.usuario_id = u.id
     LEFT JOIN clone_propostas_apprudnik p
