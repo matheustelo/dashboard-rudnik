@@ -506,10 +506,10 @@ app.get(
 
       // Get detailed proposals including child users
       const proposalsQuery = `
-        SELECT DISTINCT ON (c.phone)
+        SELECT DISTINCT ON ((p.lead->>'phone'))
             p.id,
-            c.name AS client_name,
-            c.phone AS client_phone,
+            p.lead->>'name' AS client_name,
+            p.lead->>'phone' AS client_phone,
             u.name AS proposer_name,
             u.role AS proposer_role,
             p.seller AS seller_id,
@@ -524,15 +524,13 @@ app.get(
         FROM
             clone_propostas_apprudnik p
         JOIN
-            clone_contatos_apprudnik c ON p.lead = c.id
-        JOIN
             clone_users_apprudnik u ON p.seller = u.id
         WHERE
             p.seller = ANY($1)
             AND p.created_at >= $3
             AND p.created_at <= $4
         ORDER BY
-            c.phone, p.created_at DESC;
+           (p.lead->>'phone'), p.created_at DESC;
       `
       const proposals = await pool.query(proposalsQuery, [sellerIds, id, dateStart, dateEnd])
 
