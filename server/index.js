@@ -44,12 +44,12 @@ const authenticateToken = (req, res, next) => {
 
 const authorize =
   (...roles) =>
-  (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ message: "Insufficient permissions" })
+    (req, res, next) => {
+      if (!req.user || !roles.includes(req.user.role)) {
+        return res.status(403).json({ message: "Insufficient permissions" })
+      }
+      next()
     }
-    next()
-  }
 
 // Helper to get date range
 function getDateRange(period, startDate, endDate) {
@@ -309,11 +309,11 @@ app.get(
         endDate,
       )
 
-    console.log("📊 Team Performance: Date range:", { dateStart, dateEnd, supervisor })
+      console.log("📊 Team Performance: Date range:", { dateStart, dateEnd, supervisor })
 
-    // Build supervisor filter
-    let supervisorFilter = ""
-    const queryParams = [dateStart, dateEnd]
+      // Build supervisor filter
+      let supervisorFilter = ""
+      const queryParams = [dateStart, dateEnd]
 
       if (supervisor && supervisor !== "all") {
         const teamIds = await getTeamHierarchyIds(supervisor)
@@ -321,23 +321,21 @@ app.get(
           supervisorFilter = "AND u.id = ANY($3)"
           queryParams.push(teamIds)
         } else {
-          supervisorFilter = "AND u.supervisor_id = $3"
+          supervisorFilter = "AND EXISTS (SELECT 1 FROM jsonb_array_elements(u.supervisors::jsonb) elem WHERE (elem->>'id')::bigint = $3)"
           queryParams.push(supervisor)
         }
-      } 
+      }
 
-    // Get all active sales representatives with targets
-    const teamMembersQuery = `
+      // Get all active sales representatives with targets
+      const teamMembersQuery = `
     WITH usuarios_com_supervisor AS (
-      SELECT 
-        u.*, 
-        s.id AS supervisor_id,
-        s.name AS supervisor_name
-      FROM clone_users_apprudnik u
-      LEFT JOIN LATERAL (
-          SELECT (elem->>'id')::bigint AS id, (elem->>'name') AS name
+      SELECT
+        u.*,
+        (
+          SELECT string_agg(elem->>'name', ', ')
           FROM jsonb_array_elements(u.supervisors::jsonb) elem
-      ) s ON TRUE
+        ) AS supervisor_name
+      FROM clone_users_apprudnik u
     ),
     metas_agg AS (
       SELECT
@@ -384,93 +382,93 @@ app.get(
     ORDER BY faturamento_total DESC;
     `
 
-    const teamMembers = await pool.query(teamMembersQuery, queryParams)
+      const teamMembers = await pool.query(teamMembersQuery, queryParams)
 
-    // Calculate team stats
-    const totalMembers = teamMembers.rows.length
-    const totalPropostas = teamMembers.rows.reduce((sum, member) => sum + Number.parseInt(member.total_propostas), 0)
-    const totalConvertidas = teamMembers.rows.reduce(
-      (sum, member) => sum + Number.parseInt(member.propostas_convertidas),
-      0,
-    )
-    const totalFaturamento = teamMembers.rows.reduce(
-      (sum, member) => sum + Number.parseFloat(member.faturamento_total),
-      0,
-    )
-    const teamConversionRate = totalPropostas > 0 ? ((totalConvertidas / totalPropostas) * 100).toFixed(2) : 0
+      // Calculate team stats
+      const totalMembers = teamMembers.rows.length
+      const totalPropostas = teamMembers.rows.reduce((sum, member) => sum + Number.parseInt(member.total_propostas), 0)
+      const totalConvertidas = teamMembers.rows.reduce(
+        (sum, member) => sum + Number.parseInt(member.propostas_convertidas),
+        0,
+      )
+      const totalFaturamento = teamMembers.rows.reduce(
+        (sum, member) => sum + Number.parseFloat(member.faturamento_total),
+        0,
+      )
+      const teamConversionRate = totalPropostas > 0 ? ((totalConvertidas / totalPropostas) * 100).toFixed(2) : 0
 
-    // Calculate goal achievement rates
-    const totalMetaPropostas = teamMembers.rows.reduce((sum, member) => sum + Number.parseInt(member.meta_propostas), 0)
-    const totalMetaVendas = teamMembers.rows.reduce((sum, member) => sum + Number.parseInt(member.meta_vendas), 0)
-    const totalMetaFaturamento = teamMembers.rows.reduce(
-      (sum, member) => sum + Number.parseFloat(member.meta_faturamento),
-      0,
-    )
+      // Calculate goal achievement rates
+      const totalMetaPropostas = teamMembers.rows.reduce((sum, member) => sum + Number.parseInt(member.meta_propostas), 0)
+      const totalMetaVendas = teamMembers.rows.reduce((sum, member) => sum + Number.parseInt(member.meta_vendas), 0)
+      const totalMetaFaturamento = teamMembers.rows.reduce(
+        (sum, member) => sum + Number.parseFloat(member.meta_faturamento),
+        0,
+      )
 
-    const goalAchievementRate =
-      totalMetaFaturamento > 0 ? ((totalFaturamento / totalMetaFaturamento) * 100).toFixed(2) : 0
+      const goalAchievementRate =
+        totalMetaFaturamento > 0 ? ((totalFaturamento / totalMetaFaturamento) * 100).toFixed(2) : 0
 
-    // Format team members data
-    const formattedTeamMembers = teamMembers.rows.map((member) => {
-      const conversionRate =
-        member.total_propostas > 0 ? ((member.propostas_convertidas / member.total_propostas) * 100).toFixed(2) : 0
+      // Format team members data
+      const formattedTeamMembers = teamMembers.rows.map((member) => {
+        const conversionRate =
+          member.total_propostas > 0 ? ((member.propostas_convertidas / member.total_propostas) * 100).toFixed(2) : 0
 
-      return {
-        id: member.id,
-        name: member.name,
-        email: member.email,
-        role: member.role,
-        supervisor: member.supervisor,
-        supervisorName: member.supervisor_name,
-        performance: {
-          totalPropostas: Number.parseInt(member.total_propostas),
-          propostasConvertidas: Number.parseInt(member.propostas_convertidas),
-          conversionRate: Number.parseFloat(conversionRate),
-          faturamentoTotal: Number.parseFloat(member.faturamento_total),
-          ticketMedio: Number.parseFloat(member.ticket_medio),
+        return {
+          id: member.id,
+          name: member.name,
+          email: member.email,
+          role: member.role,
+          supervisor: member.supervisor,
+          supervisorName: member.supervisor_name,
+          performance: {
+            totalPropostas: Number.parseInt(member.total_propostas),
+            propostasConvertidas: Number.parseInt(member.propostas_convertidas),
+            conversionRate: Number.parseFloat(conversionRate),
+            faturamentoTotal: Number.parseFloat(member.faturamento_total),
+            ticketMedio: Number.parseFloat(member.ticket_medio),
+          },
+          targets: {
+            metaPropostas: Number.parseInt(member.meta_propostas),
+            metaVendas: Number.parseInt(member.meta_vendas),
+            metaFaturamento: Number.parseFloat(member.meta_faturamento),
+          },
+          achievements: {
+            propostasAchievement:
+              member.meta_propostas > 0 ? ((member.total_propostas / member.meta_propostas) * 100).toFixed(1) : 0,
+            vendasAchievement:
+              member.meta_vendas > 0 ? ((member.propostas_convertidas / member.meta_vendas) * 100).toFixed(1) : 0,
+            faturamentoAchievement:
+              member.meta_faturamento > 0 ? ((member.faturamento_total / member.meta_faturamento) * 100).toFixed(1) : 0,
+          },
+        }
+      })
+
+      console.log("✅ Team Performance: Processed", formattedTeamMembers.length, "team members")
+
+      res.json({
+        teamStats: {
+          totalMembers,
+          teamConversionRate: Number.parseFloat(teamConversionRate),
+          totalFaturamento,
+          goalAchievementRate: Number.parseFloat(goalAchievementRate),
+          totalPropostas,
+          totalConvertidas,
+          totalMetaPropostas,
+          totalMetaVendas,
+          totalMetaFaturamento,
         },
-        targets: {
-          metaPropostas: Number.parseInt(member.meta_propostas),
-          metaVendas: Number.parseInt(member.meta_vendas),
-          metaFaturamento: Number.parseFloat(member.meta_faturamento),
-        },
-        achievements: {
-          propostasAchievement:
-            member.meta_propostas > 0 ? ((member.total_propostas / member.meta_propostas) * 100).toFixed(1) : 0,
-          vendasAchievement:
-            member.meta_vendas > 0 ? ((member.propostas_convertidas / member.meta_vendas) * 100).toFixed(1) : 0,
-          faturamentoAchievement:
-            member.meta_faturamento > 0 ? ((member.faturamento_total / member.meta_faturamento) * 100).toFixed(1) : 0,
-        },
-      }
-    })
-
-    console.log("✅ Team Performance: Processed", formattedTeamMembers.length, "team members")
-
-    res.json({
-      teamStats: {
-        totalMembers,
-        teamConversionRate: Number.parseFloat(teamConversionRate),
-        totalFaturamento,
-        goalAchievementRate: Number.parseFloat(goalAchievementRate),
-        totalPropostas,
-        totalConvertidas,
-        totalMetaPropostas,
-        totalMetaVendas,
-        totalMetaFaturamento,
-      },
-      teamMembers: formattedTeamMembers,
-      period: { startDate: dateStart, endDate: dateEnd },
-      filters: { supervisor},
-    })
-  } catch (error) {
-    console.error("❌ Team Performance: Error:", error.message)
-    res.status(500).json({
-      message: "Erro ao carregar performance da equipe",
-      error: error.message,
-    })
-  }
-})
+        teamMembers: formattedTeamMembers,
+        period: { startDate: dateStart, endDate: dateEnd },
+        filters: { supervisor },
+      })
+    } catch (error) {
+      console.error("❌ Team Performance: Error:", error.message)
+      res.status(500).json({
+        message: "Erro ao carregar performance da equipe",
+        error: error.message,
+      })
+    }
+  })
 
 // Get detailed representative performance (drill-down)
 app.get(
@@ -665,7 +663,7 @@ app.get("/api/goals", authenticateToken, authorize("admin", "gerente_comercial")
   console.log("--- Goals API: GET /api/goals started ---")
   try {
     const { period, startDate: start, endDate: end } = req.query
-    
+
     const { startDate, endDate } = getDateRange(period, start, end)
 
     console.log("📅 Goals: Date range:", { startDate, endDate })
@@ -887,7 +885,7 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
           "SELECT children FROM clone_users_apprudnik WHERE id = $1 AND is_active = true",
           [usuario_id],
         )
-        
+
         const leaderChildren =
           leaderData.rows.length > 0
             ? parseJsonField(leaderData.rows[0].children).map((c) => Number(c.id))
@@ -962,7 +960,7 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
         INSERT INTO metas_individuais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por, supervisor_id)
         VALUES ($1, $2, $3, $4, $5, $6, $7)`
 
-        const hasDup = async (uid) => {
+      const hasDup = async (uid) => {
         const { rows } = await client.query(
           `SELECT 1 FROM metas_individuais
             WHERE usuario_id = $1
@@ -1074,19 +1072,19 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
     }
     res.status(201).json(result.rows[0])
   } else {
-      const conflict = await pool.query(
-        `SELECT 1 FROM metas_individuais
+    const conflict = await pool.query(
+      `SELECT 1 FROM metas_individuais
           WHERE usuario_id=$1
             AND tipo_meta=$2
             AND NOT (data_fim < $3 OR data_inicio > $4)
           LIMIT 1`,
-        [usuario_id, tipo_meta, data_inicio, data_fim],
-      )
-      if (conflict.rows.length > 0) {
-        return res.status(400).json({
-          message: 'Já existe uma meta cadastrada para este período e tipo',
-        })
-      }
+      [usuario_id, tipo_meta, data_inicio, data_fim],
+    )
+    if (conflict.rows.length > 0) {
+      return res.status(400).json({
+        message: 'Já existe uma meta cadastrada para este período e tipo',
+      })
+    }
     return res.status(400).json({ message: "Invalid goal type" })
   }
 })
@@ -1172,7 +1170,7 @@ app.delete("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerent
     console.log("🗑️ Goals: Deleting goal:", { type, id })
 
     if (type === "general") {
-            // Fetch goal periods for this leader so we can remove individual goals
+      // Fetch goal periods for this leader so we can remove individual goals
       const { rows } = await pool.query(
         "SELECT usuario_id, tipo_meta, data_inicio, data_fim FROM metas_gerais WHERE id = $1",
         [id],
@@ -1219,7 +1217,7 @@ app.delete("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerent
 
       await pool.query("DELETE FROM metas_gerais WHERE id = $1", [id])
     } else if (type === "individual") {
-       await pool.query("DELETE FROM metas_individuais WHERE id = $1", [id])
+      await pool.query("DELETE FROM metas_individuais WHERE id = $1", [id])
     } else {
       return res.status(400).json({ message: "Invalid goal type" })
     }
@@ -1544,7 +1542,7 @@ app.get("/api/users/:id/team", authenticateToken, async (req, res) => {
       enhancedMembers.length,
       "team members including hierarchy",
     )
-    res.json(enhancedMembers) 
+    res.json(enhancedMembers)
   } catch (error) {
     console.error("❌ Users: Error fetching team:", error.message)
     res.status(500).json({ message: "Erro ao buscar equipe", error: error.message })
