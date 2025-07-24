@@ -157,100 +157,6 @@ app.get("/api/team-leaders", authenticateToken, authorize("admin", "gerente_come
   }
 })
 
-// Get Team Performance
-app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
-  try {
-    const { period, startDate, endDate, supervisorId } = req.query
-    const { startDate: dateStart, endDate: dateEnd } = getDateRange(period, startDate, endDate)
-
-    let supervisorFilter = ""
-    const queryParams = [dateStart, dateEnd]
-
-    if (supervisorId && supervisorId !== "all") {
-      // Filter by users who are children of the selected supervisor/parceiro
-      supervisorFilter = `AND u.id IN (
-        SELECT (jsonb_array_elements(children)->>'id')::bigint
-        FROM clone_users_apprudnik
-        WHERE id = $3
-      )`;
-      queryParams.push(supervisorId);
-    }
-
-    const teamMembersQuery = `
-      SELECT 
-        u.id, u.name, u.email, u.role,
-        sup.name AS supervisor_name,
-        COUNT(p.id) AS total_propostas,
-        SUM(CASE WHEN p.has_generated_sale = true THEN 1 ELSE 0 END) AS propostas_convertidas,
-        COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN p.total_price::DECIMAL ELSE 0 END), 0) AS faturamento_total,
-        COALESCE(m_prop.valor_meta, 40) AS meta_propostas,
-        COALESCE(m_vend.valor_meta, 12) AS meta_vendas,
-        COALESCE(m_fat.valor_meta, 60000) AS meta_faturamento
-      FROM clone_users_apprudnik u
-      LEFT JOIN clone_users_apprudnik sup 
-        ON (u.supervisor->>'id')::bigint = sup.id
-      LEFT JOIN clone_propostas_apprudnik p 
-        ON u.id = p.seller 
-      AND p.created_at BETWEEN $1 AND $2
-      LEFT JOIN metas_individuais m_prop 
-        ON u.id = m_prop.usuario_id 
-      AND m_prop.tipo_meta = 'propostas' 
-      AND m_prop.data_inicio <= $2 AND m_prop.data_fim >= $1
-      LEFT JOIN metas_individuais m_vend 
-        ON u.id = m_vend.usuario_id 
-      AND m_vend.tipo_meta = 'vendas' 
-      AND m_vend.data_inicio <= $2 AND m_vend.data_fim >= $1
-      LEFT JOIN metas_individuais m_fat 
-        ON u.id = m_fat.usuario_id 
-      AND m_fat.tipo_meta = 'faturamento' 
-      AND m_fat.data_inicio <= $2 AND m_fat.data_fim >= $1
-      WHERE u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium')
-        AND u.is_active = true
-        ${supervisorFilter}
-      GROUP BY 
-        u.id, u.name, u.email, u.role, sup.name, 
-        m_prop.valor_meta, m_vend.valor_meta, m_fat.valor_meta
-      ORDER BY faturamento_total DESC
-    `;
-    const { rows: teamMembers } = await pool.query(teamMembersQuery, queryParams)
-    // ... (processing logic remains the same as previous turn, it's correct)
-    const formattedTeamMembers = teamMembers.map((member) => {
-      const conversionRate =
-        member.total_propostas > 0 ? ((member.propostas_convertidas / member.total_propostas) * 100).toFixed(2) : 0
-      return {
-        id: member.id,
-        name: member.name,
-        email: member.email,
-        role: member.role,
-        supervisorName: member.supervisor_name,
-        performance: {
-          totalPropostas: Number.parseInt(member.total_propostas),
-          propostasConvertidas: Number.parseInt(member.propostas_convertidas),
-          conversionRate: Number.parseFloat(conversionRate),
-          faturamentoTotal: Number.parseFloat(member.faturamento_total),
-        },
-        targets: {
-          metaPropostas: Number.parseInt(member.meta_propostas),
-          metaVendas: Number.parseInt(member.meta_vendas),
-          metaFaturamento: Number.parseFloat(member.meta_faturamento),
-        },
-        achievements: {
-          propostasAchievement:
-            member.meta_propostas > 0 ? ((member.total_propostas / member.meta_propostas) * 100).toFixed(1) : 0,
-          vendasAchievement:
-            member.meta_vendas > 0 ? ((member.propostas_convertidas / member.meta_vendas) * 100).toFixed(1) : 0,
-          faturamentoAchievement:
-            member.meta_faturamento > 0 ? ((member.faturamento_total / member.meta_faturamento) * 100).toFixed(1) : 0,
-        },
-      }
-    })
-    res.json({ teamMembers: formattedTeamMembers })
-  } catch (error) {
-    console.error("❌ Error fetching team performance:", error)
-    res.status(500).json({ message: "Erro ao carregar performance da equipe", error: error.message })
-  }
-})
-
 // Get Revenue vs. Target Chart Data
 app.get(
   "/api/dashboard/revenue-vs-target",
@@ -373,22 +279,31 @@ app.get("/api/supervisors", authenticateToken, authorize("admin", "gerente_comer
 })
 
 // Get comprehensive team performance with enhanced filtering
-app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
-  console.log("--- Performance API: GET /api/performance/team started ---")
-  try {
-    const { period, startDate, endDate, supervisor } = req.query
-    const { startDate: dateStart, endDate: dateEnd } = getDateRange(period, startDate, endDate)
+app.get(
+  "/api/performance/team",
+  authenticateToken,
+  authorize("admin", "gerente_comercial"),
+  async (req, res) => {
+    console.log("--- Performance API: GET /api/performance/team started ---")
+    try {
+      const { period, startDate, endDate } = req.query
+      const supervisor = req.query.supervisorId || req.query.supervisor
+      const { startDate: dateStart, endDate: dateEnd } = getDateRange(
+        period,
+        startDate,
+        endDate,
+      )
 
     console.log("📊 Team Performance: Date range:", { dateStart, dateEnd, supervisor })
 
     // Build supervisor filter
     let supervisorFilter = ""
-    const queryParams = [dateStart, dateEnd]
+     const queryParams = [dateStart, dateEnd]
 
-    if (supervisor && supervisor !== "all") {
-      supervisorFilter = "AND u.supervisor = $3"
-      queryParams.push(supervisor)
-    }
+      if (supervisor && supervisor !== "all") {
+        supervisorFilter = "AND u.supervisor = $3"
+        queryParams.push(supervisor)
+      }
 
     // Get all active sales representatives with targets
     const teamMembersQuery = `
@@ -402,40 +317,49 @@ app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_
           SELECT (elem->>'id')::bigint AS id, (elem->>'name') AS name
           FROM jsonb_array_elements(u.supervisors::jsonb) elem
       ) s ON TRUE
+    ),
+    metas_agg AS (
+      SELECT
+        usuario_id,
+        SUM(CASE WHEN tipo_meta = 'propostas' THEN valor_meta ELSE 0 END) AS meta_propostas,
+        SUM(CASE WHEN tipo_meta = 'vendas' THEN valor_meta ELSE 0 END) AS meta_vendas,
+        SUM(CASE WHEN tipo_meta = 'faturamento' THEN valor_meta ELSE 0 END) AS meta_faturamento
+      FROM metas_individuais
+      WHERE data_inicio <= $2 AND data_fim >= $1
+      GROUP BY usuario_id
     )
-    SELECT 
-      u.id, 
-      u.name, 
-      u.email, 
-      u.role, 
-      u.supervisor, 
+    SELECT
+      u.id,
+      u.name,
+      u.email,
+      u.role,
+      u.supervisor,
       u.supervisor_name,
       COUNT(p.*) AS total_propostas,
       COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) AS propostas_convertidas,
       COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) END), 0) AS faturamento_total,
       COALESCE(AVG(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) END), 0) AS ticket_medio,
-      CASE 
-        WHEN u.role = 'vendedor' THEN 50
-        WHEN u.role = 'representante' THEN 30
-        ELSE 40
-      END AS meta_propostas,
-      CASE 
-        WHEN u.role = 'vendedor' THEN 15
-        WHEN u.role = 'representante' THEN 10
-        ELSE 12
-      END AS meta_vendas,
-      CASE 
-        WHEN u.role = 'vendedor' THEN 75000
-        WHEN u.role = 'representante' THEN 50000
-        ELSE 60000
-      END AS meta_faturamento
+      COALESCE(m.meta_propostas,
+        CASE WHEN u.role = 'vendedor' THEN 50
+             WHEN u.role = 'representante' THEN 30
+             ELSE 40 END) AS meta_propostas,
+      COALESCE(m.meta_vendas,
+        CASE WHEN u.role = 'vendedor' THEN 15
+             WHEN u.role = 'representante' THEN 10
+             ELSE 12 END) AS meta_vendas,
+      COALESCE(m.meta_faturamento,
+        CASE WHEN u.role = 'vendedor' THEN 75000
+             WHEN u.role = 'representante' THEN 50000
+             ELSE 60000 END) AS meta_faturamento
     FROM usuarios_com_supervisor u
-    LEFT JOIN clone_propostas_apprudnik p 
-      ON u.id = p.seller 
+    LEFT JOIN metas_agg m ON m.usuario_id = u.id
+    LEFT JOIN clone_propostas_apprudnik p
+      ON u.id = p.seller
+      AND p.created_at BETWEEN $1 AND $2
     WHERE u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium') 
       AND u.is_active = true
       ${supervisorFilter}
-    GROUP BY u.id, u.name, u.email, u.role, u.supervisor, u.supervisor_name
+    GROUP BY u.id, u.name, u.email, u.role, u.supervisor, u.supervisor_name, m.meta_propostas, m.meta_vendas, m.meta_faturamento
     ORDER BY faturamento_total DESC;
     `
 
@@ -516,7 +440,7 @@ app.get("/api/performance/team", authenticateToken, authorize("admin", "gerente_
       },
       teamMembers: formattedTeamMembers,
       period: { startDate: dateStart, endDate: dateEnd },
-      filters: { supervisor },
+      filters: { supervisor},
     })
   } catch (error) {
     console.error("❌ Team Performance: Error:", error.message)
