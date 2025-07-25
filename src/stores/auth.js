@@ -2,9 +2,20 @@ import { defineStore } from "pinia"
 import axios from "axios"
 import api from "../services/api"
 
+function getStoredUser() {
+  try {
+    const item = localStorage.getItem("user")
+    return item ? JSON.parse(item) : null
+  } catch (err) {
+    // Remove invalid data
+    localStorage.removeItem("user")
+    return null
+  }
+}
+
 export const useAuthStore = defineStore("auth", {
   state: () => ({
-    user: JSON.parse(localStorage.getItem("user")) || null,
+    user: getStoredUser(),
     token: localStorage.getItem("token") || null,
   }),
 
@@ -18,17 +29,52 @@ export const useAuthStore = defineStore("auth", {
       try {
         const response = await axios.post("/api/auth/login", credentials)
 
+        // Fetch the user role from the external system
+        const remoteCredentials = {
+          username: credentials.email || credentials.username,
+          password: credentials.password,
+        }
+        const roleResponse = await axios.post(
+          "https://www.apprudnik.com.br/api/auth/login",
+          remoteCredentials,
+          { validateStatus: () => true },
+        )
+
+        if (roleResponse.status === 401) {
+          throw new Error("Credenciais inválidas")
+        }
+
+        if (roleResponse.status >= 400) {
+          throw new Error(
+            roleResponse.data?.message ||
+              "Erro ao obter papel do usuário no sistema externo",
+          )
+        }
+
+        const role =
+          roleResponse.data?.user?.role ?? roleResponse.data?.role ?? this.user?.role
+
         this.token = response.data.token
-        this.user = response.data.user
+         this.user = { ...response.data.user, role }
 
         localStorage.setItem("token", this.token)
         localStorage.setItem("user", JSON.stringify(this.user))
         axios.defaults.headers.common["Authorization"] = `Bearer ${this.token}`
         api.defaults.headers.common["Authorization"] = `Bearer ${this.token}`
 
-        return response.data
+        return { token: this.token, user: this.user }
       } catch (error) {
-        throw error.response?.data?.message || "Erro ao fazer login"
+        this.logout()
+        if (error.response) {
+          if (error.response.status === 401) {
+            throw "Credenciais inválidas"
+          }
+          throw error.response.data?.message || "Erro ao fazer login"
+        }
+        if (error.request) {
+          throw "Falha de conexão com o servidor"
+        }
+        throw error.message || "Erro ao fazer login"
       }
     },
 
@@ -47,10 +93,7 @@ export const useAuthStore = defineStore("auth", {
         api.defaults.headers.common["Authorization"] = `Bearer ${this.token}`
 
         if (!this.user) {
-          const storedUser = localStorage.getItem("user")
-          if (storedUser) {
-            this.user = JSON.parse(storedUser)
-          }
+          this.user = getStoredUser()
         }
       }
     },

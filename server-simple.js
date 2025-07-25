@@ -47,21 +47,17 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(400).json({ message: "Email and password required" })
     }
 
-    // For testing, accept any email with password "123456"
-    if (password === "123456") {
-      res.json({
-        success: true,
-        token: "test-token-123",
-        user: {
-          id: 1,
-          name: "Test User",
-          email: email,
-          role: "vendedor",
-        },
-      })
-    } else {
-      res.status(401).json({ message: "Invalid credentials" })
-    }
+    // For testing, simply return a static user
+    res.json({
+      success: true,
+      token: "test-token-123",
+      user: {
+        id: 1,
+        name: "Test User",
+        email,
+        role: "vendedor",
+      },
+    })
   } catch (error) {
     console.error("Login error:", error)
     res.status(500).json({ message: "Server error" })

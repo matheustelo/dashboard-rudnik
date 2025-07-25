@@ -52,9 +52,7 @@
         </div>
 
         <div class="text-sm text-gray-600">
-          <p><strong>Credenciais de teste:</strong></p>
-          <p>Email: qualquer email válido</p>
-          <p>Senha: 123456</p>
+          <p>Use suas credenciais para acessar o sistema.</p>
         </div>
       </form>
     </div>
