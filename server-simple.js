@@ -1,6 +1,5 @@
 const express = require("express")
 const cors = require("cors")
-const axios = require("axios")
 const { Pool } = require("pg")
 require("dotenv").config()
 
@@ -48,19 +47,24 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(400).json({ message: "Email and password required" })
     }
 
-    const response = await axios.post(
-      "https://www.apprudnik.com.br/api/auth/login",
-      { username: email, password },
-    )
-    res.json({
-      success: true,
-      token: response.data.token,
-      user: response.data.user,
-    })
+    // For testing, accept any email with password "123456"
+    if (password === "123456") {
+      res.json({
+        success: true,
+        token: "test-token-123",
+        user: {
+          id: 1,
+          name: "Test User",
+          email: email,
+          role: "vendedor",
+        },
+      })
+    } else {
+      res.status(401).json({ message: "Invalid credentials" })
+    }
   } catch (error) {
     console.error("Login error:", error)
-    const message = error.response?.data?.message || "Invalid credentials"
-    res.status(401).json({ message })
+    res.status(500).json({ message: "Server error" })
   }
 })
 
