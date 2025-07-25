@@ -51,6 +51,11 @@
           </button>
         </div>
 
+        <div class="text-sm text-gray-600">
+          <p><strong>Credenciais de teste:</strong></p>
+          <p>Email: qualquer email válido</p>
+          <p>Senha: 123456</p>
+        </div>
       </form>
     </div>
   </div>
@@ -79,12 +84,9 @@ const handleLogin = async () => {
   try {
     const result = await authStore.login(form.value)
     
-    if (result.token || result.status === 200) {
-      const role = result.user?.role || 'vendedor'
-      router.push(`/dashboard/${role}`)
-    } else {
-      error.value = 'Credenciais inválidas'
-    }
+    // Redirect based on user role
+    const role = result.user.role
+    router.push(`/dashboard/${role}`)
   } catch (err) {
     error.value = err
   } finally {

@@ -4,15 +4,7 @@ import api from "../services/api"
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
-    user: (() => {
-      const stored = localStorage.getItem("user")
-      if (!stored || stored === "undefined") return null
-      try {
-        return JSON.parse(stored)
-      } catch {
-        return null
-      }
-    })(),
+    user: JSON.parse(localStorage.getItem("user")) || null,
     token: localStorage.getItem("token") || null,
   }),
 
@@ -24,14 +16,7 @@ export const useAuthStore = defineStore("auth", {
   actions: {
     async login(credentials) {
       try {
-        const payload = {
-          username: credentials.username || credentials.email,
-          password: credentials.password,
-        }
-        const response = await axios.post(
-          "https://www.apprudnik.com.br/api/auth/login",
-          payload,
-        )
+        const response = await axios.post("/api/auth/login", credentials)
 
         this.token = response.data.token
         this.user = response.data.user
@@ -41,7 +26,7 @@ export const useAuthStore = defineStore("auth", {
         axios.defaults.headers.common["Authorization"] = `Bearer ${this.token}`
         api.defaults.headers.common["Authorization"] = `Bearer ${this.token}`
 
-        return { status: response.status, user: this.user, token: this.token }
+        return response.data
       } catch (error) {
         throw error.response?.data?.message || "Erro ao fazer login"
       }
@@ -63,12 +48,8 @@ export const useAuthStore = defineStore("auth", {
 
         if (!this.user) {
           const storedUser = localStorage.getItem("user")
-          if (storedUser && storedUser !== "undefined") {
-            try {
-              this.user = JSON.parse(storedUser)
-            } catch {
-              this.user = null
-            }
+          if (storedUser) {
+            this.user = JSON.parse(storedUser)
           }
         }
       }
