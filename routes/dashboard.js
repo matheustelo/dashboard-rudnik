@@ -38,12 +38,13 @@ router.get("/vendedor/:id", authenticateToken, checkSupervisorAccess, async (req
 
     // Get proposals data
     const proposalsQuery = `
-      SELECT 
-        COUNT(*) as total, 
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento_total
-      FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      SELECT
+        COUNT(*) as total,
+        COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as convertidas,
+        COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN p.total_price END), 0) as faturamento_total
+      FROM clone_propostas_apprudnik p
+      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+      WHERE p.seller = $1 AND p.created_at >= $2 AND p.created_at <= $3
     `
 
     console.log("🔍 Executing proposals query...")
@@ -52,14 +53,15 @@ router.get("/vendedor/:id", authenticateToken, checkSupervisorAccess, async (req
 
     // Get monthly sales data
     const monthlySalesQuery = `
-      SELECT 
-        DATE_TRUNC('month', created_at) as mes,
+      SELECT
+        DATE_TRUNC('month', p.created_at) as mes,
         COUNT(*) as total_propostas,
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento
-      FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-      GROUP BY DATE_TRUNC('month', created_at)
+        COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as vendas,
+        COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN p.total_price END), 0) as faturamento
+      FROM clone_propostas_apprudnik p
+      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+      WHERE p.seller = $1 AND p.created_at >= $2 AND p.created_at <= $3
+      GROUP BY DATE_TRUNC('month', p.created_at)
       ORDER BY mes
     `
 
@@ -112,25 +114,27 @@ router.get("/representante/:id", authenticateToken, checkSupervisorAccess, async
 
     // Same logic as vendedor
     const proposalsQuery = `
-      SELECT 
-        COUNT(*) as total, 
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento_total
-      FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      SELECT
+        COUNT(*) as total,
+        COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as convertidas,
+        COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN p.total_price END), 0) as faturamento_total
+      FROM clone_propostas_apprudnik p
+      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+      WHERE p.seller = $1 AND p.created_at >= $2 AND p.created_at <= $3
     `
 
     const propostas = await query(proposalsQuery, [id, startDate, endDate])
 
     const monthlySalesQuery = `
-      SELECT 
-        DATE_TRUNC('month', created_at) as mes,
+      SELECT
+        DATE_TRUNC('month', p.created_at) as mes,
         COUNT(*) as total_propostas,
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento
-      FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-      GROUP BY DATE_TRUNC('month', created_at)
+        COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as vendas,
+        COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN p.total_price END), 0) as faturamento
+      FROM clone_propostas_apprudnik p
+      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+      WHERE p.seller = $1 AND p.created_at >= $2 AND p.created_at <= $3
+      GROUP BY DATE_TRUNC('month', p.created_at)
       ORDER BY mes
     `
 
@@ -196,26 +200,28 @@ router.get("/supervisor/:id", authenticateToken, checkSupervisorAccess, async (r
 
     // Team summary
     const teamSummaryQuery = `
-      SELECT 
+      SELECT
         COUNT(*) as total_propostas,
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento
-      FROM clone_propostas_apprudnik 
-      WHERE seller = ANY($1) AND created_at >= $2 AND created_at <= $3
+        COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as convertidas,
+        COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN p.total_price END), 0) as faturamento
+      FROM clone_propostas_apprudnik p
+      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+      WHERE p.seller = ANY($1) AND p.created_at >= $2 AND p.created_at <= $3
     `
 
     const resumoEquipe = await query(teamSummaryQuery, [vendedorIds, startDate, endDate])
 
     // Individual performance ranking
     const rankingQuery = `
-      SELECT 
+      SELECT
         u.name, u.id,
         COUNT(p.*) as propostas,
-        COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) as vendas,
-        COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN p.total_price END), 0) as faturamento
+        COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as vendas,
+        COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN p.total_price END), 0) as faturamento
       FROM clone_users_apprudnik u
-      LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
+      LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller
         AND p.created_at >= $2 AND p.created_at <= $3
+      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
       WHERE u.id = ANY($1)
       GROUP BY u.id, u.name
       ORDER BY faturamento DESC
@@ -258,25 +264,27 @@ router.get("/gerente_comercial", authenticateToken, async (req, res) => {
 
     // Global indicators
     const globalQuery = `
-      SELECT 
+      SELECT
         COUNT(*) as total_propostas,
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN total_price END), 0) as faturamento_total
-      FROM clone_propostas_apprudnik 
-      WHERE created_at >= $1 AND created_at <= $2
+        COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as vendas,
+        COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN p.total_price END), 0) as faturamento_total
+      FROM clone_propostas_apprudnik p
+      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+      WHERE p.created_at >= $1 AND p.created_at <= $2
     `
 
     const indicadores = await query(globalQuery, [startDate, endDate])
 
     // Monthly revenue
     const monthlyRevenueQuery = `
-      SELECT 
-        DATE_TRUNC('month', created_at) as mes,
-        COALESCE(SUM(total_price), 0) as faturamento,
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas
-      FROM clone_propostas_apprudnik 
-      WHERE has_generated_sale = true AND created_at >= $1 AND created_at <= $2
-      GROUP BY DATE_TRUNC('month', created_at)
+      SELECT
+        DATE_TRUNC('month', p.created_at) as mes,
+        COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN p.total_price END), 0) as faturamento,
+        COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as vendas
+      FROM clone_propostas_apprudnik p
+      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+      WHERE p.created_at >= $1 AND p.created_at <= $2
+      GROUP BY DATE_TRUNC('month', p.created_at)
       ORDER BY mes
     `
 
@@ -287,11 +295,12 @@ router.get("/gerente_comercial", authenticateToken, async (req, res) => {
       SELECT 
         u.name,
         u.role,
-        COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN p.total_price END), 0) as faturamento,
-        COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) as vendas
+        COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN p.total_price END), 0) as faturamento,
+        COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as vendas
       FROM clone_users_apprudnik u
-      LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
+      LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller
         AND p.created_at >= $1 AND p.created_at <= $2
+      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
       WHERE u.role IN ('vendedor', 'representante') AND u.is_active = true
       GROUP BY u.id, u.name, u.role
       ORDER BY faturamento DESC

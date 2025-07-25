@@ -183,11 +183,15 @@ app.get(
       const { startDate: dateStart, endDate: dateEnd } = getDateRange(period, startDate, endDate)
 
       const revenueQuery = `
-        SELECT to_char(date_trunc('month', p.created_at), 'YYYY-MM') as month, 
-               SUM(CAST(p.total_price AS DECIMAL)) as revenue
-          FROM clone_propostas_apprudnik p
-         WHERE p.has_generated_sale = true AND p.created_at BETWEEN $1 AND $2
-         GROUP BY 1 ORDER BY 1;
+        SELECT
+          to_char(date_trunc('month', p.created_at), 'YYYY-MM') as month,
+          SUM(CASE WHEN s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END) as revenue
+        FROM clone_propostas_apprudnik p
+        JOIN clone_vendas_apprudnik s ON s.code = p.id
+        WHERE p.has_generated_sale = true
+          AND p.created_at BETWEEN $1 AND $2
+        GROUP BY 1
+        ORDER BY 1;
       `
       const revenueResult = await pool.query(revenueQuery, [dateStart, dateEnd])
 
@@ -232,9 +236,9 @@ app.get(
       );
 
       const query = `
-      SELECT 
+      SELECT
           sup.name AS supervisor_name,
-          COALESCE(SUM(p.total_price::DECIMAL), 0) AS total_revenue
+          COALESCE(SUM(CASE WHEN s.status <> 'suspenso' THEN p.total_price::DECIMAL END), 0) AS total_revenue
       FROM clone_users_apprudnik sup
       LEFT JOIN clone_users_apprudnik u
         ON EXISTS (
@@ -244,8 +248,8 @@ app.get(
         )
       LEFT JOIN clone_propostas_apprudnik p
         ON u.id = p.seller
-      AND p.has_generated_sale = true
-      AND p.created_at BETWEEN $1 AND $2
+       AND p.created_at BETWEEN $1 AND $2
+      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id AND p.has_generated_sale = true
       WHERE sup.role IN ('supervisor', 'parceiro_comercial')
         AND sup.is_active = true
       GROUP BY sup.id, sup.name
@@ -355,9 +359,9 @@ app.get(
       u.supervisor,
       u.supervisor_name,
       COUNT(p.*) AS total_propostas,
-      COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) AS propostas_convertidas,
-      COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) END), 0) AS faturamento_total,
-      COALESCE(AVG(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) END), 0) AS ticket_medio,
+      COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) AS propostas_convertidas,
+      COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) AS faturamento_total,
+      COALESCE(AVG(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) AS ticket_medio,
       COALESCE(m.meta_propostas,
         CASE WHEN u.role = 'vendedor' THEN 0
              WHEN u.role = 'representante' THEN 0
@@ -375,6 +379,7 @@ app.get(
     LEFT JOIN clone_propostas_apprudnik p
       ON u.id = p.seller
       AND p.created_at BETWEEN $1 AND $2
+    LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
     WHERE u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium') 
       AND u.is_active = true
       ${supervisorFilter}
@@ -516,6 +521,7 @@ app.get(
             CASE WHEN p.seller = $2 THEN 'self' ELSE 'child' END AS origin,
             p.total_price,
             p.has_generated_sale,
+            s.status AS sale_status,
             p.created_at,
             CASE 
                 WHEN p.has_generated_sale = true THEN 'Convertida'
@@ -525,6 +531,7 @@ app.get(
             clone_propostas_apprudnik p
         JOIN
             clone_users_apprudnik u ON p.seller = u.id
+        LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
         WHERE
             p.seller = ANY($1)
             AND p.created_at >= $3
@@ -537,57 +544,60 @@ app.get(
       // Get monthly performance trend
       const monthlyTrendQuery = `
       SELECT 
-          DATE_TRUNC('month', created_at) AS mes,
+          DATE_TRUNC('month', p.created_at) AS mes,
           COUNT(*) AS propostas,
-          COUNT(CASE WHEN has_generated_sale = true THEN 1 END) AS vendas,
-          COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) AS faturamento,
-          COALESCE(AVG(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) AS ticket_medio
-      FROM 
-          clone_propostas_apprudnik 
-      WHERE 
-          seller = $1 
-          AND created_at >= $2 
-          AND created_at <= $3
-      GROUP BY 
-          DATE_TRUNC('month', created_at)
-      ORDER BY 
+          COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) AS vendas,
+          COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) AS faturamento,
+          COALESCE(AVG(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) AS ticket_medio
+      FROM
+          clone_propostas_apprudnik p
+      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+      WHERE
+          p.seller = $1
+          AND p.created_at >= $2
+          AND p.created_at <= $3
+      GROUP BY
+          DATE_TRUNC('month', p.created_at)
+      ORDER BY
           mes;
       `
       const monthlyTrend = await pool.query(monthlyTrendQuery, [id, dateStart, dateEnd])
 
       // Get weekly performance for detailed chart
       const weeklyTrendQuery = `
-      SELECT 
-          DATE_TRUNC('week', created_at) AS semana,
+      SELECT
+          DATE_TRUNC('week', p.created_at) AS semana,
           COUNT(*) AS propostas,
-          COUNT(CASE WHEN has_generated_sale = true THEN 1 END) AS vendas,
-          COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) AS faturamento
-      FROM 
-          clone_propostas_apprudnik 
-      WHERE 
-          seller = $1 
-          AND created_at >= $2 
-          AND created_at <= $3
-      GROUP BY 
-          DATE_TRUNC('week', created_at)
-      ORDER BY 
+          COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) AS vendas,
+          COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) AS faturamento
+      FROM
+          clone_propostas_apprudnik p
+      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+      WHERE
+          p.seller = $1
+          AND p.created_at >= $2
+          AND p.created_at <= $3
+      GROUP BY
+          DATE_TRUNC('week', p.created_at)
+      ORDER BY
           semana;
       `
       const weeklyTrend = await pool.query(weeklyTrendQuery, [id, dateStart, dateEnd])
 
       // Get conversion funnel data
       const funnelQuery = `
-      SELECT 
+      SELECT
           COUNT(*) AS total_propostas,
-          COUNT(CASE WHEN has_generated_sale = true THEN 1 END) AS vendas_fechadas,
-          COALESCE(SUM(CAST(total_price AS DECIMAL)), 0) AS valor_total_propostas,
-          COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) AS valor_vendas
-      FROM 
-          clone_propostas_apprudnik 
-      WHERE 
-          seller = $1 
-          AND created_at >= $2 
-          AND created_at <= $3;
+          COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) AS vendas_fechadas,
+          COALESCE(SUM(CAST(p.total_price AS DECIMAL)), 0) AS valor_total_propostas,
+          COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) AS valor_vendas
+      FROM
+          clone_propostas_apprudnik p
+      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+      WHERE
+          p.seller = $1
+          AND p.created_at >= $2
+          AND p.created_at <= $3;
       `
       const funnel = await pool.query(funnelQuery, [id, dateStart, dateEnd])
 
@@ -596,6 +606,28 @@ app.get(
       const vendasFechadas = Number.parseInt(funnel.rows[0].vendas_fechadas)
       const conversionRate = totalPropostas > 0 ? ((vendasFechadas / totalPropostas) * 100).toFixed(2) : 0
       const ticketMedio = vendasFechadas > 0 ? (funnel.rows[0].valor_vendas / vendasFechadas).toFixed(2) : 0
+
+      const excludedSales = []
+      const processedProposals = proposals.rows.map((proposal) => {
+        if (proposal.sale_status === 'suspenso') {
+          excludedSales.push({ id: proposal.id, reason: 'suspenso' })
+        } else if (proposal.sale_status === null && proposal.has_generated_sale) {
+          excludedSales.push({ id: proposal.id, reason: 'status_unavailable' })
+        }
+        return {
+          id: proposal.id,
+          clientName: proposal.client_name,
+          clientPhone: proposal.client_phone,
+          proposerName: proposal.proposer_name,
+          proposerRole: proposal.proposer_role,
+          origin: proposal.origin,
+          sellerId: proposal.seller_id,
+          totalPrice: Number.parseFloat(proposal.total_price),
+          status: proposal.status,
+          createdAt: proposal.created_at,
+          hasGeneratedSale: proposal.has_generated_sale,
+        }
+      })
 
       const response = {
         representative: {
@@ -613,19 +645,8 @@ app.get(
           ticketMedio: Number.parseFloat(ticketMedio),
           valorTotalPropostas: Number.parseFloat(funnel.rows[0].valor_total_propostas),
         },
-        proposals: proposals.rows.map((proposal) => ({
-          id: proposal.id,
-          clientName: proposal.client_name,
-          clientPhone: proposal.client_phone,
-          proposerName: proposal.proposer_name,
-          proposerRole: proposal.proposer_role,
-          origin: proposal.origin,
-          sellerId: proposal.seller_id,
-          totalPrice: Number.parseFloat(proposal.total_price),
-          status: proposal.status,
-          createdAt: proposal.created_at,
-          hasGeneratedSale: proposal.has_generated_sale,
-        })),
+        proposals: processedProposals,
+        excludedSales,
         monthlyTrend: monthlyTrend.rows.map((row) => ({
           mes: row.mes,
           propostas: Number.parseInt(row.propostas),
@@ -1248,12 +1269,13 @@ app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) =>
 
     // Get actual performance data
     const performanceQuery = `
-      SELECT 
+      SELECT
         COUNT(*) as total_propostas,
-        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as propostas_convertidas,
-        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento_total
-      FROM clone_propostas_apprudnik 
-      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+        COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as propostas_convertidas,
+        COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento_total
+      FROM clone_propostas_apprudnik p
+      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+      WHERE p.seller = $1 AND p.created_at >= $2 AND p.created_at <= $3
     `
     const performance = await pool.query(performanceQuery, [id, startDate, endDate])
 
@@ -1340,8 +1362,9 @@ app.get(
           let metricQuery = null
           if (goal.tipo_meta === "faturamento") {
             metricQuery = `
-              SELECT COALESCE(SUM(p.total_price::DECIMAL),0) AS value
+               SELECT COALESCE(SUM(CASE WHEN s.status <> 'suspenso' THEN p.total_price::DECIMAL END),0) AS value
                 FROM clone_propostas_apprudnik p
+               LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
                WHERE p.seller = ANY($1)
                  AND p.has_generated_sale = true
                  AND p.created_at BETWEEN $2 AND $3`
@@ -1355,8 +1378,10 @@ app.get(
             metricQuery = `
               SELECT COUNT(*) AS value
                 FROM clone_propostas_apprudnik p
+                LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
                WHERE p.seller = ANY($1)
                  AND p.has_generated_sale = true
+                 AND s.status <> 'suspenso'
                  AND p.created_at BETWEEN $2 AND $3`
           }
 
@@ -1522,26 +1547,28 @@ app.get("/api/dashboard/vendedor/:id", authenticateToken, async (req, res) => {
 
     // Get proposals data
     const proposalsQuery = `
-  SELECT 
-    COUNT(*) as total, 
-    COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas,
-    COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento_total
-  FROM clone_propostas_apprudnik 
-  WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-`
+      SELECT
+        COUNT(*) as total,
+        COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as convertidas,
+        COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento_total
+      FROM clone_propostas_apprudnik p
+      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+      WHERE p.seller = $1 AND p.created_at >= $2 AND p.created_at <= $3
+    `
 
     const propostas = await pool.query(proposalsQuery, [id, startDate, endDate])
 
     // Get monthly sales data
     const monthlySalesQuery = `
-  SELECT 
-    DATE_TRUNC('month', created_at) as mes,
+  SELECT
+    DATE_TRUNC('month', p.created_at) as mes,
     COUNT(*) as total_propostas,
-    COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
-    COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento
-  FROM clone_propostas_apprudnik 
-  WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-  GROUP BY DATE_TRUNC('month', created_at)
+    COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as vendas,
+    COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento
+  FROM clone_propostas_apprudnik p
+  LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+  WHERE p.seller = $1 AND p.created_at >= $2 AND p.created_at <= $3
+  GROUP BY DATE_TRUNC('month', p.created_at)
   ORDER BY mes
 `
 
@@ -1672,23 +1699,25 @@ app.get("/api/dashboard/supervisor/:id", authenticateToken, async (req, res) => 
     }
 
     const teamSummaryQuery = `
-  SELECT 
+  SELECT
     COUNT(*) as total_propostas,
-    COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas,
-    COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento
-  FROM clone_propostas_apprudnik 
-  WHERE seller = ANY($1) AND created_at >= $2 AND created_at <= $3
+    COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as convertidas,
+    COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento
+  FROM clone_propostas_apprudnik p
+  LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+  WHERE p.seller = ANY($1) AND p.created_at >= $2 AND p.created_at <= $3
 `
 
     const rankingQuery = `
-  SELECT 
+  SELECT
     u.name, u.id,
     COUNT(p.*) as propostas,
-    COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) as vendas,
-    COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento
+    COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as vendas,
+    COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento
   FROM clone_users_apprudnik u
-  LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
+  LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller
     AND p.created_at >= $2 AND p.created_at <= $3
+  LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
   WHERE u.id = ANY($1)
   GROUP BY u.id, u.name
   ORDER BY faturamento DESC
@@ -1729,34 +1758,37 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
     const { startDate, endDate } = getDateRange(period, start, end)
 
     const globalQuery = `
-  SELECT 
+  SELECT
     COUNT(*) as total_propostas,
-    COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
-    COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento_total
-  FROM clone_propostas_apprudnik 
-  WHERE created_at >= $1 AND created_at <= $2
+    COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as vendas,
+    COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento_total
+  FROM clone_propostas_apprudnik p
+  LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+  WHERE p.created_at >= $1 AND p.created_at <= $2
 `
 
     const monthlyRevenueQuery = `
-  SELECT 
-    DATE_TRUNC('month', created_at) as mes,
-    COALESCE(SUM(CAST(total_price AS DECIMAL)), 0) as faturamento,
-    COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas
-  FROM clone_propostas_apprudnik 
-  WHERE has_generated_sale = true AND created_at >= $1 AND created_at <= $2
-  GROUP BY DATE_TRUNC('month', created_at)
+  SELECT
+    DATE_TRUNC('month', p.created_at) as mes,
+    COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN p.total_price END), 0) as faturamento,
+    COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as vendas
+  FROM clone_propostas_apprudnik p
+  LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+  WHERE p.created_at >= $1 AND p.created_at <= $2
+  GROUP BY DATE_TRUNC('month', p.created_at)
   ORDER BY mes
 `
 
     const topPerformersQuery = `
-  SELECT 
+  SELECT
     u.name,
     u.role,
-    COALESCE(SUM(CASE WHEN p.has_generated_sale = true THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento,
-    COUNT(CASE WHEN p.has_generated_sale = true THEN 1 END) as vendas
+    COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento,
+    COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as vendas
   FROM clone_users_apprudnik u
-  LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller 
+  LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller
     AND p.created_at >= $1 AND p.created_at <= $2
+  LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
   WHERE u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium') AND u.is_active = true
   GROUP BY u.id, u.name, u.role
   ORDER BY faturamento DESC
@@ -1767,15 +1799,12 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
     const faturamentoMensal = await pool.query(monthlyRevenueQuery, [startDate, endDate])
     const topVendedores = await pool.query(topPerformersQuery, [startDate, endDate])
 
-    // Meta mensal (exemplo fixo, pode vir de uma tabela de metas)
-    const metaMensal = 150000 // R$ 150.000,00
 
     const response = {
       indicadores: {
         totalPropostas: Number.parseInt(indicadores.rows[0].total_propostas),
         totalVendas: Number.parseInt(indicadores.rows[0].vendas),
-        faturamentoTotal: Number.parseFloat(indicadores.rows[0].faturamento_total),
-        metaMensal,
+        faturamentoTotal: Number.parseFloat(indicadores.rows[0].faturamento_total)
       },
       faturamentoMensal: faturamentoMensal.rows.map((row) => ({
         mes: row.mes,
