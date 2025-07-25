@@ -511,7 +511,7 @@ app.get(
 
       // Get detailed proposals including child users
       const proposalsQuery = `
-        SELECT DISTINCT ON ((p.lead->>'phone'))
+        SELECT
             p.id,
             p.lead->>'name' AS client_name,
             p.lead->>'phone' AS client_phone,
@@ -537,7 +537,7 @@ app.get(
             AND p.created_at >= $3
             AND p.created_at <= $4
         ORDER BY
-           (p.lead->>'phone'), p.created_at DESC;
+           p.created_at DESC;
       `
       const proposals = await pool.query(proposalsQuery, [sellerIds, id, dateStart, dateEnd])
 
@@ -624,6 +624,7 @@ app.get(
           sellerId: proposal.seller_id,
           totalPrice: Number.parseFloat(proposal.total_price),
           status: proposal.status,
+          saleStatus: proposal.sale_status,
           createdAt: proposal.created_at,
           hasGeneratedSale: proposal.has_generated_sale,
         }
