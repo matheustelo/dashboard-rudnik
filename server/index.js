@@ -139,8 +139,11 @@ app.post("/api/auth/login", async (req, res) => {
     if (result.rows.length === 0) return res.status(401).json({ message: "Credenciais inválidas" })
 
     const user = result.rows[0]
-    // Using a placeholder password check as per previous context
-    if (password !== "123456") return res.status(401).json({ message: "Credenciais inválidas" })
+    const isValidPassword =
+      user.password_hash && (await bcrypt.compare(password, user.password_hash))
+    if (!isValidPassword) {
+      return res.status(401).json({ message: "Credenciais inválidas" })
+    }
 
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
