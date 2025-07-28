@@ -47,11 +47,6 @@ jobs:
       - name: Checkout do repositório
         uses: actions/checkout@v4
 
-      - name: Testar conexão SSH manual
-        run: |
-          ssh -i ~/.ssh/dashboardRudnik -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo '✅ SSH conectado com sucesso'"
-
-
       - name: Configurar chave SSH
         env:
           SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -60,6 +55,10 @@ jobs:
           echo "$SSH_KEY" > ~/.ssh/dashboardRudnik
           chmod 600 ~/.ssh/dashboardRudnik
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Testar conexão SSH manual
+        run: |
+          ssh -i ~/.ssh/dashboardRudnik -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo '✅ SSH conectado com sucesso'"
 
       - name: Instalar Ansible (caso não esteja presente)
         run: |
