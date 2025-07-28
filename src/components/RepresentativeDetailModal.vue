@@ -207,16 +207,27 @@
                 <h4 class="text-lg leading-6 font-medium text-gray-900 mb-4">
                   Propostas Detalhadas ({{ filteredProposals.length }})
                 </h4>
-                <div class="mb-4 flex items-center space-x-2">
-                  <label class="text-sm font-medium text-gray-700">Origem:</label>
-                  <select v-model="originFilter" class="border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500">
-                    <option value="all">Todos</option>
-                    <option value="self">{{ selfLabel }}</option>
-                    <option value="child">Usuários Filhos</option>
-                    <option value="converted">Convertida</option>
-                  </select>
-                </div>
-                <div class="overflow-hidden">
+                <div class="mb-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-2 sm:space-y-0">
+                  <div class="flex items-center space-x-2">
+                    <label class="text-sm font-medium text-gray-700">Origem:</label>
+                    <select v-model="originFilter" class="border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                      <option value="all">Todos</option>
+                      <option value="self">{{ selfLabel }}</option>
+                      <option value="child">Usuários Filhos</option>
+                      <option value="converted">Convertida</option>
+                    </select>
+                  </div>
+                  <div class="flex items-center space-x-2">
+                    <label class="text-sm font-medium text-gray-700">Pesquisar:</label>
+                    <input
+                      v-model="searchQuery"
+                      type="text"
+                      placeholder="Nome ou telefone"
+                      class="border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                  </div>
+                </div>  
+                <div class="overflow-x-auto">
                   <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                       <tr>
@@ -242,13 +253,13 @@
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
                       <tr v-for="proposal in sortedProposals" :key="proposal.id">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        <td class="px-6 py-4  whitespace-normal break-words text-sm font-medium text-gray-900">
                           {{ proposal.clientName + ' #' +  proposal.id}}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {{ formatPhone(proposal.clientPhone) }}
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <td class="px-6 py-4 whitespace-normal break-words text-sm text-gray-900">
                           {{ proposal.proposerName }}
                         </td>
 
@@ -295,6 +306,13 @@ import { computed, watch, ref } from 'vue'
 import LineChart from './LineChart.vue'
 import BarChart from './BarChart.vue'
 
+const normalize = (text) => {
+  return (text || '')
+    .normalize('NFD')                  // separa acento das letras
+    .replace(/[\u0300-\u036f]/g, '')  // remove os acentos
+    .toLowerCase()
+}
+
 const props = defineProps({
   isOpen: {
     type: Boolean,
@@ -339,19 +357,31 @@ const uniqueProposals = computed(() => {
 })
 
 const originFilter = ref('all')
+const searchQuery = ref('')
 
 const selfLabel = computed(() => {
   const role = props.representative?.role || 'supervisor'
   return role === 'parceiro_comercial' ? 'Parceiro' : 'Supervisor'
 })
 
-const filteredProposals = computed(() => {
+const originFilteredProposals = computed(() => {
   if (originFilter.value === 'all') return uniqueProposals.value
   if (originFilter.value === 'converted') {
     return uniqueProposals.value.filter((p) => p.status === 'Convertida')
   }
   return uniqueProposals.value.filter((p) =>
     originFilter.value === 'self' ? p.origin === 'self' : p.origin === 'child'
+  )
+})
+
+const filteredProposals = computed(() => {
+  const term = normalize(searchQuery.value.trim())
+  if (!term) return originFilteredProposals.value
+
+  return originFilteredProposals.value.filter(
+    (p) =>
+      normalize(p.clientName).includes(term) ||
+      p.clientPhone.replace(/\D/g, '').includes(term.replace(/\D/g, '')),
   )
 })
 
