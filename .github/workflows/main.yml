@@ -44,12 +44,23 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
+
+      - name: Debug dos valores das secrets
+        run: |
+          echo "Host: ${{ secrets.SERVER_HOST }}"
+          echo "Usuário: ${{ secrets.SERVER_USER }}"
+          echo "Caminho: ${{ secrets.SERVER_PATH }}"
+          echo "Tamanho da chave (em bytes):"
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | wc -c
+          echo "Início da chave (safe preview):"
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | head -n 2
+
       - name: Checkout do repositório
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4 
 
       - name: Configurar chave SSH (via base64)
         env:
-          SSH_KEY_B64: ${{ secrets.SSH_PRIVATE_KEY_B64 }}
+          SSH_KEY_B64: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.ssh
           echo "$SSH_KEY_B64" | base64 -d > ~/.ssh/dashboard-ci
