@@ -49,12 +49,8 @@ npm run client  # Frontend na porta 5173
 
 ## 🔐 Credenciais de Teste
 
-Para fazer login, use qualquer email válido com a senha `123456`.
-
-Exemplos de usuários criados pelo script:
-- **Gestor**: joao@empresa.com
-- **Supervisor**: maria@empresa.com / carlos@empresa.com  
-- **Vendedor**: pedro@empresa.com / ana@empresa.com / lucia@empresa.com / roberto@empresa.com
+O login agora valida suas credenciais na API externa da Aprrudnik. Utilize o
+mesmo email e senha cadastrados na plataforma.
 
 ## 📊 Funcionalidades por Papel
 
