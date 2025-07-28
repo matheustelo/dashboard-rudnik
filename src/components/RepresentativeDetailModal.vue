@@ -375,13 +375,21 @@ const originFilteredProposals = computed(() => {
 })
 
 const filteredProposals = computed(() => {
-  const term = normalize(searchQuery.value.trim())
-  if (!term) return originFilteredProposals.value
+  const raw = searchQuery.value.trim()
+  if (!raw) return originFilteredProposals.value
 
-  return originFilteredProposals.value.filter(
-    (p) =>
-      normalize(p.clientName).includes(term) ||
-      p.clientPhone.replace(/\D/g, '').includes(term.replace(/\D/g, '')),
+  const tokens = raw.split(/\s+/).filter(Boolean)
+
+  return originFilteredProposals.value.filter((p) =>
+    tokens.every((token) => {
+      const normalized = normalize(token)
+      const digits = token.replace(/\D/g, '')
+      const nameMatch = normalize(p.clientName).includes(normalized)
+      const phoneMatch = digits
+        ? p.clientPhone.replace(/\D/g, '').includes(digits)
+        : false
+      return nameMatch || phoneMatch
+    })
   )
 })
 
