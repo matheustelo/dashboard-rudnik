@@ -25,58 +25,65 @@ export const useAuthStore = defineStore("auth", {
   },
 
   actions: {
-    async login(credentials) {
-      try {
-        const response = await axios.post("/api/auth/login", credentials)
+async login(credentials) {
+  try {
+    const remoteCredentials = {
+      username: credentials.email || credentials.username,
+      password: credentials.password,
+    }
 
-        // Fetch the user role from the external system
-        const remoteCredentials = {
-          username: credentials.email || credentials.username,
-          password: credentials.password,
-        }
-        const roleResponse = await axios.post(
-          "https://www.apprudnik.com.br/api/auth/login",
-          remoteCredentials,
-          { validateStatus: () => true },
-        )
+    // Primeiro, tenta login na API externa
+    const externalResponse = await axios.post(
+      "https://www.apprudnik.com.br/api/auth/login",
+      remoteCredentials,
+      { validateStatus: () => true },
+    )
 
-        if (roleResponse.status === 401) {
-          throw new Error("Credenciais inválidas")
-        }
+    if (externalResponse.status === 401) {
+      throw new Error("Credenciais inválidas na API externa")
+    }
 
-        if (roleResponse.status >= 400) {
-          throw new Error(
-            roleResponse.data?.message ||
-              "Erro ao obter papel do usuário no sistema externo",
-          )
-        }
+    if (externalResponse.status !== 200) {
+      throw new Error(
+        externalResponse.data?.message ||
+        "Erro ao validar credenciais na API externa"
+      )
+    }
 
-        const role =
-          roleResponse.data?.user?.role ?? roleResponse.data?.role ?? this.user?.role
+    // Faz login na API local apenas com o e-mail (sem senha)
+    const localResponse = await axios.post("/api/auth/login", {
+      email: credentials.email || credentials.username,
+    })
 
-        this.token = response.data.token
-         this.user = { ...response.data.user, role }
+    const role =
+      externalResponse.data?.user?.role ??
+      externalResponse.data?.role ??
+      localResponse.data?.user?.role
 
-        localStorage.setItem("token", this.token)
-        localStorage.setItem("user", JSON.stringify(this.user))
-        axios.defaults.headers.common["Authorization"] = `Bearer ${this.token}`
-        api.defaults.headers.common["Authorization"] = `Bearer ${this.token}`
+    this.token = localResponse.data.token
+    this.user = { ...localResponse.data.user, role }
 
-        return { token: this.token, user: this.user }
-      } catch (error) {
-        this.logout()
-        if (error.response) {
-          if (error.response.status === 401) {
-            throw "Credenciais inválidas"
-          }
-          throw error.response.data?.message || "Erro ao fazer login"
-        }
-        if (error.request) {
-          throw "Falha de conexão com o servidor"
-        }
-        throw error.message || "Erro ao fazer login"
+    localStorage.setItem("token", this.token)
+    localStorage.setItem("user", JSON.stringify(this.user))
+    axios.defaults.headers.common["Authorization"] = `Bearer ${this.token}`
+    api.defaults.headers.common["Authorization"] = `Bearer ${this.token}`
+
+    return { token: this.token, user: this.user }
+  } catch (error) {
+    this.logout()
+    if (error.response) {
+      if (error.response.status === 401) {
+        throw "Credenciais inválidas"
       }
-    },
+      throw error.response.data?.message || "Erro ao fazer login"
+    }
+    if (error.request) {
+      throw "Falha de conexão com o servidor"
+    }
+    throw error.message || "Erro ao fazer login"
+  }
+},
+
 
     logout() {
       this.user = null
