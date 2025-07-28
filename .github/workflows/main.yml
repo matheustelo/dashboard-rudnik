@@ -44,35 +44,17 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
-
-      - name: Debug dos valores das secrets
-        run: |
-          echo "Host: ${{ secrets.SERVER_HOST }}"
-          echo "Usuário: ${{ secrets.SERVER_USER }}"
-          echo "Caminho: ${{ secrets.SERVER_PATH }}"
-          echo "Tamanho da chave (em bytes):"
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" | wc -c
-          echo "Início da chave (safe preview):"
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" | head -n 2
-
       - name: Checkout do repositório
-        uses: actions/checkout@v4 
+        uses: actions/checkout@v4
 
-      - name: Configurar chave SSH (via base64)
+      - name: Configurar chave SSH
         env:
-          SSH_KEY_B64: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.ssh
-          echo "$SSH_KEY_B64" | base64 -d > ~/.ssh/dashboard-ci
+          printf "%s" "$SSH_KEY" > ~/.ssh/dashboard-ci
           chmod 600 ~/.ssh/dashboard-ci
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Verificar conteúdo da chave (sem exibir)
-        run: |
-          echo "Linhas da chave:"
-          wc -l ~/.ssh/dashboard-ci
-          echo "Tipo de arquivo:"
-          file ~/.ssh/dashboard-ci
 
       - name: Instalar Ansible (caso não esteja presente)
         run: |
