@@ -1,7 +1,6 @@
 const express = require("express")
 const cors = require("cors")
 const jwt = require("jsonwebtoken")
-const bcrypt = require("bcryptjs")
 const { Pool } = require("pg")
 require("dotenv").config()
 
@@ -132,20 +131,16 @@ async function getTeamHierarchyIds(leaderId) {
 // Login
 app.post("/api/auth/login", async (req, res) => {
   try {
-    const { email, password } = req.body
-    const result = await pool.query("SELECT * FROM clone_users_apprudnik WHERE email = $1 AND is_active = true", [
-      email,
-    ])
-    if (result.rows.length === 0) return res.status(401).json({ message: "Credenciais inválidas" })
-
-    const user = result.rows[0]
-    
-    const isValidPassword =
-      user.password_hash && (await bcrypt.compare(password, user.password_hash))
-
-    if (!isValidPassword) {
+    const { email } = req.body
+    const result = await pool.query(
+      "SELECT * FROM clone_users_apprudnik WHERE email = $1 AND is_active = true",
+      [email],
+    )
+    if (result.rows.length === 0) {
       return res.status(401).json({ message: "Credenciais inválidas" })
     }
+
+    const user = result.rows[0]
 
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
