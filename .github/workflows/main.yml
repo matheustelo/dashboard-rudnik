@@ -52,13 +52,9 @@ jobs:
           SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/dashboardRudnik
-          chmod 600 ~/.ssh/dashboardRudnik
+          echo "$SSH_KEY" > ~/.ssh/dashboard-ci
+          chmod 600 ~/.ssh/dashboard-ci
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Testar conexão SSH manual
-        run: |
-          ssh -i ~/.ssh/dashboardRudnik -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo '✅ SSH conectado com sucesso'"
 
       - name: Instalar Ansible (caso não esteja presente)
         run: |
@@ -69,5 +65,5 @@ jobs:
         run: |
           ansible-playbook ansible/deploy.yml \
             -i "${{ secrets.SERVER_HOST }}," \
-            --private-key ~/.ssh/dashboardRudnik \
+            --private-key ~/.ssh/dashboard-ci \
             -u ${{ secrets.SERVER_USER }}
