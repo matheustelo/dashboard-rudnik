@@ -4,7 +4,7 @@
             <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
                 <h1 class="text-xl font-semibold text-gray-900">Histórico de Metas da Equipe</h1>
                 <div class="space-x-4">
-                    <router-link to="/dashboard/gerente_comercial"
+                    <router-link :to="dashboardPath"
                         class="text-blue-600 hover:underline text-sm">Voltar</router-link>
                 </div>
             </div>
@@ -101,11 +101,19 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { teamLeaderService, goalsService } from '../services/api'
+import { useAuthStore } from '../stores/auth'
 import TeamPerformanceChart from '../components/TeamPerformanceChart.vue'
 
 const teamLeaders = ref([])
 const goals = ref([])
 const loading = ref(false)
+
+const authStore = useAuthStore()
+
+const dashboardPath = computed(() => {
+  const role = authStore.user?.role
+  return `/dashboard/${role}` 
+})
 
 const filters = ref({ leader: '', status: '', start: '', end: '' })
 

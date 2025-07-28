@@ -4,7 +4,7 @@
     <header class="bg-white shadow-sm">
       <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
         <h1 class="text-2xl font-bold text-gray-900">Gerenciamento de Metas</h1>
-        <router-link to="/dashboard/gerente_comercial" class="text-sm text-blue-600 hover:underline">
+        <router-link :to="dashboardPath"   class="text-sm text-blue-600 hover:underline">
           &larr; Voltar ao Dashboard
         </router-link>
       </div>
@@ -755,6 +755,11 @@ const selectedPeriod = ref("")
 const authStore = useAuthStore()
 const customStart = ref("")
 const customEnd = ref("")
+
+const dashboardPath = computed(() => {
+  const role = authStore.user?.role
+  return `/dashboard/${role}` 
+})
 
 const handlePeriodChange = () => {
   customStart.value = ''

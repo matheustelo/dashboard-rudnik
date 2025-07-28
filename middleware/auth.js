@@ -39,7 +39,13 @@ const authorize = (...roles) => {
       return res.status(401).json({ message: "Authentication required" })
     }
 
-    if (!roles.includes(req.user.role)) {
+    const hasRole = roles.includes(req.user.role)
+
+    // Allow admin to access gerente_comercial privileges automatically
+    const adminOverride =
+      req.user.role === "admin" && roles.includes("gerente_comercial")
+
+    if (!hasRole && !adminOverride) {
       return res.status(403).json({ message: "Insufficient permissions" })
     }
 
