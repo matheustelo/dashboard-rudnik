@@ -21,7 +21,12 @@ pool.on("connect", () => console.log("✅ Connected to PostgreSQL database"))
 pool.on("error", (err) => console.error("💥 Database connection error:", err))
 
 // Middleware
-app.use(cors({ origin: "http://localhost:5173", credentials: true }))
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+    credentials: true,
+  }),
+)
 app.use(express.json())
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`)
