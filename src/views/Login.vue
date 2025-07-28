@@ -52,7 +52,7 @@
         </div>
 
         <div class="text-sm text-gray-600">
-          <p>Use suas credenciais para acessar o sistema.</p>
+          <p>Use suas credenciais do AppRudnik para acessar o sistema.</p>
         </div>
       </form>
     </div>
