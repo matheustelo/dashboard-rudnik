@@ -1,6 +1,6 @@
 ---
 - name: Deploy dashboard
-  hosts: production
+  hosts: all
   become: yes
   vars:
     app_path: /var/www/dashboard
