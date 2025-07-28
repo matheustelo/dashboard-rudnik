@@ -1,18 +1,68 @@
-name: Node.js CI
+name: CI/CD - Dashboard de Vendas
 
 on:
-  pull_request:
-    branches: [ main ]
   push:
-    branches: [ main ]
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
-  test:
+  build-and-test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./ # raiz do projeto
+
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - name: Checkout do repositório
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      - run: npm ci
-      - run: npm test --if-present
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Instalar dependências
+        run: npm install
+
+      - name: Rodar testes unitários
+        run: npm run test
+
+      - name: Build do Frontend (Vue)
+        run: npm run build
+
+      - name: Upload da pasta dist como artefato
+        uses: actions/upload-artifact@v3
+        with:
+          name: dist
+          path: dist
+
+  deploy:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v3
+
+      - name: Configurar chave SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/dashboardRudnik
+          chmod 600 ~/.ssh/dashboardRudnik
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Instalar Ansible (caso não esteja presente)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ansible
+
+      - name: Executar Ansible Playbook
+        run: |
+          ansible-playbook ansible/deploy.yml \
+            -i ansible/inventory.ini
+

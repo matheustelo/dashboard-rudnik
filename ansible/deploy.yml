@@ -1,0 +1,34 @@
+---
+- name: Deploy dashboard
+  hosts: production
+  become: yes
+  vars:
+    app_path: /var/www/dashboard
+    repo_url: https://github.com/Emerson-Okopnik/Projeto.git
+  tasks:
+    - name: Ensure application directory exists
+      file:
+        path: "{{ app_path }}"
+        state: directory
+
+    - name: Pull latest code
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_path }}"
+        version: main
+        force: yes
+
+    - name: Install dependencies
+      npm:
+        path: "{{ app_path }}"
+        production: yes
+
+    - name: Build frontend
+      command: npm run build
+      args:
+        chdir: "{{ app_path }}"
+
+    - name: Restart application
+      command: pm2 restart server/index.js --name dashboard
+      args:
+        chdir: "{{ app_path }}"
