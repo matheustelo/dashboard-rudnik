@@ -47,6 +47,11 @@ jobs:
       - name: Checkout do repositório
         uses: actions/checkout@v4
 
+      - name: Testar conexão SSH manual
+        run: |
+          ssh -i ~/.ssh/dashboardRudnik -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo '✅ SSH conectado com sucesso'"
+
+
       - name: Configurar chave SSH
         env:
           SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
