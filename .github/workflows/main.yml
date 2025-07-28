@@ -47,14 +47,21 @@ jobs:
       - name: Checkout do repositório
         uses: actions/checkout@v4
 
-      - name: Configurar chave SSH
+      - name: Configurar chave SSH (via base64)
         env:
-          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KEY_B64: ${{ secrets.SSH_PRIVATE_KEY_B64 }}
         run: |
           mkdir -p ~/.ssh
-          printf "%s" "$SSH_KEY" > ~/.ssh/dashboard-ci
+          echo "$SSH_KEY_B64" | base64 -d > ~/.ssh/dashboard-ci
           chmod 600 ~/.ssh/dashboard-ci
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Verificar conteúdo da chave (sem exibir)
+        run: |
+          echo "Linhas da chave:"
+          wc -l ~/.ssh/dashboard-ci
+          echo "Tipo de arquivo:"
+          file ~/.ssh/dashboard-ci
 
       - name: Instalar Ansible (caso não esteja presente)
         run: |
