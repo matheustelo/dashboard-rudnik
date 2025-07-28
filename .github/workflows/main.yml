@@ -67,4 +67,3 @@ jobs:
             -i "${{ secrets.SERVER_HOST }}," \
             --private-key ~/.ssh/dashboardRudnik \
             -u ${{ secrets.SERVER_USER }}
-
