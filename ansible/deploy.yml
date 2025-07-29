@@ -27,7 +27,8 @@
       args:
         chdir: "{{ app_path }}"
 
-    - name: Restart application
-      command: pm2 restart server/index.js --name dashboard
+    - name: Restart or start app with PM2
+      shell: |
+        pm2 restart index.js --name dashboard || pm2 start index.js --name dashboard
       args:
-        chdir: "{{ app_path }}"
+        chdir: "{{ app_path }}/server"
