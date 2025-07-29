@@ -4,7 +4,7 @@
   become: yes
   vars:
     app_path: /var/www/dashboard
-    repo_url: https://github.com/Emerson-Okopnik/Projeto.git
+    repo_url: https://github.com/Emerson-Okopnik/dashboard.git
   tasks:
     - name: Ensure application directory exists
       file:
