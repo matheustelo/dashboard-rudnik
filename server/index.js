@@ -1849,12 +1849,3 @@ app.use("*", (req, res) => {
   console.log("❌ 404: Route not found:", req.originalUrl)
   res.status(404).json({ message: "Route not found" })
 })
-
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`)
-  console.log(`📊 Dashboard API available at http://localhost:${PORT}/api/dashboard`)
-  console.log(`🎯 Goals API available at http://localhost:${PORT}/api/goals`)
-  console.log(`👤 Users API available at http://localhost:${PORT}/api/users`)
-  console.log(`📈 Performance API available at http://localhost:${PORT}/api/performance`)
-  console.log(`🏥 Health check at http://localhost:${PORT}/health`)
-})
