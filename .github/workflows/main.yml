@@ -52,8 +52,8 @@ jobs:
           SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.ssh
-          printf "%s" "$SSH_KEY" > ~/.ssh/rudnikKey
-          chmod 600 ~/.ssh/rudnikKey
+          printf "%s" "$SSH_KEY" > ~/.ssh/authorized_keys
+          chmod 600 ~/.ssh/authorized_keys
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
       - name: Instalar Ansible (caso não esteja presente)
@@ -64,13 +64,13 @@ jobs:
       - name: Teste de conexão SSH (debug)
         run: |
           echo "Comando SSH que será executado:"
-          echo "ssh -i ~/.ssh/rudnikKey -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}"
+          echo "ssh -i ~/.ssh/authorized_keys -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}"
           echo "Tentando conectar..."
-          ssh -i ~/.ssh/rudnikKey -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo '✅ Conexão SSH bem-sucedida'"
+          ssh -i ~/.ssh/authorized_keys -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo '✅ Conexão SSH bem-sucedida'"
 
       - name: Executar Ansible Playbook
         run: |
           ansible-playbook ansible/deploy.yml \
             -i "${{ secrets.SERVER_HOST }}," \
-            --private-key ~/.ssh/rudnikKey \
+            --private-key ~/.ssh/authorized_keys \
             -u ${{ secrets.SERVER_USER }}
