@@ -21,7 +21,6 @@
     - name: Install dependencies
       npm:
         path: "{{ app_path }}"
-        production: yes
 
     - name: Build frontend
       command: npm run build
