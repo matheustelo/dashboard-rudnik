@@ -44,7 +44,7 @@ const routes = [
   },
   {
     path: "/dashboard/admin",
-    name: "DashboardGerenteComercial",
+    name: "DashboardAdmin",
     component: DashboardGerenteComercial,
     meta: { requiresAuth: true, roles: ["admin", "gerente_comercial"] },
   },
