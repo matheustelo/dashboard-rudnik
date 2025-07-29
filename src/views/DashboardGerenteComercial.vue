@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-gray-50">
     <header class="bg-white shadow">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="custom-max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between items-center py-6">
           <div>
             <h1 class="text-3xl font-bold text-gray-900">Dashboard Gerente Comercial</h1>
@@ -16,7 +16,7 @@
       </div>
     </header>
 
-    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+    <main class="custom-max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <!-- Filters -->
       <div class="bg-white shadow rounded-lg p-4 mb-6 flex items-center justify-between space-x-4">
         <div class="flex items-center space-x-4">
@@ -307,7 +307,7 @@ onMounted(async () => {
 })
 </script>
 <style>
-.max-w-7xl {
+.custom-max-w-7xl {
     max-width: 100rem;
 }
 </style>
