@@ -8,8 +8,12 @@
             <p class="text-gray-600">Bem-vindo, {{ authStore.user?.name }}</p>
           </div>
           <div class="flex items-center space-x-4">
-            <router-link to="/dashboard/metas" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 text-sm font-medium">Gerenciar Metas</router-link>
-            <router-link to="/dashboard/team-goals-history" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium">Histórico de Metas</router-link>
+            <router-link to="/dashboard/metas"
+              class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 text-sm font-medium">Gerenciar
+              Metas</router-link>
+            <router-link to="/dashboard/team-goals-history"
+              class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium">Histórico de
+              Metas</router-link>
             <button @click="logout" class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700">Sair</button>
           </div>
         </div>
@@ -21,11 +25,14 @@
       <div class="bg-white shadow rounded-lg p-4 mb-6 flex items-center justify-between space-x-4">
         <div class="flex items-center space-x-4">
           <h3 class="text-md font-medium text-gray-700">Filtros:</h3>
-          <select v-model="filters.supervisorId" @change="applyFilters" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+          <select v-model="filters.supervisorId" @change="applyFilters"
+            class="border border-gray-300 rounded-md px-3 py-2 text-sm">
             <option value="all">Todos os Líderes</option>
-            <option v-for="leader in teamLeaders" :key="leader.id" :value="leader.id">{{ leader.name }} ({{ leader.role }})</option>
+            <option v-for="leader in teamLeaders" :key="leader.id" :value="leader.id">{{ leader.name }} ({{ leader.role
+              }})</option>
           </select>
-          <select v-model="filters.period" @change="applyFilters" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+          <select v-model="filters.period" @change="applyFilters"
+            class="border border-gray-300 rounded-md px-3 py-2 text-sm">
             <option v-for="p in periods" :key="p" :value="p">
               {{ formatPeriodLabel(p) }}
             </option>
@@ -33,9 +40,11 @@
           </select>
         </div>
         <div class="flex items-center space-x-2">
-          <input v-model="filters.startDate" type="date" @change="applyFilters" :disabled="!!filters.period" class="border border-gray-300 rounded-md px-3 py-2 text-sm disabled:bg-gray-100" />
+          <input v-model="filters.startDate" type="date" @change="applyFilters" :disabled="!!filters.period"
+            class="border border-gray-300 rounded-md px-3 py-2 text-sm disabled:bg-gray-100" />
           <span class="text-gray-500">até</span>
-          <input v-model="filters.endDate" type="date" @change="applyFilters" :disabled="!!filters.period" class="border border-gray-300 rounded-md px-3 py-2 text-sm disabled:bg-gray-100" />
+          <input v-model="filters.endDate" type="date" @change="applyFilters" :disabled="!!filters.period"
+            class="border border-gray-300 rounded-md px-3 py-2 text-sm disabled:bg-gray-100" />
         </div>
       </div>
 
@@ -45,9 +54,11 @@
           <div class="p-5">
             <div class="flex items-center">
               <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-indigo-500 rounded-md flex items-center justify-center">
+                <div class="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center">
                   <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 00-2-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 00-2-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
+                    </path>
                   </svg>
                 </div>
               </div>
@@ -58,12 +69,14 @@
                     <div class="text-2xl font-semibold text-gray-900">
                       {{ formatCurrency(teamPerformance?.teamStats?.totalFaturamento || 0) }}
                     </div>
-                    <div class="ml-2 flex items-baseline text-sm font-semibold" :class="faturamentoProgress >= 100 ? 'text-green-600' : 'text-yellow-600'">
+                    <div class="ml-2 flex items-baseline text-sm font-semibold"
+                      :class="faturamentoProgress >= 100 ? 'text-green-600' : 'text-yellow-600'">
                       {{ faturamentoProgress.toFixed(1) }}% da meta
                     </div>
                   </dd>
                   <div class="mt-2 w-full bg-gray-200 rounded-full h-2">
-                    <div class="bg-indigo-600 h-2 rounded-full transition-all duration-300" :style="{ width: Math.min(faturamentoProgress, 100) + '%' }"></div>
+                    <div class="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+                      :style="{ width: Math.min(faturamentoProgress, 100) + '%' }"></div>
                   </div>
                 </dl>
               </div>
@@ -75,9 +88,10 @@
           <div class="p-5">
             <div class="flex items-center">
               <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-green-500 rounded-md flex items-center justify-center">
+                <div class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
                   <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
                   </svg>
                 </div>
               </div>
@@ -100,9 +114,11 @@
           <div class="p-5">
             <div class="flex items-center">
               <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
+                <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
                   <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                    </path>
                   </svg>
                 </div>
               </div>
@@ -125,9 +141,10 @@
           <div class="p-5">
             <div class="flex items-center">
               <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-purple-500 rounded-md flex items-center justify-center">
+                <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
                   <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
                   </svg>
                 </div>
               </div>
@@ -146,74 +163,74 @@
           </div>
         </div>
 
-            <!-- Proposal Metrics -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-      <div class="bg-white overflow-hidden shadow rounded-lg">
-        <div class="p-5">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <div class="w-8 h-8 bg-green-600 rounded-md flex items-center justify-center">
-                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
+        <!-- Proposal Metrics -->
+          <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <div class="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Propostas Convertidas</dt>
+                    <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.convertidas }}</dd>
+                  </dl>
+                </div>
               </div>
             </div>
-            <div class="ml-5 w-0 flex-1">
-              <dl>
-                <dt class="text-sm font-medium text-gray-500 truncate">Propostas Convertidas</dt>
-                <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.convertidas }}</dd>
-              </dl>
-            </div>
           </div>
-        </div>
-      </div>
 
-      <div class="bg-white overflow-hidden shadow rounded-lg">
-        <div class="p-5">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <div class="w-8 h-8 bg-yellow-500 rounded-md flex items-center justify-center">
-                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5-6l3 3-3 3" />
-                </svg>
+          <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <div class="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M8 9l3 3-3 3m5-6l3 3-3 3" />
+                    </svg>
+                  </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Propostas em Negociação</dt>
+                    <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.emNegociacao }}</dd>
+                  </dl>
+                </div>
               </div>
             </div>
-            <div class="ml-5 w-0 flex-1">
-              <dl>
-                <dt class="text-sm font-medium text-gray-500 truncate">Propostas em Negociação</dt>
-                <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.emNegociacao }}</dd>
-              </dl>
-            </div>
           </div>
-        </div>
-      </div>
 
-      <div class="bg-white overflow-hidden shadow rounded-lg">
-        <div class="p-5">
-          <div class="flex items-center">
-            <div class="flex-shrink-0">
-              <div class="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
-                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2zM7 7h10" />
-                </svg>
+          <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 17v-2a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2zM7 7h10" />
+                    </svg>
+                  </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Propostas Fechadas</dt>
+                    <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.fechadas }}</dd>
+                  </dl>
+                </div>
               </div>
-            </div>
-            <div class="ml-5 w-0 flex-1">
-              <dl>
-                <dt class="text-sm font-medium text-gray-500 truncate">Propostas Fechadas</dt>
-                <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.fechadas }}</dd>
-              </dl>
             </div>
           </div>
-        </div>
-              </div>
-    </div>
 
         <div class="bg-white overflow-hidden shadow rounded-lg">
           <div class="p-5">
             <div class="flex items-center">
               <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-red-500 rounded-md flex items-center justify-center">
+                <div class="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
                   <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                   </svg>
@@ -222,7 +239,8 @@
               <div class="ml-5 w-0 flex-1">
                 <dl>
                   <dt class="text-sm font-medium text-gray-500 truncate">Pedidos Cancelados</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">{{ teamPerformance?.teamStats?.totalCanceladas || 0 }}</dd>
+                  <dd class="text-2xl font-semibold text-gray-900">{{ teamPerformance?.teamStats?.totalCanceladas || 0
+                    }}</dd>
                 </dl>
               </div>
             </div>
@@ -230,19 +248,27 @@
         </div>
       </div>
 
-      <div v-if="loading" class="text-center py-12"><div class="text-lg">Carregando dashboard...</div></div>
+      <div v-if="loading" class="text-center py-12">
+        <div class="text-lg">Carregando dashboard...</div>
+      </div>
       <div v-else class="space-y-6">
         <!-- KPIs and Charts -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div class="bg-white shadow rounded-lg p-4"><LineChart :data="revenueVsTargetChartData" :options="lineChartOptions" /></div>
-          <div class="bg-white shadow rounded-lg p-4"><BarChart :data="revenueBySupervisorChartData" :options="barChartOptions" /></div>
+          <div class="bg-white shadow rounded-lg p-4">
+            <LineChart :data="revenueVsTargetChartData" :options="lineChartOptions" />
+          </div>
+          <div class="bg-white shadow rounded-lg p-4">
+            <BarChart :data="revenueBySupervisorChartData" :options="barChartOptions" />
+          </div>
         </div>
 
         <!-- Detailed Performance Table -->
-        <PerformanceTable v-if="teamPerformance" :team-members="teamPerformance.teamMembers" @drill-down="handleDrillDown" />
+        <PerformanceTable v-if="teamPerformance" :team-members="teamPerformance.teamMembers"
+          @drill-down="handleDrillDown" />
 
         <!-- Representative Detail Modal -->
-        <RepresentativeDetailModal :is-open="showDetailModal" :representative="selectedRepresentative" :details="representativeDetails" :loading="detailLoading" @close="closeDetailModal" />
+        <RepresentativeDetailModal :is-open="showDetailModal" :representative="selectedRepresentative"
+          :details="representativeDetails" :loading="detailLoading" @close="closeDetailModal" />
       </div>
     </main>
   </div>
@@ -323,7 +349,7 @@ const loadInitialData = async () => {
     teamPerformance.value = perf.data
     revenueVsTarget.value = revVsTarget.data
     revenueBySupervisor.value = revBySup.data
-    proposalMetrics.value = metrics.data  
+    proposalMetrics.value = metrics.data
   } catch (error) {
     console.error('Erro ao carregar dashboard:', error)
   } finally {
@@ -417,6 +443,6 @@ onMounted(async () => {
 </script>
 <style>
 .custom-max-w-7xl {
-    max-width: 100rem;
+  max-width: 100rem;
 }
 </style>
