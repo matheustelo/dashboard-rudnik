@@ -295,12 +295,32 @@ app.get(
 
       const metricsQuery = `
         SELECT
-          COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) AS convertidas,
-          COUNT(CASE WHEN (s.is_contract_downloaded = false OR s.is_contract_downloaded IS NULL) AND s.status <> 'suspenso' THEN 1 END) AS em_negociacao,
-          COUNT(CASE WHEN s.is_contract_downloaded = true AND s.status <> 'suspenso' THEN 1 END) AS fechadas
-        FROM clone_propostas_apprudnik p
-        LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
-        WHERE p.created_at BETWEEN $1 AND $2
+          (
+            SELECT COUNT(*)
+            FROM clone_propostas_apprudnik p
+            WHERE p.has_generated_sale = true
+              AND p.created_at BETWEEN $1 AND $2
+          ) AS convertidas,
+          (
+            SELECT COUNT(*)
+            FROM clone_vendas_apprudnik v
+            WHERE (v.is_contract_downloaded = false OR v.is_contract_downloaded IS NULL)
+              AND v.status <> 'suspenso'
+              AND v.created_at BETWEEN $1 AND $2
+          ) AS em_negociacao,
+          (
+            SELECT COUNT(*)
+            FROM clone_vendas_apprudnik v
+            WHERE v.is_contract_downloaded = true
+              AND v.status <> 'suspenso'
+              AND v.created_at BETWEEN $1 AND $2
+          ) AS fechadas,
+          (
+            SELECT COUNT(*)
+            FROM clone_vendas_apprudnik v
+            WHERE v.status = 'suspenso'
+              AND v.created_at BETWEEN $1 AND $2
+          ) AS canceladas
       `;
 
       const { rows } = await pool.query(metricsQuery, [dateStart, dateEnd]);
@@ -309,6 +329,7 @@ app.get(
         convertidas: parseInt(rows[0].convertidas, 10),
         emNegociacao: parseInt(rows[0].em_negociacao, 10),
         fechadas: parseInt(rows[0].fechadas, 10),
+        canceladas: parseInt(rows[0].canceladas, 10),
       });
     } catch (error) {
       console.error("❌ Error fetching proposal metrics:", error);

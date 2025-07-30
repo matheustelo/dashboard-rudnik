@@ -239,8 +239,7 @@
               <div class="ml-5 w-0 flex-1">
                 <dl>
                   <dt class="text-sm font-medium text-gray-500 truncate">Pedidos Cancelados</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">{{ teamPerformance?.teamStats?.totalCanceladas || 0
-                    }}</dd>
+                  <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.canceladas }}</dd>
                 </dl>
               </div>
             </div>
@@ -292,7 +291,12 @@ const teamPerformance = ref(null)
 const teamLeaders = ref([])
 const revenueVsTarget = ref([])
 const revenueBySupervisor = ref([])
-const proposalMetrics = ref({ convertidas: 0, emNegociacao: 0, fechadas: 0 })
+const proposalMetrics = ref({
+  convertidas: 0,
+  emNegociacao: 0,
+  fechadas: 0,
+  canceladas: 0,
+})
 
 const showDetailModal = ref(false)
 const selectedRepresentative = ref(null)
