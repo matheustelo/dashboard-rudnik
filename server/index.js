@@ -528,14 +528,17 @@ app.get(
             p.has_generated_sale,
             s.status AS sale_status,
             p.created_at,
-            CASE 
+            CASE
                 WHEN p.has_generated_sale = true THEN 'Convertida'
                 ELSE 'Pendente'
-            END AS status
+            END AS status,
+            (p.order_price_config->'seller'->>'parent_id')::int AS supervisor_id,
+            sup.name AS supervisor_name
         FROM
             clone_propostas_apprudnik p
         JOIN
             clone_users_apprudnik u ON p.seller = u.id
+        LEFT JOIN clone_users_apprudnik sup ON (p.order_price_config->'seller'->>'parent_id')::int = sup.id
         LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
         WHERE
             p.seller = ANY($1)
@@ -628,6 +631,8 @@ app.get(
           origin: proposal.origin,
           sellerId: proposal.seller_id,
           totalPrice: Number.parseFloat(proposal.total_price),
+          supervisorId: proposal.supervisor_id,
+          supervisorName: proposal.supervisor_name,
           status: proposal.status,
           saleStatus: proposal.sale_status,
           createdAt: proposal.created_at,

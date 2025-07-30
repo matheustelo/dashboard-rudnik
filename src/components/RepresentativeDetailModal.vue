@@ -62,7 +62,7 @@
                           Total Propostas
                         </dt>
                         <dd class="text-lg font-medium text-gray-900">
-                          {{ details.summary.totalPropostas }}
+                          {{ filteredSummary.totalPropostas }}
                         </dd>
                       </dl>
                     </div>
@@ -84,7 +84,7 @@
                           Vendas Fechadas
                         </dt>
                         <dd class="text-lg font-medium text-gray-900">
-                          {{ details.summary.vendasFechadas }}
+                          {{ filteredSummary.vendasFechadas }}
                         </dd>
                       </dl>
                     </div>
@@ -106,7 +106,7 @@
                           Taxa Conversão
                         </dt>
                         <dd class="text-lg font-medium text-gray-900">
-                          {{ details.summary.conversionRate }}%
+                          {{ filteredSummary.conversionRate }}%
                         </dd>
                       </dl>
                     </div>
@@ -128,7 +128,7 @@
                           Faturamento Total
                         </dt>
                         <dd class="text-lg font-medium text-gray-900">
-                          R$ {{ formatCurrency(details.summary.faturamentoTotal) }}
+                          R$ {{ formatCurrency(filteredSummary.faturamentoTotal) }}
                         </dd>
                       </dl>
                     </div>
@@ -166,11 +166,11 @@
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="text-center">
                   <div class="text-3xl font-bold text-blue-600">
-                    {{ details.summary.totalPropostas }}
+                    {{ filteredSummary.totalPropostas }}
                   </div>
                   <div class="text-sm text-gray-500">Propostas Criadas</div>
                   <div class="text-lg text-gray-600">
-                    R$ {{ formatCurrency(details.summary.valorTotalPropostas) }}
+                     R$ {{ formatCurrency(filteredSummary.valorTotalPropostas) }}
                   </div>
                 </div>
                 
@@ -182,21 +182,21 @@
                 
                 <div class="text-center">
                   <div class="text-3xl font-bold text-green-600">
-                    {{ details.summary.vendasFechadas }}
+                    {{ filteredSummary.vendasFechadas }}
                   </div>
                   <div class="text-sm text-gray-500">Vendas Fechadas</div>
                   <div class="text-lg text-gray-600">
-                    R$ {{ formatCurrency(details.summary.faturamentoTotal) }}
+                     R$ {{ formatCurrency(filteredSummary.faturamentoTotal) }}
                   </div>
                 </div>
               </div>
               
               <div class="mt-4 text-center">
                 <div class="text-lg font-medium text-gray-900">
-                  Taxa de Conversão: {{ details.summary.conversionRate }}%
+                  Taxa de Conversão: {{ filteredSummary.conversionRate }}%
                 </div>
                 <div class="text-sm text-gray-500">
-                  Ticket Médio: R$ {{ formatCurrency(details.summary.ticketMedio) }}
+                  Ticket Médio: R$ {{ formatCurrency(filteredSummary.ticketMedio) }}
                 </div>
               </div>
             </div>
@@ -215,6 +215,13 @@
                       <option value="self">{{ selfLabel }}</option>
                       <option value="child">Usuários Filhos</option>
                       <option value="converted">Convertida</option>
+                    </select>
+                  </div>
+                  <div v-if="supervisorOptions.length > 1" class="flex items-center space-x-2">
+                    <label class="text-sm font-medium text-gray-700">Supervisor:</label>
+                    <select v-model="supervisorFilter" class="border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                      <option value="all">Todos</option>
+                      <option v-for="sup in supervisorOptions" :key="sup.id" :value="sup.id">{{ sup.name }}</option>
                     </select>
                   </div>
                   <div class="flex items-center space-x-2">
@@ -358,18 +365,34 @@ const uniqueProposals = computed(() => {
 
 const originFilter = ref('all')
 const searchQuery = ref('')
+const supervisorFilter = ref('all')
+const supervisorOptions = computed(() => {
+  const map = new Map()
+  uniqueProposals.value.forEach((p) => {
+    if (p.supervisorId) {
+      map.set(p.supervisorId, p.supervisorName || `Supervisor #${p.supervisorId}`)
+    }
+  })
+  return Array.from(map, ([id, name]) => ({ id, name }))
+})
 
 const selfLabel = computed(() => {
   const role = props.representative?.role || 'supervisor'
   return role === 'parceiro_comercial' ? 'Parceiro' : 'Supervisor'
 })
 
+const supervisorFilteredProposals = computed(() => {
+  if (supervisorFilter.value === 'all') return uniqueProposals.value
+  return uniqueProposals.value.filter((p) => String(p.supervisorId) === String(supervisorFilter.value))
+})
+
 const originFilteredProposals = computed(() => {
-  if (originFilter.value === 'all') return uniqueProposals.value
+  const list = supervisorFilteredProposals.value
+  if (originFilter.value === 'all') return list
   if (originFilter.value === 'converted') {
-    return uniqueProposals.value.filter((p) => p.status === 'Convertida')
+    return list.filter((p) => p.status === 'Convertida')
   }
-  return uniqueProposals.value.filter((p) =>
+  return list.filter((p) =>
     originFilter.value === 'self' ? p.origin === 'self' : p.origin === 'child'
   )
 })
@@ -399,46 +422,168 @@ const sortedProposals = computed(() => {
   )
 })
 
-const monthlyChartData = computed(() => {
-  if (!props.details?.monthlyTrend) return null
+const filteredSummary = computed(() => {
+  if (!props.details) {
+    return {
+      totalPropostas: 0,
+      vendasFechadas: 0,
+      conversionRate: 0,
+      faturamentoTotal: 0,
+      ticketMedio: 0,
+      valorTotalPropostas: 0,
+    }
+  }
+
+  const list = filteredProposals.value
+  const totalPropostas = list.length
+  let vendasFechadas = 0
+  let faturamentoTotal = 0
+  let valorTotalPropostas = 0
+
+  list.forEach((p) => {
+    valorTotalPropostas += p.totalPrice
+    if (p.status === 'Convertida' && p.saleStatus !== 'suspenso') {
+      vendasFechadas += 1
+      faturamentoTotal += p.totalPrice
+    }
+  })
+
+  const conversionRate =
+    totalPropostas > 0 ? ((vendasFechadas / totalPropostas) * 100).toFixed(2) : 0
+  const ticketMedio =
+    vendasFechadas > 0 ? (faturamentoTotal / vendasFechadas).toFixed(2) : 0
 
   return {
-    labels: props.details.monthlyTrend.map(item => 
-      new Date(item.mes).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
+    totalPropostas,
+    vendasFechadas,
+    conversionRate: Number.parseFloat(conversionRate),
+    faturamentoTotal: Number.parseFloat(faturamentoTotal.toFixed(2)),
+    ticketMedio: Number.parseFloat(ticketMedio),
+    valorTotalPropostas: Number.parseFloat(valorTotalPropostas.toFixed(2)),
+  }
+})
+
+function startOfWeek(date) {
+  const d = new Date(date)
+  const day = d.getDay()
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+  d.setDate(diff)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+const filteredMonthlyTrend = computed(() => {
+  const groups = {}
+  filteredProposals.value.forEach((p) => {
+    const d = new Date(p.createdAt)
+    const key = new Date(d.getFullYear(), d.getMonth(), 1).toISOString()
+    if (!groups[key]) {
+      groups[key] = { mes: new Date(key), propostas: 0, vendas: 0, faturamento: 0 }
+    }
+    const g = groups[key]
+    g.propostas += 1
+    if (p.status === 'Convertida' && p.saleStatus !== 'suspenso') {
+      g.vendas += 1
+      g.faturamento += p.totalPrice
+    }
+  })
+  return Object.values(groups)
+    .sort((a, b) => a.mes - b.mes)
+    .map((item) => ({
+      mes: item.mes,
+      propostas: item.propostas,
+      vendas: item.vendas,
+      faturamento: Number.parseFloat(item.faturamento.toFixed(2)),
+      ticketMedio:
+        item.vendas > 0
+          ? Number.parseFloat((item.faturamento / item.vendas).toFixed(2))
+          : 0,
+      conversionRate:
+        item.propostas > 0 ? (item.vendas / item.propostas) * 100 : 0,
+    }))
+})
+
+const filteredWeeklyTrend = computed(() => {
+  const groups = {}
+  filteredProposals.value.forEach((p) => {
+    const start = startOfWeek(new Date(p.createdAt)).toISOString()
+    if (!groups[start]) {
+      groups[start] = {
+        semana: new Date(start),
+        propostas: 0,
+        vendas: 0,
+        faturamento: 0,
+      }
+    }
+    const g = groups[start]
+    g.propostas += 1
+    if (p.status === 'Convertida' && p.saleStatus !== 'suspenso') {
+      g.vendas += 1
+      g.faturamento += p.totalPrice
+    }
+  })
+  return Object.values(groups)
+    .sort((a, b) => a.semana - b.semana)
+    .map((item) => ({
+      semana: item.semana,
+      propostas: item.propostas,
+      vendas: item.vendas,
+      faturamento: Number.parseFloat(item.faturamento.toFixed(2)),
+      ticketMedio:
+        item.vendas > 0
+          ? Number.parseFloat((item.faturamento / item.vendas).toFixed(2))
+          : 0,
+      conversionRate:
+        item.propostas > 0 ? (item.vendas / item.propostas) * 100 : 0,
+    }))
+})
+
+const monthlyChartData = computed(() => {
+  if (!filteredMonthlyTrend.value.length) return null
+
+  return {
+    labels: filteredMonthlyTrend.value.map((item) =>
+      new Date(item.mes).toLocaleDateString('pt-BR', {
+        month: 'short',
+        year: 'numeric',
+      })
     ),
     datasets: [
       {
         label: 'Propostas',
-        data: props.details.monthlyTrend.map(item => item.propostas),
+        data: filteredMonthlyTrend.value.map((item) => item.propostas),
         borderColor: 'rgb(59, 130, 246)',
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        tension: 0.4
+        tension: 0.4,
       },
       {
         label: 'Vendas',
-        data: props.details.monthlyTrend.map(item => item.vendas),
+        data: filteredMonthlyTrend.value.map((item) => item.vendas),
         borderColor: 'rgb(34, 197, 94)',
         backgroundColor: 'rgba(34, 197, 94, 0.1)',
-        tension: 0.4
-      }
-    ]
+        tension: 0.4,
+      },
+    ],
   }
 })
 
 const weeklyChartData = computed(() => {
-  if (!props.details?.weeklyTrend) return null
+  if (!filteredWeeklyTrend.value.length) return null
 
   return {
-    labels: props.details.weeklyTrend.map(item => 
-      new Date(item.semana).toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' })
+    labels: filteredWeeklyTrend.value.map((item) =>
+      new Date(item.semana).toLocaleDateString('pt-BR', {
+        month: 'short',
+        day: 'numeric',
+      })
     ),
     datasets: [
       {
         label: 'Faturamento (R$)',
-        data: props.details.weeklyTrend.map(item => item.faturamento),
+        data: filteredWeeklyTrend.value.map((item) => item.faturamento),
         backgroundColor: 'rgba(147, 51, 234, 0.8)',
-      }
-    ]
+      },
+    ],
   }
 })
 
