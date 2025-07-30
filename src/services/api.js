@@ -54,6 +54,7 @@ export const dashboardService = {
     api.get("/dashboard/gerente_comercial", { params: { period, startDate, endDate } }),
   getRevenueVsTarget: (filters) => api.get("/dashboard/revenue-vs-target", { params: filters }),
   getRevenueBySupervisor: (filters) => api.get("/dashboard/revenue-by-supervisor", { params: filters }),
+  getProposalMetrics: (filters) => api.get("/dashboard/proposal-metrics", { params: filters }),
 }
 
 // Goals service

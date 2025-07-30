@@ -279,6 +279,47 @@ app.get(
   }
 );
 
+// Get proposal metrics for dashboard
+app.get(
+  "/api/dashboard/proposal-metrics",
+  authenticateToken,
+  authorize("admin", "gerente_comercial"),
+  async (req, res) => {
+    try {
+      const { period, startDate, endDate } = req.query;
+      const { startDate: dateStart, endDate: dateEnd } = getDateRange(
+        period,
+        startDate,
+        endDate,
+      );
+
+      const metricsQuery = `
+        SELECT
+          COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) AS convertidas,
+          COUNT(CASE WHEN (s.is_contract_downloaded = false OR s.is_contract_downloaded IS NULL) AND s.status <> 'suspenso' THEN 1 END) AS em_negociacao,
+          COUNT(CASE WHEN s.is_contract_downloaded = true AND s.status <> 'suspenso' THEN 1 END) AS fechadas
+        FROM clone_propostas_apprudnik p
+        LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+        WHERE p.created_at BETWEEN $1 AND $2
+      `;
+
+      const { rows } = await pool.query(metricsQuery, [dateStart, dateEnd]);
+
+      res.json({
+        convertidas: parseInt(rows[0].convertidas, 10),
+        emNegociacao: parseInt(rows[0].em_negociacao, 10),
+        fechadas: parseInt(rows[0].fechadas, 10),
+      });
+    } catch (error) {
+      console.error("❌ Error fetching proposal metrics:", error);
+      res.status(500).json({
+        message: "Erro ao carregar métricas de propostas",
+        error: error.message,
+      });
+    }
+  },
+);
+
 // Get supervisors list
 app.get("/api/supervisors", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
   console.log("--- Supervisors API: GET /api/supervisors started ---")
@@ -367,6 +408,8 @@ app.get(
       COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) AS propostas_convertidas,
       COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) AS faturamento_total,
       COALESCE(AVG(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) AS ticket_medio,
+      COALESCE(SUM(CAST(p.total_price AS DECIMAL)), 0) AS valor_total_propostas,
+      COUNT(CASE WHEN s.status = 'suspenso' THEN 1 END) AS vendas_canceladas,
       COALESCE(m.meta_propostas,
         CASE WHEN u.role = 'vendedor' THEN 0
              WHEN u.role = 'representante' THEN 0
@@ -405,7 +448,16 @@ app.get(
         (sum, member) => sum + Number.parseFloat(member.faturamento_total),
         0,
       )
+            const totalValorPropostas = teamMembers.rows.reduce(
+        (sum, member) => sum + Number.parseFloat(member.valor_total_propostas),
+        0,
+      )
+      const totalCanceladas = teamMembers.rows.reduce(
+        (sum, member) => sum + Number.parseInt(member.vendas_canceladas),
+        0,
+      )
       const teamConversionRate = totalPropostas > 0 ? ((totalConvertidas / totalPropostas) * 100).toFixed(2) : 0
+      const ticketMedio = totalConvertidas > 0 ? totalFaturamento / totalConvertidas : 0
 
       // Calculate goal achievement rates
       const totalMetaPropostas = teamMembers.rows.reduce((sum, member) => sum + Number.parseInt(member.meta_propostas), 0)
@@ -460,6 +512,9 @@ app.get(
           totalMembers,
           teamConversionRate: Number.parseFloat(teamConversionRate),
           totalFaturamento,
+          totalValorPropostas,
+          totalCanceladas,
+          ticketMedio,
           goalAchievementRate: Number.parseFloat(goalAchievementRate),
           totalPropostas,
           totalConvertidas,

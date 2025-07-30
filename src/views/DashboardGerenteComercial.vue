@@ -84,7 +84,12 @@
               <div class="ml-5 w-0 flex-1">
                 <dl>
                   <dt class="text-sm font-medium text-gray-500 truncate">Total de Vendas</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">{{ teamPerformance?.teamStats?.totalConvertidas || 0 }}</dd>
+                  <dd class="text-2xl font-semibold text-gray-900">
+                    {{ teamPerformance?.teamStats?.totalConvertidas || 0 }}
+                    <span class="block text-sm font-normal text-gray-500">
+                      {{ formatCurrency(teamPerformance?.teamStats?.totalFaturamento || 0) }}
+                    </span>
+                  </dd>
                 </dl>
               </div>
             </div>
@@ -104,7 +109,12 @@
               <div class="ml-5 w-0 flex-1">
                 <dl>
                   <dt class="text-sm font-medium text-gray-500 truncate">Total de Propostas</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">{{ teamPerformance?.teamStats?.totalPropostas || 0 }}</dd>
+                  <dd class="text-2xl font-semibold text-gray-900">
+                    {{ teamPerformance?.teamStats?.totalPropostas || 0 }}
+                    <span class="block text-sm font-normal text-gray-500">
+                      {{ formatCurrency(teamPerformance?.teamStats?.totalValorPropostas || 0) }}
+                    </span>
+                  </dd>
                 </dl>
               </div>
             </div>
@@ -124,7 +134,95 @@
               <div class="ml-5 w-0 flex-1">
                 <dl>
                   <dt class="text-sm font-medium text-gray-500 truncate">Taxa de Conversão</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">{{ teamPerformance?.teamStats?.teamConversionRate?.toFixed(1) || 0 }}%</dd>
+                  <dd class="text-2xl font-semibold text-gray-900">
+                    {{ teamPerformance?.teamStats?.teamConversionRate?.toFixed(1) || 0 }}%
+                    <span class="block text-sm font-normal text-gray-500">
+                      {{ formatCurrency(teamTicketMedio) }}
+                    </span>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+            <!-- Proposal Metrics -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+      <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="p-5">
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <div class="w-8 h-8 bg-green-600 rounded-md flex items-center justify-center">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            </div>
+            <div class="ml-5 w-0 flex-1">
+              <dl>
+                <dt class="text-sm font-medium text-gray-500 truncate">Propostas Convertidas</dt>
+                <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.convertidas }}</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="p-5">
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <div class="w-8 h-8 bg-yellow-500 rounded-md flex items-center justify-center">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5-6l3 3-3 3" />
+                </svg>
+              </div>
+            </div>
+            <div class="ml-5 w-0 flex-1">
+              <dl>
+                <dt class="text-sm font-medium text-gray-500 truncate">Propostas em Negociação</dt>
+                <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.emNegociacao }}</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="p-5">
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <div class="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2zM7 7h10" />
+                </svg>
+              </div>
+            </div>
+            <div class="ml-5 w-0 flex-1">
+              <dl>
+                <dt class="text-sm font-medium text-gray-500 truncate">Propostas Fechadas</dt>
+                <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.fechadas }}</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+              </div>
+    </div>
+
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+          <div class="p-5">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-8 h-8 bg-red-500 rounded-md flex items-center justify-center">
+                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+              </div>
+              <div class="ml-5 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Pedidos Cancelados</dt>
+                  <dd class="text-2xl font-semibold text-gray-900">{{ teamPerformance?.teamStats?.totalCanceladas || 0 }}</dd>
                 </dl>
               </div>
             </div>
@@ -168,6 +266,7 @@ const teamPerformance = ref(null)
 const teamLeaders = ref([])
 const revenueVsTarget = ref([])
 const revenueBySupervisor = ref([])
+const proposalMetrics = ref({ convertidas: 0, emNegociacao: 0, fechadas: 0 })
 
 const showDetailModal = ref(false)
 const selectedRepresentative = ref(null)
@@ -193,14 +292,16 @@ watch(() => filters.period, (newPeriod) => {
 const applyFilters = async () => {
   loading.value = true
   try {
-    const [perf, revVsTarget, revBySup] = await Promise.all([
+    const [perf, revVsTarget, revBySup, metrics] = await Promise.all([
       performanceService.getTeamPerformance(filters),
       dashboardService.getRevenueVsTarget(filters),
       dashboardService.getRevenueBySupervisor(filters),
+      dashboardService.getProposalMetrics(filters),
     ])
     teamPerformance.value = perf.data
     revenueVsTarget.value = revVsTarget.data
     revenueBySupervisor.value = revBySup.data
+    proposalMetrics.value = metrics.data
   } catch (error) {
     console.error('Erro ao aplicar filtros:', error)
   } finally {
@@ -211,16 +312,18 @@ const applyFilters = async () => {
 const loadInitialData = async () => {
   loading.value = true
   try {
-    const [leaders, perf, revVsTarget, revBySup] = await Promise.all([
+    const [leaders, perf, revVsTarget, revBySup, metrics] = await Promise.all([
       teamLeaderService.getTeamLeaders(),
       performanceService.getTeamPerformance(filters),
       dashboardService.getRevenueVsTarget(filters),
       dashboardService.getRevenueBySupervisor(filters),
+      dashboardService.getProposalMetrics(filters),
     ])
     teamLeaders.value = leaders.data
     teamPerformance.value = perf.data
     revenueVsTarget.value = revVsTarget.data
     revenueBySupervisor.value = revBySup.data
+    proposalMetrics.value = metrics.data  
   } catch (error) {
     console.error('Erro ao carregar dashboard:', error)
   } finally {
@@ -298,6 +401,12 @@ const faturamentoProgress = computed(() => {
   const meta = teamPerformance.value.teamStats.totalMetaFaturamento || 150000
   const atual = teamPerformance.value.teamStats.totalFaturamento || 0
   return (atual / meta) * 100
+})
+
+const teamTicketMedio = computed(() => {
+  const stats = teamPerformance.value?.teamStats
+  if (!stats || !stats.totalConvertidas) return 0
+  return stats.totalFaturamento / stats.totalConvertidas
 })
 
 onMounted(async () => {
