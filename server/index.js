@@ -309,11 +309,22 @@ app.get(
               AND v.created_at BETWEEN $1 AND $2
           ) AS em_negociacao,
           (
-            SELECT COUNT(*)
-            FROM clone_vendas_apprudnik v
-            WHERE v.is_contract_downloaded = true
-              AND v.status <> 'suspenso'
-              AND v.created_at BETWEEN $1 AND $2
+          SELECT COUNT(*)
+          FROM clone_vendas_apprudnik v
+          WHERE v.is_contract_downloaded = true
+            AND v.status NOT IN (
+              'contrato_assinaturas',
+              'contrato_assinaturas_pendentes',
+              'checklist',
+              'checklist_erro',
+              'conferencia_engenharia',
+              'conferencia_financeiro',
+              'conferencia_financeiro_engenharia',
+              'contrato_reprovado',
+              'contrato_preenchimento_contrato',
+              'suspenso'
+            )
+            AND v.created_at BETWEEN $1 AND $2
           ) AS fechadas,
           (
             SELECT COUNT(*)
