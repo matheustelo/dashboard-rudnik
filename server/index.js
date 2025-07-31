@@ -181,7 +181,7 @@ app.get("/api/team-leaders", authenticateToken, authorize("admin", "gerente_come
 app.get(
   "/api/dashboard/revenue-vs-target",
   authenticateToken,
-  authorize("admin", "gerente_comercial"),
+ authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial"),
   async (req, res) => {
     try {
       const { period, startDate, endDate } = req.query
@@ -230,7 +230,7 @@ app.get(
 app.get(
   "/api/dashboard/revenue-by-supervisor",
   authenticateToken,
-  authorize("admin", "gerente_comercial"),
+   authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial"),
   async (req, res) => {
     try {
       const { period, startDate, endDate } = req.query;
@@ -283,7 +283,7 @@ app.get(
 app.get(
   "/api/dashboard/proposal-metrics",
   authenticateToken,
-  authorize("admin", "gerente_comercial"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial"),
   async (req, res) => {
     try {
       const { period, startDate, endDate } = req.query;
@@ -389,7 +389,7 @@ app.get("/api/supervisors", authenticateToken, authorize("admin", "gerente_comer
 app.get(
   "/api/performance/team",
   authenticateToken,
-  authorize("admin", "gerente_comercial"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial"),
   async (req, res) => {
     console.log("--- Performance API: GET /api/performance/team started ---")
     try {
@@ -581,7 +581,7 @@ app.get(
 app.get(
   "/api/performance/representative/:id",
   authenticateToken,
-  authorize("admin", "gerente_comercial"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial"),
   async (req, res) => {
     console.log("--- Performance API: GET /api/performance/representative started ---")
     try {
