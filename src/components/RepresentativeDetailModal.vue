@@ -390,7 +390,9 @@ const originFilteredProposals = computed(() => {
   const list = supervisorFilteredProposals.value
   if (originFilter.value === 'all') return list
   if (originFilter.value === 'converted') {
-    return list.filter((p) => p.status === 'Convertida')
+    return list.filter(
+      (p) => p.status === 'Convertida' && p.saleStatus !== 'suspenso'
+    )
   }
   return list.filter((p) =>
     originFilter.value === 'self' ? p.origin === 'self' : p.origin === 'child'

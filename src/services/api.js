@@ -101,6 +101,7 @@ export const userService = {
   getUsers: () => api.get("/users"),
   getAllUsers: () => api.get("/users"),
   getUserTeam: (id) => api.get(`/users/${id}/team`),
+  getUser: (id) => api.get(`/users/${id}`),
 }
 
 export default api

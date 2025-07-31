@@ -78,28 +78,40 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { goalsService } from '../services/api'
 
 const props = defineProps({
   userId: {
     type: [String, Number],
-    required: true
+    default: null
   },
   period: {
     type: String,
     default: '2025-07'
+      },
+  goals: {
+    type: Array,
+    default: () => []
+  },
+  summary: {
+    type: Object,
+    default: null
   }
 })
 
-const goals = ref([])
-const summary = ref(null)
+const goals = ref(props.goals)
+const summary = ref(props.summary)
 const loading = ref(false)
 
 const loadGoals = async () => {
+  if (!props.userId) return
   loading.value = true
   try {
-    const response = await goalsService.getSellerTracking(props.userId, props.period)
+    const response = await goalsService.getSellerTracking(
+      props.userId,
+      props.period
+    )
     goals.value = response.data.goals
     summary.value = response.data.summary
   } catch (error) {
@@ -135,6 +147,39 @@ const getProgressColor = (progress) => {
 }
 
 onMounted(() => {
-  loadGoals()
+  if (props.goals && props.goals.length) {
+    goals.value = props.goals
+    summary.value = props.summary
+  } else {
+    loadGoals()
+  }
 })
+
+watch(
+  () => [props.userId, props.period],
+  () => {
+    if (!props.goals || props.goals.length === 0) {
+      loadGoals()
+    }
+  }
+)
+
+watch(
+  () => props.goals,
+  (newGoals) => {
+    if (newGoals && newGoals.length) {
+      goals.value = newGoals
+      summary.value = props.summary
+    }
+  }
+)
+
+watch(
+  () => props.summary,
+  (newSummary) => {
+    if (props.goals && props.goals.length) {
+      summary.value = newSummary
+    }
+  }
+)
 </script>

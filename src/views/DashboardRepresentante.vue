@@ -132,7 +132,7 @@
       <div v-else class="space-y-6">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <!-- Goals Chart -->
-          <GoalsChart :goals="goalsData" />
+          <GoalsChart :goals="teamGoals" :summary="teamSummary" />
          
           <!-- Monthly Sales Chart -->
           <div class="bg-white p-6 rounded-lg shadow">
@@ -146,10 +146,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { dashboardService, goalsService } from '../services/api'
+import { dashboardService, goalsService, userService } from '../services/api'
 import BarChart from '../components/BarChart.vue'
 import GoalsChart from '../components/GoalsChart.vue'
 
@@ -159,7 +159,8 @@ const authStore = useAuthStore()
 const loading = ref(true)
 
 const dashboardData = ref(null)
-const goalsData = ref([])
+const goalsData = ref({ goals: [], summary: null })
+const teamSummary = ref(null)
 const periods = ref([])
 
 const selectedPeriod = ref('')
@@ -216,7 +217,12 @@ const loadDashboard = async () => {
     const start = selectedPeriod.value ? undefined : customStart.value || undefined
     const end = selectedPeriod.value ? undefined : customEnd.value || undefined
     const [dashboardResponse, goalsResponse] = await Promise.all([
-      dashboardService.getRepresentanteDashboard(authStore.user.id, periodParam, start, end),
+      dashboardService.getRepresentanteDashboard(
+        authStore.user.id,
+        periodParam,
+        start,
+        end
+      ),
       goalsService.getSellerTracking(authStore.user.id, periodParam, start, end)
     ])
 
@@ -226,6 +232,50 @@ const loadDashboard = async () => {
     console.error('Erro ao carregar dashboard:', error)
   } finally {
     loading.value = false
+  }
+}
+
+const loadTeamGoals = async () => {
+  try {
+    const userRes = await userService.getUser(authStore.user.id)
+    const sup =
+      userRes.data.supervisor ||
+      (Array.isArray(userRes.data.supervisors) && userRes.data.supervisors.length
+        ? userRes.data.supervisors[0].id || userRes.data.supervisors[0]
+        : null)
+
+    if (!sup) {
+      teamGoals.value = []
+      teamSummary.value = null
+      return
+    }
+
+    const params = {}
+    if (selectedPeriod.value) params.period = selectedPeriod.value
+    else {
+      if (customStart.value) params.startDate = customStart.value
+      if (customEnd.value) params.endDate = customEnd.value
+    }
+
+    const { data } = await goalsService.getTeamGoals(sup, params)
+    teamGoals.value = Array.isArray(data) ? data : []
+    const totalTarget = teamGoals.value.reduce(
+      (s, g) => s + parseFloat(g.valor_meta),
+      0
+    )
+    const totalAchieved = teamGoals.value.reduce(
+      (s, g) => s + (g.achieved || 0),
+      0
+    )
+    teamSummary.value = {
+      target: totalTarget,
+      achieved: totalAchieved,
+      progress: totalTarget > 0 ? (totalAchieved / totalTarget) * 100 : 0,
+    }
+  } catch (error) {
+    console.error('Erro ao carregar metas da equipe:', error)
+    teamGoals.value = []
+    teamSummary.value = null
   }
 }
 
@@ -259,10 +309,18 @@ const formatPeriodLabel = (p) => {
   return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
 }
 
+watch(
+  [selectedPeriod, customStart, customEnd],
+  () => {
+    loadDashboard()
+  }
+)
+
 onMounted(async () => {
   authStore.initializeAuth()
   await loadPeriods()
   loadDashboard()
+  loadTeamGoals()
 })
 </script>
 <style>
