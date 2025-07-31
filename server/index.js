@@ -1488,7 +1488,7 @@ app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) =>
 app.get(
   "/api/goals/team/:id",
   authenticateToken,
-  authorize("admin", "gerente_comercial"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial"),
   async (req, res) => {
     console.log("--- Goals API: GET /api/goals/team/:id started ---")
     try {
