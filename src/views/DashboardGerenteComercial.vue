@@ -190,8 +190,7 @@
                 <div class="flex-shrink-0">
                   <div class="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
                     <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M8 9l3 3-3 3m5-6l3 3-3 3" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5-6l3 3-3 3" />
                     </svg>
                   </div>
                 </div>

@@ -102,8 +102,24 @@ async function getTeamMembers(leaderId) {
   const leaderResult = await pool.query(leaderQuery, [leaderId])
   if (leaderResult.rows.length === 0) return []
 
-  const children = parseJsonField(leaderResult.rows[0].children)
-  if (!children || children.length === 0) return []
+  let children = parseJsonField(leaderResult.rows[0].children)
+
+  // Fallback to supervisor relationship if no children defined
+  if (!children || children.length === 0) {
+    const fallbackQuery = `
+      SELECT id, name, email, role
+      FROM clone_users_apprudnik
+      WHERE is_active = true
+        AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements(supervisors) sup
+          WHERE (sup->>'id')::int = $1
+        )
+      ORDER BY name
+    `
+    const result = await pool.query(fallbackQuery, [leaderId])
+    return result.rows
+  }
+
   const childIds = children.map((c) => c.id)
 
   const teamQuery = `
@@ -286,65 +302,95 @@ app.get(
   authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial"),
   async (req, res) => {
     try {
-      const { period, startDate, endDate } = req.query;
+      const { period, startDate, endDate, supervisorId, supervisor } = req.query;
+      const leader = supervisorId || supervisor;
       const { startDate: dateStart, endDate: dateEnd } = getDateRange(
         period,
         startDate,
         endDate,
       );
 
+      let supervisorFilter = "";
+      const queryParams = [dateStart, dateEnd];
+
+      if (leader && leader !== "all") {
+        const teamIds = await getTeamHierarchyIds(leader);
+        if (teamIds.length > 0) {
+          supervisorFilter = "AND u.id = ANY($3)";
+          queryParams.push(teamIds);
+        } else {
+          supervisorFilter =
+            "AND EXISTS (SELECT 1 FROM jsonb_array_elements(u.supervisors::jsonb) elem WHERE (elem->>'id')::bigint = $3)";
+          queryParams.push(leader);
+        }
+      }
+
       const metricsQuery = `
+        WITH usuarios_filtrados AS (
+          SELECT u.id
+          FROM clone_users_apprudnik u
+          WHERE u.is_active = true
+            AND u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium')
+            ${supervisorFilter}
+        )
         SELECT
           (
             SELECT COUNT(*)
             FROM clone_propostas_apprudnik p
             WHERE p.has_generated_sale = true
               AND p.created_at BETWEEN $1 AND $2
+              AND p.seller IN (SELECT id FROM usuarios_filtrados)
           ) AS convertidas,
           (
-          SELECT COUNT(*)
-          FROM clone_vendas_apprudnik v
-          WHERE (v.is_contract_downloaded = false OR v.is_contract_downloaded IS NULL)
-            AND v.status IN (
-              'contrato_assinaturas',
-              'contrato_assinaturas_pendentes',
-              'checklist',
-              'checklist_erro',
-              'conferencia_engenharia',
-              'conferencia_financeiro',
-              'conferencia_financeiro_engenharia',
-              'contrato_reprovado',
-              'contrato_preenchimento_contrato'
-            )
-            AND v.created_at BETWEEN $1 AND $2
+            SELECT COUNT(*)
+            FROM clone_vendas_apprudnik v
+            JOIN clone_propostas_apprudnik p ON p.id = v.code
+            WHERE (v.is_contract_downloaded = false OR v.is_contract_downloaded IS NULL)
+              AND v.status IN (
+                'contrato_assinaturas',
+                'contrato_assinaturas_pendentes',
+                'checklist',
+                'checklist_erro',
+                'conferencia_engenharia',
+                'conferencia_financeiro',
+                'conferencia_financeiro_engenharia',
+                'contrato_reprovado',
+                'contrato_preenchimento_contrato'
+              )
+              AND v.created_at BETWEEN $1 AND $2
+              AND p.seller IN (SELECT id FROM usuarios_filtrados)
           ) AS em_negociacao,
           (
-          SELECT COUNT(*)
-          FROM clone_vendas_apprudnik v
-          WHERE v.is_contract_downloaded = true
-            AND v.status NOT IN (
-              'contrato_assinaturas',
-              'contrato_assinaturas_pendentes',
-              'checklist',
-              'checklist_erro',
-              'conferencia_engenharia',
-              'conferencia_financeiro',
-              'conferencia_financeiro_engenharia',
-              'contrato_reprovado',
-              'contrato_preenchimento_contrato',
-              'suspenso'
-            )
-            AND v.created_at BETWEEN $1 AND $2
+            SELECT COUNT(*)
+            FROM clone_vendas_apprudnik v
+            JOIN clone_propostas_apprudnik p ON p.id = v.code
+            WHERE v.is_contract_downloaded = true
+              AND v.status NOT IN (
+                'contrato_assinaturas',
+                'contrato_assinaturas_pendentes',
+                'checklist',
+                'checklist_erro',
+                'conferencia_engenharia',
+                'conferencia_financeiro',
+                'conferencia_financeiro_engenharia',
+                'contrato_reprovado',
+                'contrato_preenchimento_contrato',
+                'suspenso'
+              )
+              AND v.created_at BETWEEN $1 AND $2
+              AND p.seller IN (SELECT id FROM usuarios_filtrados)
           ) AS fechadas,
           (
             SELECT COUNT(*)
             FROM clone_vendas_apprudnik v
+            JOIN clone_propostas_apprudnik p ON p.id = v.code
             WHERE v.status = 'suspenso'
               AND v.created_at BETWEEN $1 AND $2
+              AND p.seller IN (SELECT id FROM usuarios_filtrados)
           ) AS canceladas
       `;
 
-      const { rows } = await pool.query(metricsQuery, [dateStart, dateEnd]);
+      const { rows } = await pool.query(metricsQuery, queryParams);
 
       res.json({
         convertidas: parseInt(rows[0].convertidas, 10),
@@ -1792,12 +1838,15 @@ app.get("/api/dashboard/supervisor/:id", authenticateToken, async (req, res) => 
       return res.status(403).json({ message: "Access denied" })
     }
 
-    const teamQuery = `
-      SELECT id, name FROM clone_users_apprudnik 
-      WHERE supervisor = $1 AND is_active = true
-    `
-    const vendedores = await pool.query(teamQuery, [id])
-    const vendedorIds = vendedores.rows.map((v) => v.id)
+    // Resolve team using hierarchy helpers
+    const vendedorIds = await getTeamHierarchyIds(id)
+
+    const vendedores = vendedorIds.length
+      ? await pool.query(
+          `SELECT id, name FROM clone_users_apprudnik WHERE id = ANY($1)`,
+          [vendedorIds],
+        )
+      : { rows: [] }
 
     if (vendedorIds.length === 0) {
       return res.json({
