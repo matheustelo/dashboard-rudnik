@@ -12,7 +12,7 @@
 
         <main class="max-w-7xl mx-auto p-4">
             <div class="bg-white p-4 rounded shadow mb-4 flex flex-wrap items-end gap-2">
-                <div>
+                <div v-if="showLeaderSelect">
                     <label class="text-sm text-gray-700">Equipe</label>
                     <select v-model="filters.leader" class="border border-gray-300 rounded px-2 py-1 text-sm">
                         <option value="">Selecione</option>
@@ -110,17 +110,29 @@ const loading = ref(false)
 
 const authStore = useAuthStore()
 
+const isSupervisorRole = computed(() => {
+    const role = authStore.user?.role
+    return role === 'supervisor' || role === 'parceiro_comercial'
+})
+
 const dashboardPath = computed(() => {
   const role = authStore.user?.role
-  return `/dashboard/${role}` 
+  return `/dashboard/${role}`
 })
 
 const filters = ref({ leader: '', status: '', start: '', end: '' })
 
 const fetchLeaders = async () => {
-    const { data } = await teamLeaderService.getTeamLeaders()
-    teamLeaders.value = Array.isArray(data) ? data : []
+    if (isSupervisorRole.value) {
+        teamLeaders.value = [{ id: authStore.user.id, name: authStore.user.name }]
+        filters.value.leader = authStore.user.id
+    } else {
+        const { data } = await teamLeaderService.getTeamLeaders()
+        teamLeaders.value = Array.isArray(data) ? data : []
+    }
 }
+
+const showLeaderSelect = computed(() => !isSupervisorRole.value)
 
 const fetchGoals = async () => {
     if (!filters.value.leader) return

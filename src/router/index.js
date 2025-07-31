@@ -3,6 +3,7 @@ import { useAuthStore } from "../stores/auth"
 import Login from "../views/Login.vue"
 import DashboardVendedor from "../views/DashboardVendedor.vue"
 import DashboardSupervisor from "../views/DashboardSupervisor.vue"
+import DashboardParceiroComercial from "../views/DashboardParceiroComercial.vue"
 import DashboardGerenteComercial from "../views/DashboardGerenteComercial.vue"
 import DashboardRepresentante from "../views/DashboardRepresentante.vue"
 import DashboardMetas from "../views/DashboardMetas.vue"
@@ -37,6 +38,12 @@ const routes = [
     meta: { requiresAuth: true, role: "supervisor" },
   },
   {
+    path: "/dashboard/parceiro_comercial",
+    name: "DashboardParceiroComercial",
+    component: DashboardParceiroComercial,
+    meta: { requiresAuth: true, role: "parceiro_comercial" },
+  },
+  {
     path: "/dashboard/gerente_comercial",
     name: "DashboardGerenteComercial",
     component: DashboardGerenteComercial,
@@ -58,7 +65,7 @@ const routes = [
     path: "/dashboard/team-goals-history",
     name: "TeamGoalsHistory",
     component: TeamGoalsHistory,
-    meta: { requiresAuth: true, roles: ["admin", "gerente_comercial"] },
+    meta: { requiresAuth: true, roles: ["admin", "gerente_comercial", "supervisor", "parceiro_comercial"] }
   },
 ]
 

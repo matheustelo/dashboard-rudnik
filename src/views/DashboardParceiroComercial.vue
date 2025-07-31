@@ -5,7 +5,7 @@
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between items-center py-6">
           <div>
-            <h1 class="text-3xl font-bold text-gray-900">Dashboard Supervisor</h1>
+            <h1 class="text-3xl font-bold text-gray-900">Dashboard Parceiro Comercial</h1>
             <p class="text-gray-600">Bem-vindo, {{ authStore.user?.name }}</p>
           </div>
           <div class="flex items-center space-x-4">
