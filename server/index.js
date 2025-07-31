@@ -304,8 +304,7 @@ app.get(
           (
           SELECT COUNT(*)
           FROM clone_vendas_apprudnik v
-          WHERE (v.is_contract_downloaded = false OR v.is_contract_downloaded IS NULL)
-            AND v.status IN (
+          WHERE v.status IN (
               'contrato_assinaturas',
               'contrato_assinaturas_pendentes',
               'checklist',
@@ -321,8 +320,7 @@ app.get(
           (
           SELECT COUNT(*)
           FROM clone_vendas_apprudnik v
-          WHERE v.is_contract_downloaded = true
-            AND v.status NOT IN (
+          WHERE v.status NOT IN (
               'contrato_assinaturas',
               'contrato_assinaturas_pendentes',
               'checklist',
