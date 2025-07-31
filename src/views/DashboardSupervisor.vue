@@ -4,7 +4,7 @@
       <div class="custom-max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between items-center py-6">
           <div>
-            <h1 class="text-3xl font-bold text-gray-900">Dashboard Supervisor</h1>
+            <h1 class="text-3xl font-bold text-gray-900">{{ dashboardTitle }}</h1>
             <p class="text-gray-600">Bem-vindo, {{ authStore.user?.name }}</p>
           </div>
           <div class="flex items-center space-x-4">
@@ -276,6 +276,12 @@ import BarChart from '../components/BarChart.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+const dashboardTitle = computed(() =>
+  authStore.user?.role === 'parceiro_comercial'
+    ? 'Dashboard Parceiro Comercial'
+    : 'Dashboard Supervisor',
+)
 
 const loading = ref(true)
 const teamPerformance = ref(null)
