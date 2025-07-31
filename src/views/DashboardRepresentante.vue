@@ -21,12 +21,6 @@
       <div class="bg-white shadow rounded-lg p-4 mb-6 flex items-center justify-between space-x-4">
         <div class="flex items-center space-x-4">
           <h3 class="text-md font-medium text-gray-700">Filtros:</h3>
-          <select v-model="filters.supervisorId" @change="applyFilters"
-            class="border border-gray-300 rounded-md px-3 py-2 text-sm">
-            <option value="all">Todos os Líderes</option>
-            <option v-for="leader in teamLeaders" :key="leader.id" :value="leader.id">{{ leader.name }} ({{ leader.role
-            }})</option>
-          </select>
           <select v-model="filters.period" @change="applyFilters"
             class="border border-gray-300 rounded-md px-3 py-2 text-sm">
             <option v-for="p in periods" :key="p" :value="p">
@@ -273,7 +267,7 @@
 import { ref, onMounted, reactive, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { dashboardService, performanceService, teamLeaderService, goalsService } from '../services/api'
+import { dashboardService, performanceService, goalsService } from '../services/api'
 import PerformanceTable from '../components/PerformanceTable.vue'
 import RepresentativeDetailModal from '../components/RepresentativeDetailModal.vue'
 import LineChart from '../components/LineChart.vue'
@@ -284,7 +278,6 @@ const authStore = useAuthStore()
 
 const loading = ref(true)
 const teamPerformance = ref(null)
-const teamLeaders = ref([])
 const revenueVsTarget = ref([])
 const revenueBySupervisor = ref([])
 const proposalMetrics = ref({
@@ -305,7 +298,7 @@ const filters = reactive({
   period: '',
   startDate: '',
   endDate: '',
-  supervisorId: 'all',
+  supervisorId: authStore.user?.id || null,
 })
 
 watch(() => filters.period, (newPeriod) => {
@@ -338,14 +331,12 @@ const applyFilters = async () => {
 const loadInitialData = async () => {
   loading.value = true
   try {
-    const [leaders, perf, revVsTarget, revBySup, metrics] = await Promise.all([
-      teamLeaderService.getTeamLeaders(),
+    const [perf, revVsTarget, revBySup, metrics] = await Promise.all([
       performanceService.getTeamPerformance(filters),
       dashboardService.getRevenueVsTarget(filters),
       dashboardService.getRevenueBySupervisor(filters),
       dashboardService.getProposalMetrics(filters),
     ])
-    teamLeaders.value = leaders.data
     teamPerformance.value = perf.data
     revenueVsTarget.value = revVsTarget.data
     revenueBySupervisor.value = revBySup.data
@@ -438,6 +429,7 @@ const teamTicketMedio = computed(() => {
 
 onMounted(async () => {
   authStore.initializeAuth()
+  filters.supervisorId = authStore.user.id
   await loadPeriods()
   loadInitialData()
 })
