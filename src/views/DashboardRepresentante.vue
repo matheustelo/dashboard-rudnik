@@ -217,7 +217,7 @@
             </div>
           </div>
         </div>
-        
+
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <!-- Goals Chart -->
           <GoalsChart :goals="teamGoals" :summary="teamSummary" />
@@ -289,6 +289,7 @@ const loading = ref(true)
 const dashboardData = ref(null)
 const goalsData = ref({ goals: [], summary: null })
 const teamSummary = ref(null)
+const teamGoals = ref([])
 const periods = ref([])
 
 const selectedPeriod = ref('')
@@ -500,6 +501,7 @@ watch(
   [selectedPeriod, customStart, customEnd],
   () => {
     loadDashboard()
+    loadTeamGoals()
     loadProposalMetrics()
     loadProposals()
   }
