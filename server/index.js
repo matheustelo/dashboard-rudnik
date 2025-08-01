@@ -1617,6 +1617,8 @@ app.get("/api/users/:id", authenticateToken, async (req, res) => {
       "gestor",
       "supervisor",
       "parceiro_comercial",
+      "representante_premium",
+      "representante",
     ]
 
     if (!allowedRoles.includes(req.user.role) && req.user.id !== Number(id)) {
@@ -1819,10 +1821,6 @@ app.get("/api/dashboard/representante/:id", authenticateToken, async (req, res) 
     const { period, startDate: start, endDate: end } = req.query
 
     const { startDate, endDate } = getDateRange(period, start, end)
-
-    if (req.user.role === "representante" && req.user.id !== Number.parseInt(id)) {
-      return res.status(403).json({ message: "Access denied" })
-    }
 
     const proposalsQuery = `
   SELECT 
