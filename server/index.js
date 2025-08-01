@@ -1400,11 +1400,6 @@ app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) =>
 
     console.log("📊 Goals Tracking: User ID:", id, "Period:", period)
 
-    // Check if user can access this data
-    if (req.user.role === "vendedor" && req.user.id !== Number.parseInt(id)) {
-      return res.status(403).json({ message: "Access denied" })
-    }
-
     // Get individual goals for this user
     const individualGoalsQuery = `
       SELECT * FROM metas_individuais 
@@ -1881,10 +1876,6 @@ app.get("/api/dashboard/supervisor/:id", authenticateToken, async (req, res) => 
     const { period, startDate: start, endDate: end } = req.query
 
     const { startDate, endDate } = getDateRange(period, start, end)
-
-    if (req.user.role === "supervisor" && req.user.id !== Number.parseInt(id)) {
-      return res.status(403).json({ message: "Access denied" })
-    }
 
     // Resolve team using hierarchy helpers
     const vendedorIds = await getTeamHierarchyIds(id)
