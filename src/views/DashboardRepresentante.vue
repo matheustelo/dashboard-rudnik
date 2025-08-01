@@ -362,7 +362,30 @@ const loadDashboard = async () => {
     ])
 
     dashboardData.value = dashboardResponse.data
-    goalsData.value = goalsResponse.data
+    
+        const userGoals = Array.isArray(goalsResponse.data.goals)
+      ? goalsResponse.data.goals.filter(
+          g => g.isIndividual || g.usuario_id === authStore.user.id
+        )
+      : []
+
+    const targetSum = userGoals.reduce(
+      (sum, g) => sum + parseFloat(g.valor_meta || 0),
+      0
+    )
+    const achievedSum = userGoals.reduce(
+      (sum, g) => sum + parseFloat(g.achieved || 0),
+      0
+    )
+
+    goalsData.value = {
+      goals: userGoals,
+      summary: {
+        target: targetSum,
+        achieved: achievedSum,
+        progress: targetSum > 0 ? (achievedSum / targetSum) * 100 : 0
+      }
+    }
   } catch (error) {
     console.error('Erro ao carregar dashboard:', error)
   } finally {
