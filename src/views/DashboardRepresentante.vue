@@ -220,7 +220,7 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <!-- Goals Chart -->
-          <GoalsChart :goals="teamGoals" :summary="teamSummary" />
+           <GoalsChart :goals="goalsData.goals" :summary="goalsData.summary" />
 
           <!-- Monthly Sales Chart -->
           <div class="bg-white p-6 rounded-lg shadow">
@@ -277,7 +277,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { dashboardService, goalsService, userService, performanceService } from '../services/api'
+import { dashboardService, goalsService, performanceService } from '../services/api'
 import BarChart from '../components/BarChart.vue'
 import GoalsChart from '../components/GoalsChart.vue'
 
@@ -288,8 +288,6 @@ const loading = ref(true)
 
 const dashboardData = ref(null)
 const goalsData = ref({ goals: [], summary: null })
-const teamSummary = ref(null)
-const teamGoals = ref([])
 const periods = ref([])
 
 const selectedPeriod = ref('')
@@ -407,50 +405,6 @@ const loadProposals = async () => {
   }
 }
 
-const loadTeamGoals = async () => {
-  try {
-    const userRes = await userService.getUser(authStore.user.id)
-    const sup =
-      userRes.data.supervisor ||
-      (Array.isArray(userRes.data.supervisors) && userRes.data.supervisors.length
-        ? userRes.data.supervisors[0].id || userRes.data.supervisors[0]
-        : null)
-
-    if (!sup) {
-      teamGoals.value = []
-      teamSummary.value = null
-      return
-    }
-
-    const params = {}
-    if (selectedPeriod.value) params.period = selectedPeriod.value
-    else {
-      if (customStart.value) params.startDate = customStart.value
-      if (customEnd.value) params.endDate = customEnd.value
-    }
-
-    const { data } = await goalsService.getTeamGoals(sup, params)
-    teamGoals.value = Array.isArray(data) ? data : []
-    const totalTarget = teamGoals.value.reduce(
-      (s, g) => s + parseFloat(g.valor_meta),
-      0
-    )
-    const totalAchieved = teamGoals.value.reduce(
-      (s, g) => s + (g.achieved || 0),
-      0
-    )
-    teamSummary.value = {
-      target: totalTarget,
-      achieved: totalAchieved,
-      progress: totalTarget > 0 ? (totalAchieved / totalTarget) * 100 : 0,
-    }
-  } catch (error) {
-    console.error('Erro ao carregar metas da equipe:', error)
-    teamGoals.value = []
-    teamSummary.value = null
-  }
-}
-
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('pt-BR', {
     minimumFractionDigits: 2,
@@ -501,7 +455,6 @@ watch(
   [selectedPeriod, customStart, customEnd],
   () => {
     loadDashboard()
-    loadTeamGoals()
     loadProposalMetrics()
     loadProposals()
   }
@@ -511,7 +464,6 @@ onMounted(async () => {
   authStore.initializeAuth()
   await loadPeriods()
   loadDashboard()
-  loadTeamGoals()
   loadProposalMetrics()
   loadProposals()
 })
