@@ -21,7 +21,7 @@ const routes = [
   {
     path: "/dashboard/vendedor",
     name: "DashboardVendedor",
-    component: DashboardVendedor,
+    component: DashboardRepresentante,
     meta: { requiresAuth: true, role: "vendedor" },
   },
   {
@@ -35,6 +35,12 @@ const routes = [
     name: "DashboardSupervisor",
     component: DashboardSupervisor,
     meta: { requiresAuth: true, role: "supervisor" },
+  },
+  {
+    path: "/dashboard/parceiro_comercial",
+    name: "DashboardParceiroComercial",
+    component: DashboardSupervisor,
+    meta: { requiresAuth: true, role: "parceiro_comercial" },
   },
   {
     path: "/dashboard/gerente_comercial",
@@ -58,7 +64,7 @@ const routes = [
     path: "/dashboard/team-goals-history",
     name: "TeamGoalsHistory",
     component: TeamGoalsHistory,
-    meta: { requiresAuth: true, roles: ["admin", "gerente_comercial"] },
+    meta: { requiresAuth: true, roles: ["admin", "gerente_comercial", "supervisor", "parceiro_comercial"] }
   },
 ]
 

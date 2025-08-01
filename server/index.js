@@ -102,8 +102,24 @@ async function getTeamMembers(leaderId) {
   const leaderResult = await pool.query(leaderQuery, [leaderId])
   if (leaderResult.rows.length === 0) return []
 
-  const children = parseJsonField(leaderResult.rows[0].children)
-  if (!children || children.length === 0) return []
+  let children = parseJsonField(leaderResult.rows[0].children)
+
+  // Fallback to supervisor relationship if no children defined
+  if (!children || children.length === 0) {
+    const fallbackQuery = `
+      SELECT id, name, email, role
+      FROM clone_users_apprudnik
+      WHERE is_active = true
+        AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements(supervisors) sup
+          WHERE (sup->>'id')::int = $1
+        )
+      ORDER BY name
+    `
+    const result = await pool.query(fallbackQuery, [leaderId])
+    return result.rows
+  }
+
   const childIds = children.map((c) => c.id)
 
   const teamQuery = `
@@ -181,7 +197,7 @@ app.get("/api/team-leaders", authenticateToken, authorize("admin", "gerente_come
 app.get(
   "/api/dashboard/revenue-vs-target",
   authenticateToken,
-  authorize("admin", "gerente_comercial"),
+ authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial"),
   async (req, res) => {
     try {
       const { period, startDate, endDate } = req.query
@@ -230,7 +246,7 @@ app.get(
 app.get(
   "/api/dashboard/revenue-by-supervisor",
   authenticateToken,
-  authorize("admin", "gerente_comercial"),
+   authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial"),
   async (req, res) => {
     try {
       const { period, startDate, endDate } = req.query;
@@ -283,28 +299,56 @@ app.get(
 app.get(
   "/api/dashboard/proposal-metrics",
   authenticateToken,
-  authorize("admin", "gerente_comercial"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor"),
   async (req, res) => {
     try {
-      const { period, startDate, endDate } = req.query;
+      const { period, startDate, endDate, supervisorId, supervisor, sellerId } = req.query;
+      const leader = supervisorId || supervisor;
       const { startDate: dateStart, endDate: dateEnd } = getDateRange(
         period,
         startDate,
         endDate,
       );
 
+      let supervisorFilter = "";
+      const queryParams = [dateStart, dateEnd];
+
+      if (sellerId) {
+        supervisorFilter = "AND u.id = $3";
+        queryParams.push(sellerId);
+      } else if (leader && leader !== "all") {
+        const teamIds = await getTeamHierarchyIds(leader);
+        if (teamIds.length > 0) {
+          supervisorFilter = "AND u.id = ANY($3)";
+          queryParams.push(teamIds);
+        } else {
+          supervisorFilter =
+            "AND EXISTS (SELECT 1 FROM jsonb_array_elements(u.supervisors::jsonb) elem WHERE (elem->>'id')::bigint = $3)";
+          queryParams.push(leader);
+        }
+      }
+
       const metricsQuery = `
+        WITH usuarios_filtrados AS (
+          SELECT u.id
+          FROM clone_users_apprudnik u
+          WHERE u.is_active = true
+            AND u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium')
+            ${supervisorFilter}
+        )
         SELECT
           (
             SELECT COUNT(*)
             FROM clone_propostas_apprudnik p
             WHERE p.has_generated_sale = true
               AND p.created_at BETWEEN $1 AND $2
+              AND p.seller IN (SELECT id FROM usuarios_filtrados)
           ) AS convertidas,
           (
           SELECT COUNT(*)
           FROM clone_vendas_apprudnik v
-          WHERE v.status IN (
+          WHERE (v.is_contract_downloaded = false OR v.is_contract_downloaded IS NULL)
+            AND v.status IN (
               'contrato_assinaturas',
               'contrato_assinaturas_pendentes',
               'checklist',
@@ -320,7 +364,8 @@ app.get(
           (
           SELECT COUNT(*)
           FROM clone_vendas_apprudnik v
-          WHERE v.status NOT IN (
+          WHERE v.is_contract_downloaded = true
+            AND v.status NOT IN (
               'contrato_assinaturas',
               'contrato_assinaturas_pendentes',
               'checklist',
@@ -337,18 +382,29 @@ app.get(
           (
             SELECT COUNT(*)
             FROM clone_vendas_apprudnik v
+            JOIN clone_propostas_apprudnik p ON p.id = v.code
             WHERE v.status = 'suspenso'
               AND v.created_at BETWEEN $1 AND $2
-          ) AS canceladas
+              AND p.seller IN (SELECT id FROM usuarios_filtrados)
+          ) AS canceladas,
+          (
+            SELECT COALESCE(SUM(CAST(p.total_price AS DECIMAL)), 0)
+            FROM clone_vendas_apprudnik v
+            JOIN clone_propostas_apprudnik p ON p.id = v.code
+            WHERE v.status = 'suspenso'
+              AND v.created_at BETWEEN $1 AND $2
+              AND p.seller IN (SELECT id FROM usuarios_filtrados)
+          ) AS valor_canceladas
       `;
 
-      const { rows } = await pool.query(metricsQuery, [dateStart, dateEnd]);
+      const { rows } = await pool.query(metricsQuery, queryParams);
 
       res.json({
         convertidas: parseInt(rows[0].convertidas, 10),
         emNegociacao: parseInt(rows[0].em_negociacao, 10),
         fechadas: parseInt(rows[0].fechadas, 10),
         canceladas: parseInt(rows[0].canceladas, 10),
+        valorCanceladas: parseFloat(rows[0].valor_canceladas),
       });
     } catch (error) {
       console.error("❌ Error fetching proposal metrics:", error);
@@ -387,7 +443,7 @@ app.get("/api/supervisors", authenticateToken, authorize("admin", "gerente_comer
 app.get(
   "/api/performance/team",
   authenticateToken,
-  authorize("admin", "gerente_comercial"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial"),
   async (req, res) => {
     console.log("--- Performance API: GET /api/performance/team started ---")
     try {
@@ -576,10 +632,8 @@ app.get(
   })
 
 // Get detailed representative performance (drill-down)
-app.get(
-  "/api/performance/representative/:id",
-  authenticateToken,
-  authorize("admin", "gerente_comercial"),
+app.get("/api/performance/representative/:id", authenticateToken,
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor"),
   async (req, res) => {
     console.log("--- Performance API: GET /api/performance/representative started ---")
     try {
@@ -1351,11 +1405,6 @@ app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) =>
 
     console.log("📊 Goals Tracking: User ID:", id, "Period:", period)
 
-    // Check if user can access this data
-    if (req.user.role === "vendedor" && req.user.id !== Number.parseInt(id)) {
-      return res.status(403).json({ message: "Access denied" })
-    }
-
     // Get individual goals for this user
     const individualGoalsQuery = `
       SELECT * FROM metas_individuais 
@@ -1440,7 +1489,7 @@ app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) =>
 app.get(
   "/api/goals/team/:id",
   authenticateToken,
-  authorize("admin", "gerente_comercial"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor"),
   async (req, res) => {
     console.log("--- Goals API: GET /api/goals/team/:id started ---")
     try {
@@ -1557,6 +1606,62 @@ app.get("/api/users", authenticateToken, authorize("admin", "gerente_comercial")
   }
 })
 
+// Get user by ID with hierarchy information
+app.get("/api/users/:id", authenticateToken, async (req, res) => {
+  console.log("--- Users API: GET /api/users/:id started ---")
+  try {
+    const { id } = req.params
+
+    const allowedRoles = [
+      "admin",
+      "gerente_comercial",
+      "gestor",
+      "supervisor",
+      "parceiro_comercial",
+      "representante_premium",
+      "representante",
+      "vendedor"
+    ]
+
+    if (!allowedRoles.includes(req.user.role) && req.user.id !== Number(id)) {
+      return res.status(403).json({ message: "Insufficient permissions" })
+    }
+
+    const userQuery = `
+      SELECT id, name, email, role, supervisor, supervisors, children, is_active, created_at
+      FROM clone_users_apprudnik
+      WHERE id = $1
+    `
+
+    const result = await pool.query(userQuery, [id])
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "Usuário não encontrado",
+        error: "USER_NOT_FOUND",
+      })
+    }
+
+    const user = result.rows[0]
+    const enhancedUser = {
+      ...user,
+      supervisors: parseJsonField(user.supervisors),
+      children: parseJsonField(user.children),
+      has_team: parseJsonField(user.children).length > 0,
+      team_members_count: parseJsonField(user.children).length,
+    }
+
+    console.log("✅ Users: Fetched user:", enhancedUser.name)
+    res.json(enhancedUser)
+  } catch (error) {
+    console.error("❌ Users: Error fetching user:", error.message)
+    res.status(500).json({
+      message: "Erro ao buscar usuário",
+      error: error.message,
+    })
+  }
+})
+
 // Get user's team (for supervisors)
 app.get("/api/users/:id/team", authenticateToken, async (req, res) => {
   console.log("--- Users API: GET /api/users/:id/team started ---")
@@ -1646,11 +1751,6 @@ app.get("/api/dashboard/vendedor/:id", authenticateToken, async (req, res) => {
     const { startDate, endDate } = getDateRange(period, start, end)
     console.log("📅 Date range:", { startDate, endDate })
 
-    // Check if user can access this data
-    if (req.user.role === "vendedor" && req.user.id !== Number.parseInt(id)) {
-      return res.status(403).json({ message: "Access denied" })
-    }
-
     // Get proposals data
     const proposalsQuery = `
       SELECT
@@ -1719,10 +1819,6 @@ app.get("/api/dashboard/representante/:id", authenticateToken, async (req, res) 
 
     const { startDate, endDate } = getDateRange(period, start, end)
 
-    if (req.user.role === "representante" && req.user.id !== Number.parseInt(id)) {
-      return res.status(403).json({ message: "Access denied" })
-    }
-
     const proposalsQuery = `
   SELECT 
     COUNT(*) as total, 
@@ -1786,16 +1882,15 @@ app.get("/api/dashboard/supervisor/:id", authenticateToken, async (req, res) => 
 
     const { startDate, endDate } = getDateRange(period, start, end)
 
-    if (req.user.role === "supervisor" && req.user.id !== Number.parseInt(id)) {
-      return res.status(403).json({ message: "Access denied" })
-    }
+    // Resolve team using hierarchy helpers
+    const vendedorIds = await getTeamHierarchyIds(id)
 
-    const teamQuery = `
-      SELECT id, name FROM clone_users_apprudnik 
-      WHERE supervisor = $1 AND is_active = true
-    `
-    const vendedores = await pool.query(teamQuery, [id])
-    const vendedorIds = vendedores.rows.map((v) => v.id)
+    const vendedores = vendedorIds.length
+      ? await pool.query(
+          `SELECT id, name FROM clone_users_apprudnik WHERE id = ANY($1)`,
+          [vendedorIds],
+        )
+      : { rows: [] }
 
     if (vendedorIds.length === 0) {
       return res.json({

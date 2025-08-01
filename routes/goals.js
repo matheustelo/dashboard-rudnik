@@ -633,7 +633,11 @@ router.get("/tracking/seller/:id", authenticateToken, async (req, res) => {
     }
 
     // Check permissions
-    if (req.user.role !== "admin" && req.user.role !== "gerente_comercial" && req.user.id !== sellerId) {
+    const currentUserId = Number(req.user.id)
+
+    if (req.user.role !== "admin" &&
+        req.user.role !== "gerente_comercial" &&
+        currentUserId !== sellerId) {
       return res.status(403).json({
         message: "Acesso negado",
         error: "ACCESS_DENIED",

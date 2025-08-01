@@ -1,279 +1,350 @@
 <template>
   <div class="min-h-screen bg-gray-50">
-    <!-- Header -->
     <header class="bg-white shadow">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="custom-max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between items-center py-6">
           <div>
-            <h1 class="text-3xl font-bold text-gray-900">Dashboard Supervisor</h1>
+            <h1 class="text-3xl font-bold text-gray-900">{{ dashboardTitle }}</h1>
             <p class="text-gray-600">Bem-vindo, {{ authStore.user?.name }}</p>
           </div>
           <div class="flex items-center space-x-4">
-            <Navbar />
-            <select
-              v-model="selectedPeriod"
-              @change="loadDashboard"
-              class="border border-gray-300 rounded-md px-3 py-2"
-            >
-              <option v-for="p in periods" :key="p" :value="p">
-                {{ formatPeriodLabel(p) }}
-              </option>
-              <option value="">Período Personalizado</option>
-            </select>
-            <input
-              type="date"
-              v-model="customStart"
-              :disabled="selectedPeriod"
-              class="border border-gray-300 rounded-md px-2 py-1"
-              @change="loadDashboard"
-            />
-            <span class="text-gray-500">até</span>
-            <input
-              type="date"
-              v-model="customEnd"
-              :disabled="selectedPeriod"
-              class="border border-gray-300 rounded-md px-2 py-1"
-              @change="loadDashboard"
-            />
-            <button
-              @click="logout"
-              class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
-            >
-              Sair
-            </button>
+            <router-link to="/dashboard/team-goals-history"
+              class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium">
+              Histórico de Metas
+            </router-link>
+            <button @click="logout" class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700">Sair</button>
           </div>
         </div>
       </div>
     </header>
 
-    <!-- Main Content -->
-    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+    <main class="custom-max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <!-- Filters -->
+      <div class="bg-white shadow rounded-lg p-4 mb-6 flex items-center justify-between space-x-4">
+        <div class="flex items-center space-x-4">
+          <h3 class="text-md font-medium text-gray-700">Filtros:</h3>
+          <select v-model="filters.period" @change="applyFilters"
+            class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+            <option v-for="p in periods" :key="p" :value="p">
+              {{ formatPeriodLabel(p) }}
+            </option>
+            <option value="">Período Personalizado</option>
+          </select>
+        </div>
+        <div class="flex items-center space-x-2">
+          <input v-model="filters.startDate" type="date" @change="applyFilters" :disabled="!!filters.period"
+            class="border border-gray-300 rounded-md px-3 py-2 text-sm disabled:bg-gray-100" />
+          <span class="text-gray-500">até</span>
+          <input v-model="filters.endDate" type="date" @change="applyFilters" :disabled="!!filters.period"
+            class="border border-gray-300 rounded-md px-3 py-2 text-sm disabled:bg-gray-100" />
+        </div>
+      </div>
+
+
+      <!-- KPIs Principais -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+          <div class="p-5">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center">
+                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 00-2-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
+                    </path>
+                  </svg>
+                </div>
+              </div>
+              <div class="ml-5 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Faturamento Total</dt>
+                  <dd class="flex items-baseline">
+                    <div class="text-2xl font-semibold text-gray-900">
+                      {{ formatCurrency(teamPerformance?.teamStats?.totalFaturamento || 0) }}
+                    </div>
+                    <div class="ml-2 flex items-baseline text-sm font-semibold"
+                      :class="faturamentoProgress >= 100 ? 'text-green-600' : 'text-yellow-600'">
+                      {{ faturamentoProgress.toFixed(1) }}% da meta
+                    </div>
+                  </dd>
+                  <div class="mt-2 w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+                      :style="{ width: Math.min(faturamentoProgress, 100) + '%' }"></div>
+                  </div>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+          <div class="p-5">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                  </svg>
+                </div>
+              </div>
+              <div class="ml-5 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Total de Vendas</dt>
+                  <dd class="text-2xl font-semibold text-gray-900">
+                    {{ teamPerformance?.teamStats?.totalConvertidas || 0 }}
+                    <span class="block text-sm font-normal text-gray-500">
+                      {{ formatCurrency(teamPerformance?.teamStats?.totalFaturamento || 0) }}
+                    </span>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+          <div class="p-5">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                    </path>
+                  </svg>
+                </div>
+              </div>
+              <div class="ml-5 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Total de Propostas</dt>
+                  <dd class="text-2xl font-semibold text-gray-900">
+                    {{ teamPerformance?.teamStats?.totalPropostas || 0 }}
+                    <span class="block text-sm font-normal text-gray-500">
+                      {{ formatCurrency(teamPerformance?.teamStats?.totalValorPropostas || 0) }}
+                    </span>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+          <div class="p-5">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
+                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
+                  </svg>
+                </div>
+              </div>
+              <div class="ml-5 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Taxa de Conversão</dt>
+                  <dd class="text-2xl font-semibold text-gray-900">
+                    {{ teamPerformance?.teamStats?.teamConversionRate?.toFixed(1) || 0 }}%
+                    <span class="block text-sm font-normal text-gray-500">
+                      {{ formatCurrency(teamTicketMedio) }}
+                    </span>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Proposal Metrics -->
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+          <div class="p-5">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
+                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+              </div>
+              <div class="ml-5 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Propostas Convertidas</dt>
+                  <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.convertidas }}</dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+          <div class="p-5">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
+                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M8 9l3 3-3 3m5-6l3 3-3 3" />
+                  </svg>
+                </div>
+              </div>
+              <div class="ml-5 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Pedidos em Negociação</dt>
+                  <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.emNegociacao }}</dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+          <div class="p-5">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 17v-2a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2zM7 7h10" />
+                  </svg>
+                </div>
+              </div>
+              <div class="ml-5 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Pedidos Fechadas</dt>
+                  <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.fechadas }}</dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+          <div class="p-5">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
+                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+              </div>
+              <div class="ml-5 w-0 flex-1">
+                <dl>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Pedidos Cancelados</dt>
+                  <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.canceladas }} <span class='text-sm text-gray-600'>({{ formatCurrency(proposalMetrics.valorCanceladas) }})</span></dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div v-if="loading" class="text-center py-12">
         <div class="text-lg">Carregando dashboard...</div>
       </div>
-
-      <div v-else-if="dashboardData" class="space-y-6">
-        <!-- KPIs da Equipe -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div class="bg-white overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-              <div class="flex items-center">
-                <div class="flex-shrink-0">
-                  <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                    <span class="text-white text-sm font-bold">P</span>
-                  </div>
-                </div>
-                <div class="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt class="text-sm font-medium text-gray-500 truncate">
-                      Total de Propostas (Equipe)
-                    </dt>
-                    <dd class="text-lg font-medium text-gray-900">
-                      {{ dashboardData.resumo.totalPropostas }}
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
+      <div v-else class="space-y-6">
+        <!-- KPIs and Charts -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="bg-white shadow rounded-lg p-4">
+            <LineChart :data="revenueVsTargetChartData" :options="lineChartOptions" />
           </div>
-
-          <div class="bg-white overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-              <div class="flex items-center">
-                <div class="flex-shrink-0">
-                  <div class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                    <span class="text-white text-sm font-bold">V</span>
-                  </div>
-                </div>
-                <div class="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt class="text-sm font-medium text-gray-500 truncate">
-                      Vendas Fechadas (Equipe)
-                    </dt>
-                    <dd class="text-lg font-medium text-gray-900">
-                      {{ dashboardData.resumo.propostasConvertidas }}
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="bg-white overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-              <div class="flex items-center">
-                <div class="flex-shrink-0">
-                  <div class="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
-                    <span class="text-white text-sm font-bold">R$</span>
-                  </div>
-                </div>
-                <div class="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt class="text-sm font-medium text-gray-500 truncate">
-                      Faturamento (Equipe)
-                    </dt>
-                    <dd class="text-lg font-medium text-gray-900">
-                      R$ {{ formatCurrency(dashboardData.resumo.faturamentoTotal) }}
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
+          <div class="bg-white shadow rounded-lg p-4">
+            <BarChart :data="revenueByMemberChartData" :options="barChartOptions" />
           </div>
         </div>
+        <!-- Detailed Performance Table -->
+        <PerformanceTable v-if="teamPerformance" :team-members="teamPerformance.teamMembers"
+          @drill-down="handleDrillDown" />
 
-        <!-- Ranking de Vendedores -->
-        <div class="bg-white shadow rounded-lg">
-          <div class="px-4 py-5 sm:p-6">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
-              Ranking de Vendedores
-            </h3>
-            <div class="overflow-hidden">
-              <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                  <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Posição
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Vendedor
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Propostas
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Vendas
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Faturamento
-                    </th>
-                  </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                  <tr
-                    v-for="(vendedor, index) in dashboardData.rankingVendedores"
-                    :key="vendedor.id"
-                    :class="index < 3 ? 'bg-yellow-50' : ''"
-                  >
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      <span
-                        v-if="index === 0"
-                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"
-                      >
-                        🥇 1º
-                      </span>
-                      <span
-                        v-else-if="index === 1"
-                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
-                      >
-                        🥈 2º
-                      </span>
-                      <span
-                        v-else-if="index === 2"
-                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800"
-                      >
-                        🥉 3º
-                      </span>
-                      <span v-else class="text-gray-500">{{ index + 1 }}º</span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {{ vendedor.name }}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {{ vendedor.propostas }}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {{ vendedor.vendas }}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      R$ {{ formatCurrency(vendedor.faturamento) }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <!-- Gráfico de Performance da Equipe -->
-        <div class="bg-white p-6 rounded-lg shadow">
-          <h3 class="text-lg font-medium text-gray-900 mb-4">Performance da Equipe</h3>
-          <BarChart
-            v-if="chartData"
-            :data="chartData"
-            :options="chartOptions"
-          />
-        </div>
+        <!-- Representative Detail Modal -->
+        <RepresentativeDetailModal :is-open="showDetailModal" :representative="selectedRepresentative"
+          :details="representativeDetails" :loading="detailLoading" @close="closeDetailModal" />
       </div>
     </main>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, reactive, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { dashboardService, goalsService } from '../services/api'
+import { dashboardService, performanceService, goalsService } from '../services/api'
+import PerformanceTable from '../components/PerformanceTable.vue'
+import RepresentativeDetailModal from '../components/RepresentativeDetailModal.vue'
+import LineChart from '../components/LineChart.vue'
 import BarChart from '../components/BarChart.vue'
-import Navbar from '../components/Navbar.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
+const dashboardTitle = computed(() =>
+  authStore.user?.role === 'parceiro_comercial'
+    ? 'Dashboard Parceiro Comercial'
+    : 'Dashboard Supervisor',
+)
+
 const loading = ref(true)
-const dashboardData = ref(null)
+const teamPerformance = ref(null)
+const revenueVsTarget = ref([])
+const proposalMetrics = ref({
+  convertidas: 0,
+  emNegociacao: 0,
+  fechadas: 0,
+  canceladas: 0,
+  valorCanceladas: 0,
+})
+
+const showDetailModal = ref(false)
+const selectedRepresentative = ref(null)
+const representativeDetails = ref(null)
+const detailLoading = ref(false)
+
 const periods = ref([])
-const selectedPeriod = ref('')
-const customStart = ref('')
-const customEnd = ref('')
 
-const chartData = computed(() => {
-  if (!dashboardData.value?.rankingVendedores) return null
+const filters = reactive({
+  period: '',
+  startDate: '',
+  endDate: '',
+})
 
-  return {
-    labels: dashboardData.value.rankingVendedores.map(v => v.name),
-    datasets: [
-      {
-        label: 'Faturamento (R$)',
-        data: dashboardData.value.rankingVendedores.map(v => v.faturamento),
-        backgroundColor: 'rgba(59, 130, 246, 0.8)'
-      },
-      {
-        label: 'Vendas',
-        data: dashboardData.value.rankingVendedores.map(v => v.vendas),
-        backgroundColor: 'rgba(34, 197, 94, 0.8)'
-      }
-    ]
+watch(() => filters.period, (newPeriod) => {
+  if (newPeriod) {
+    filters.startDate = ''
+    filters.endDate = ''
   }
 })
 
-const chartOptions = {
-  responsive: true,
-  plugins: {
-    legend: {
-      position: 'top'
-    }
-  },
-  scales: {
-    y: {
-      beginAtZero: true
-    }
+const applyFilters = async () => {
+  loading.value = true
+  try {
+    const supervisorFilters = { ...filters, supervisorId: authStore.user.id }
+    const [perf, revVsTarget, metrics] = await Promise.all([
+      performanceService.getTeamPerformance(supervisorFilters),
+      dashboardService.getRevenueVsTarget(supervisorFilters),
+      dashboardService.getProposalMetrics(supervisorFilters),
+    ])
+    teamPerformance.value = perf.data
+    revenueVsTarget.value = revVsTarget.data
+    proposalMetrics.value = metrics.data
+  } catch (error) {
+    console.error('Erro ao aplicar filtros:', error)
+  } finally {
+    loading.value = false
   }
 }
 
-const loadDashboard = async () => {
+const loadInitialData = async () => {
   loading.value = true
   try {
-    const periodParam = selectedPeriod.value ? selectedPeriod.value : undefined
-    const start = selectedPeriod.value ? undefined : customStart.value || undefined
-    const end = selectedPeriod.value ? undefined : customEnd.value || undefined
-    const response = await dashboardService.getSupervisorDashboard(
-      authStore.user.id,
-      periodParam,
-      start,
-      end
-    )
-    dashboardData.value = response.data
+    const supervisorFilters = { ...filters, supervisorId: authStore.user.id }
+    const [perf, revVsTarget, metrics] = await Promise.all([
+      performanceService.getTeamPerformance(supervisorFilters),
+      dashboardService.getRevenueVsTarget(supervisorFilters),
+      dashboardService.getProposalMetrics(supervisorFilters),
+    ])
+    teamPerformance.value = perf.data
+    revenueVsTarget.value = revVsTarget.data
+    proposalMetrics.value = metrics.data
   } catch (error) {
     console.error('Erro ao carregar dashboard:', error)
   } finally {
@@ -281,12 +352,53 @@ const loadDashboard = async () => {
   }
 }
 
-const formatCurrency = (value) => {
-  return new Intl.NumberFormat('pt-BR', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(value)
+const handleDrillDown = async (representative) => {
+  selectedRepresentative.value = representative
+  showDetailModal.value = true
+  detailLoading.value = true
+  try {
+    const response = await performanceService.getRepresentativeDetails(representative.id, filters)
+    representativeDetails.value = response.data
+  } catch (error) {
+    console.error('Erro ao carregar detalhes do representante:', error)
+  } finally {
+    detailLoading.value = false
+  }
 }
+
+const closeDetailModal = () => {
+  showDetailModal.value = false
+  selectedRepresentative.value = null
+  representativeDetails.value = null
+}
+
+const revenueVsTargetChartData = computed(() => ({
+  labels: revenueVsTarget.value.map(d => d.month),
+  datasets: [
+    { label: 'Faturamento Realizado', data: revenueVsTarget.value.map(d => d.revenue), borderColor: '#4F46E5', tension: 0.1, fill: false },
+    { label: 'Meta de Faturamento', data: revenueVsTarget.value.map(d => d.target), borderColor: '#F59E0B', borderDash: [5, 5], tension: 0.1, fill: false },
+  ],
+}))
+
+const revenueByMemberChartData = computed(() => {
+  if (!teamPerformance.value) return { labels: [], datasets: [] }
+
+  const sorted = [...teamPerformance.value.teamMembers]
+    .sort((a, b) => b.performance.faturamentoTotal - a.performance.faturamentoTotal)
+    .slice(0, 10)
+      
+  return {
+    labels: sorted.map(m => m.name),
+    datasets: [{
+      label: 'Faturamento por Membro',
+      data: sorted.map(m => m.performance.faturamentoTotal),
+      backgroundColor: '#10B981'
+    }]
+   }
+})
+
+const lineChartOptions = { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Faturamento Mensal vs. Meta' } } }
+const barChartOptions = { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Faturamento por Membro de Equipe' } } }
 
 const logout = () => {
   authStore.logout()
@@ -297,8 +409,8 @@ const loadPeriods = async () => {
   try {
     const response = await goalsService.getGoalPeriods(authStore.user.id)
     periods.value = response.data
-    if (periods.value.length && !selectedPeriod.value) {
-      selectedPeriod.value = periods.value[0]
+    if (periods.value.length && !filters.period) {
+      filters.period = periods.value[0]
     }
   } catch (error) {
     console.error('Erro ao carregar períodos de metas:', error)
@@ -311,9 +423,34 @@ const formatPeriodLabel = (p) => {
   return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
 }
 
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  }).format(value)
+}
+
+const faturamentoProgress = computed(() => {
+  if (!teamPerformance.value?.teamStats) return 0
+  const meta = teamPerformance.value.teamStats.totalMetaFaturamento || 150000
+  const atual = teamPerformance.value.teamStats.totalFaturamento || 0
+  return (atual / meta) * 100
+})
+
+const teamTicketMedio = computed(() => {
+  const stats = teamPerformance.value?.teamStats
+  if (!stats || !stats.totalConvertidas) return 0
+  return stats.totalFaturamento / stats.totalConvertidas
+})
+
 onMounted(async () => {
   authStore.initializeAuth()
   await loadPeriods()
-  loadDashboard()
+  loadInitialData()
 })
 </script>
+<style>
+.custom-max-w-7xl {
+  max-width: 100rem;
+}
+</style>

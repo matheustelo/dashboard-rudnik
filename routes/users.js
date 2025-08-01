@@ -250,6 +250,8 @@ router.get("/:id/team", authenticateToken, async (req, res) => {
     }
 
     // Check permissions
+    const currentUserId = Number(req.user.id)
+    
     if (req.user.role !== "admin" && req.user.role !== "gerente_comercial" && req.user.id !== userId) {
       return res.status(403).json({
         message: "Acesso negado",
