@@ -19,17 +19,17 @@
     <main class="custom-max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <!-- Filters -->
       <div class="bg-white shadow rounded-lg p-4 mb-6 flex items-center space-x-4">
-        <select v-model="selectedPeriod" @change="loadDashboard"
+        <select v-model="selectedPeriod" @change="handlePeriodChange"
           class="border border-gray-300 rounded-md px-3 py-2 text-sm">
           <option v-for="p in periods" :key="p" :value="p">
             {{ formatPeriodLabel(p) }}
           </option>
           <option value="">Período Personalizado</option>
         </select>
-        <input type="date" v-model="customStart" :disabled="selectedPeriod"
+        <input type="date" v-model="customStart" :disabled="!!selectedPeriod"
           class="border border-gray-300 rounded-md px-2 py-1" @change="loadDashboard" />
         <span class="text-gray-500">até</span>
-        <input type="date" v-model="customEnd" :disabled="selectedPeriod"
+        <input type="date" v-model="customEnd" :disabled="!!selectedPeriod"
           class="border border-gray-300 rounded-md px-2 py-1" @change="loadDashboard" />
       </div>
 

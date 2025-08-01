@@ -23,7 +23,7 @@
             <input
               type="date"
               v-model="customStart"
-              :disabled="selectedPeriod"
+              :disabled="!!selectedPeriod"
               class="border border-gray-300 rounded-md px-2 py-1"
               @change="loadDashboard"
             />
@@ -31,7 +31,7 @@
             <input
               type="date"
               v-model="customEnd"
-              :disabled="selectedPeriod"
+              :disabled="!!selectedPeriod"
               class="border border-gray-300 rounded-md px-2 py-1"
               @change="loadDashboard"
             />
