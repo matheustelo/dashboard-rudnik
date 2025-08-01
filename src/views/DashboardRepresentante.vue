@@ -380,7 +380,7 @@ const loadProposalMetrics = async () => {
       if (customStart.value) params.startDate = customStart.value
       if (customEnd.value) params.endDate = customEnd.value
     }
-    params.supervisorId = authStore.user.id
+    params.sellerId = authStore.user.id
     const { data } = await dashboardService.getProposalMetrics(params)
     proposalMetrics.value = data
   } catch (error) {

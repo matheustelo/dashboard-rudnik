@@ -302,7 +302,7 @@ app.get(
   authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante"),
   async (req, res) => {
     try {
-      const { period, startDate, endDate, supervisorId, supervisor } = req.query;
+      const { period, startDate, endDate, supervisorId, supervisor, sellerId } = req.query;
       const leader = supervisorId || supervisor;
       const { startDate: dateStart, endDate: dateEnd } = getDateRange(
         period,
@@ -313,7 +313,10 @@ app.get(
       let supervisorFilter = "";
       const queryParams = [dateStart, dateEnd];
 
-      if (leader && leader !== "all") {
+      if (sellerId) {
+        supervisorFilter = "AND u.id = $3";
+        queryParams.push(sellerId);
+      } else if (leader && leader !== "all") {
         const teamIds = await getTeamHierarchyIds(leader);
         if (teamIds.length > 0) {
           supervisorFilter = "AND u.id = ANY($3)";
