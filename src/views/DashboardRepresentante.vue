@@ -100,7 +100,8 @@
               <div class="ml-5 w-0 flex-1">
                 <dl>
                   <dt class="text-sm font-medium text-gray-500 truncate">Faturamento</dt>
-                  <dd class="text-lg font-medium text-gray-900">R$ {{ formatCurrency(dashboardData.resumo.faturamentoTotal) }}</dd>
+                  <dd class="text-lg font-medium text-gray-900">R$ {{
+                    formatCurrency(dashboardData.resumo.faturamentoTotal) }}</dd>
                 </dl>
               </div>
             </div>
@@ -118,7 +119,8 @@
               <div class="ml-5 w-0 flex-1">
                 <dl>
                   <dt class="text-sm font-medium text-gray-500 truncate">Ticket Médio</dt>
-                  <dd class="text-lg font-medium text-gray-900">R$ {{ formatCurrency(dashboardData.resumo.ticketMedio) }}</dd>
+                  <dd class="text-lg font-medium text-gray-900">R$ {{ formatCurrency(dashboardData.resumo.ticketMedio)
+                    }}</dd>
                 </dl>
               </div>
             </div>
@@ -130,14 +132,140 @@
         <div class="text-lg">Carregando dashboard...</div>
       </div>
       <div v-else class="space-y-6">
+
+                        <!-- Proposal Metrics -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <div class="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Propostas Convertidas</dt>
+                    <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.convertidas }}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <div class="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M8 9l3 3-3 3m5-6l3 3-3 3" />
+                    </svg>
+                  </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Pedidos em Negociação</dt>
+                    <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.emNegociacao }}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 17v-2a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2zM7 7h10" />
+                    </svg>
+                  </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Pedidos Fechados</dt>
+                    <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.fechadas }}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+              <div class="flex items-center">
+                <div class="flex-shrink-0">
+                  <div class="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </div>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Pedidos Cancelados</dt>
+                    <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.canceladas }}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <!-- Goals Chart -->
           <GoalsChart :goals="teamGoals" :summary="teamSummary" />
-         
+
           <!-- Monthly Sales Chart -->
           <div class="bg-white p-6 rounded-lg shadow">
             <h3 class="text-lg font-medium text-gray-900 mb-4">Vendas Mensais</h3>
-            <BarChart v-if="chartData.vendasMensais" :data="chartData.vendasMensais" :options="chartOptions.bar" /> 
+            <BarChart v-if="chartData.vendasMensais" :data="chartData.vendasMensais" :options="chartOptions.bar" />
+          </div>
+        </div>
+
+        <!-- Detailed Propostas Table -->
+        <div class="bg-white shadow rounded-lg">
+          <div class="px-4 py-5 sm:p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Propostas Detalhadas</h3>
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefone
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <tr v-for="p in proposals" :key="p.id">
+                    <td class="px-6 py-4 whitespace-normal break-words text-sm font-medium text-gray-900">{{
+                      p.clientName + ' #' + p.id }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ formatPhone(p.clientPhone) }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">R$ {{ formatCurrency(p.totalPrice) }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <span
+                        :class="p.hasGeneratedSale ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'"
+                        class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium">{{ p.status
+                        }}</span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ formatDate(p.createdAt) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -149,7 +277,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { dashboardService, goalsService, userService } from '../services/api'
+import { dashboardService, goalsService, userService, performanceService } from '../services/api'
 import BarChart from '../components/BarChart.vue'
 import GoalsChart from '../components/GoalsChart.vue'
 
@@ -166,6 +294,14 @@ const periods = ref([])
 const selectedPeriod = ref('')
 const customStart = ref('')
 const customEnd = ref('')
+
+const proposalMetrics = ref({
+  convertidas: 0,
+  emNegociacao: 0,
+  fechadas: 0,
+  canceladas: 0,
+})
+const proposals = ref([])
 
 const chartData = computed(() => {
   if (!dashboardData.value) return {}
@@ -235,6 +371,41 @@ const loadDashboard = async () => {
   }
 }
 
+const loadProposalMetrics = async () => {
+  try {
+    const params = {}
+    if (selectedPeriod.value) params.period = selectedPeriod.value
+    else {
+      if (customStart.value) params.startDate = customStart.value
+      if (customEnd.value) params.endDate = customEnd.value
+    }
+    params.supervisorId = authStore.user.id
+    const { data } = await dashboardService.getProposalMetrics(params)
+    proposalMetrics.value = data
+  } catch (error) {
+    console.error('Erro ao carregar métricas de propostas:', error)
+  }
+}
+
+const loadProposals = async () => {
+  try {
+    const params = {}
+    if (selectedPeriod.value) params.period = selectedPeriod.value
+    else {
+      if (customStart.value) params.startDate = customStart.value
+      if (customEnd.value) params.endDate = customEnd.value
+    }
+    const { data } = await performanceService.getRepresentativeDetails(
+      authStore.user.id,
+      params
+    )
+    proposals.value = Array.isArray(data.proposals) ? data.proposals : []
+  } catch (error) {
+    console.error('Erro ao carregar propostas:', error)
+    proposals.value = []
+  }
+}
+
 const loadTeamGoals = async () => {
   try {
     const userRes = await userService.getUser(authStore.user.id)
@@ -286,6 +457,22 @@ const formatCurrency = (value) => {
   }).format(value)
 }
 
+const formatDate = (dateString) => {
+  return new Date(dateString).toLocaleDateString('pt-BR')
+}
+
+const formatPhone = (phone) => {
+  if (!phone) return ''
+  const clean = phone.replace(/[^\d]/g, '')
+  if (clean.length === 10) {
+    return clean.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3')
+  }
+  if (clean.length === 11) {
+    return clean.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
+  }
+  return phone
+}
+
 const logout = () => {
   authStore.logout()
   router.push('/login')
@@ -313,6 +500,8 @@ watch(
   [selectedPeriod, customStart, customEnd],
   () => {
     loadDashboard()
+    loadProposalMetrics()
+    loadProposals()
   }
 )
 
@@ -321,6 +510,8 @@ onMounted(async () => {
   await loadPeriods()
   loadDashboard()
   loadTeamGoals()
+  loadProposalMetrics()
+  loadProposals()
 })
 </script>
 <style>
