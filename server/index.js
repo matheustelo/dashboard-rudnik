@@ -390,7 +390,15 @@ app.get(
             WHERE v.status = 'suspenso'
               AND v.created_at BETWEEN $1 AND $2
               AND p.seller IN (SELECT id FROM usuarios_filtrados)
-          ) AS canceladas
+          ) AS canceladas,
+          (
+            SELECT COALESCE(SUM(CAST(p.total_price AS DECIMAL)), 0)
+            FROM clone_vendas_apprudnik v
+            JOIN clone_propostas_apprudnik p ON p.id = v.code
+            WHERE v.status = 'suspenso'
+              AND v.created_at BETWEEN $1 AND $2
+              AND p.seller IN (SELECT id FROM usuarios_filtrados)
+          ) AS valor_canceladas
       `;
 
       const { rows } = await pool.query(metricsQuery, queryParams);
@@ -400,6 +408,7 @@ app.get(
         emNegociacao: parseInt(rows[0].em_negociacao, 10),
         fechadas: parseInt(rows[0].fechadas, 10),
         canceladas: parseInt(rows[0].canceladas, 10),
+        valorCanceladas: parseFloat(rows[0].valor_canceladas),
       });
     } catch (error) {
       console.error("❌ Error fetching proposal metrics:", error);
