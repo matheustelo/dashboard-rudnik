@@ -1605,6 +1605,59 @@ app.get("/api/users", authenticateToken, authorize("admin", "gerente_comercial")
   }
 })
 
+// Get user by ID with hierarchy information
+app.get("/api/users/:id", authenticateToken, async (req, res) => {
+  console.log("--- Users API: GET /api/users/:id started ---")
+  try {
+    const { id } = req.params
+
+    const allowedRoles = [
+      "admin",
+      "gerente_comercial",
+      "gestor",
+      "supervisor",
+      "parceiro_comercial",
+    ]
+
+    if (!allowedRoles.includes(req.user.role) && req.user.id !== Number(id)) {
+      return res.status(403).json({ message: "Insufficient permissions" })
+    }
+
+    const userQuery = `
+      SELECT id, name, email, role, supervisor, supervisors, children, is_active, created_at
+      FROM clone_users_apprudnik
+      WHERE id = $1
+    `
+
+    const result = await pool.query(userQuery, [id])
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        message: "Usuário não encontrado",
+        error: "USER_NOT_FOUND",
+      })
+    }
+
+    const user = result.rows[0]
+    const enhancedUser = {
+      ...user,
+      supervisors: parseJsonField(user.supervisors),
+      children: parseJsonField(user.children),
+      has_team: parseJsonField(user.children).length > 0,
+      team_members_count: parseJsonField(user.children).length,
+    }
+
+    console.log("✅ Users: Fetched user:", enhancedUser.name)
+    res.json(enhancedUser)
+  } catch (error) {
+    console.error("❌ Users: Error fetching user:", error.message)
+    res.status(500).json({
+      message: "Erro ao buscar usuário",
+      error: error.message,
+    })
+  }
+})
+
 // Get user's team (for supervisors)
 app.get("/api/users/:id/team", authenticateToken, async (req, res) => {
   console.log("--- Users API: GET /api/users/:id/team started ---")
