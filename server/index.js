@@ -299,7 +299,7 @@ app.get(
 app.get(
   "/api/dashboard/proposal-metrics",
   authenticateToken,
-  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor"),
   async (req, res) => {
     try {
       const { period, startDate, endDate, supervisorId, supervisor, sellerId } = req.query;
@@ -628,7 +628,7 @@ app.get(
 
 // Get detailed representative performance (drill-down)
 app.get("/api/performance/representative/:id", authenticateToken,
-  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor"),
   async (req, res) => {
     console.log("--- Performance API: GET /api/performance/representative started ---")
     try {
@@ -1489,7 +1489,7 @@ app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) =>
 app.get(
   "/api/goals/team/:id",
   authenticateToken,
-  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor"),
   async (req, res) => {
     console.log("--- Goals API: GET /api/goals/team/:id started ---")
     try {
@@ -1620,6 +1620,7 @@ app.get("/api/users/:id", authenticateToken, async (req, res) => {
       "parceiro_comercial",
       "representante_premium",
       "representante",
+      "vendedor"
     ]
 
     if (!allowedRoles.includes(req.user.role) && req.user.id !== Number(id)) {
@@ -1749,11 +1750,6 @@ app.get("/api/dashboard/vendedor/:id", authenticateToken, async (req, res) => {
 
     const { startDate, endDate } = getDateRange(period, start, end)
     console.log("📅 Date range:", { startDate, endDate })
-
-    // Check if user can access this data
-    if (req.user.role === "vendedor" && req.user.id !== Number.parseInt(id)) {
-      return res.status(403).json({ message: "Access denied" })
-    }
 
     // Get proposals data
     const proposalsQuery = `

@@ -21,7 +21,7 @@ const routes = [
   {
     path: "/dashboard/vendedor",
     name: "DashboardVendedor",
-    component: DashboardVendedor,
+    component: DashboardRepresentante,
     meta: { requiresAuth: true, role: "vendedor" },
   },
   {

@@ -80,8 +80,11 @@ const checkSupervisorAccess = async (req, res, next) => {
       }
     }
 
-    // Vendedor can only access their own data
-    if (user.role === "vendedor" && user.id !== Number.parseInt(id)) {
+    // Vendedor and representante can only access their own data
+    if (
+      ["vendedor", "representante"].includes(user.role) &&
+      user.id !== Number.parseInt(id)
+    ) {
       return res.status(403).json({ message: "Access denied" })
     }
 
