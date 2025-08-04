@@ -359,7 +359,7 @@ app.get(
                 'contrato_reprovado',
                 'contrato_preenchimento_contrato'
               )
-              AND v.created_at BETWEEN $1 AND $2
+              AND p.created_at BETWEEN $1 AND $2
               AND p.seller IN (SELECT id FROM usuarios_filtrados)
           ) AS em_negociacao,
           (
