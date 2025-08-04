@@ -58,7 +58,8 @@ const authorize =
 // Auxiliar para obter intervalo de datas
 function getDateRange(period, startDate, endDate) {
   if (startDate && endDate) {
-    return { startDate, endDate }
+    // Ensure the end date includes the entire day
+    return { startDate, endDate: `${endDate} 23:59:59` }
   }
   if (period) {
     const [year, month] = period.split("-")
@@ -66,7 +67,8 @@ function getDateRange(period, startDate, endDate) {
     const end = new Date(year, Number.parseInt(month), 0)
     return {
       startDate: start.toISOString().split("T")[0],
-      endDate: end.toISOString().split("T")[0],
+      // Append 23:59:59 to capture the full final day
+      endDate: end.toISOString().split("T")[0] + " 23:59:59",
     }
   }
   const now = new Date()
@@ -74,7 +76,8 @@ function getDateRange(period, startDate, endDate) {
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0)
   return {
     startDate: start.toISOString().split("T")[0],
-    endDate: end.toISOString().split("T")[0],
+    // Include the complete final day in the range
+    endDate: end.toISOString().split("T")[0] + " 23:59:59",
   }
 }
 

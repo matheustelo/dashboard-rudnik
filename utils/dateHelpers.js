@@ -12,7 +12,8 @@ const getDateRange = (period, startDate, endDate) => {
   if (startDate && endDate) {
     return {
       startDate: moment(startDate).format("YYYY-MM-DD"),
-      endDate: moment(endDate).format("YYYY-MM-DD"),
+      // Use end of day to include the full end date in comparisons
+      endDate: moment(endDate).endOf("day").format("YYYY-MM-DD HH:mm:ss"),
     }
   }
 
@@ -24,7 +25,8 @@ const getDateRange = (period, startDate, endDate) => {
 
     return {
       startDate: start.format("YYYY-MM-DD"),
-      endDate: end.format("YYYY-MM-DD"),
+      // Ensure the end date covers the entire day
+      endDate: end.endOf("day").format("YYYY-MM-DD HH:mm:ss"),
     }
   }
 
@@ -34,7 +36,8 @@ const getDateRange = (period, startDate, endDate) => {
   const endDateDefault = new Date(now.getFullYear(), now.getMonth() + 1, 0)
   return {
     startDate: startDateDefault.toISOString().split("T")[0],
-    endDate: endDateDefault.toISOString().split("T")[0],
+    // Append 23:59:59 to include the entire last day
+    endDate: moment(endDateDefault).endOf("day").format("YYYY-MM-DD HH:mm:ss"),
   }
 }
 

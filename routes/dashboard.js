@@ -1,7 +1,6 @@
 const express = require("express")
 const { query } = require("../config/database")
 const { authenticateToken, checkSupervisorAccess } = require("../middleware/auth")
-const { getDateRange } = require("../utils/dateHelpers")
 
 const router = express.Router()
 
@@ -14,16 +13,20 @@ function getDateRangeLocal(period) {
     const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
     return {
       startDate: startDate.toISOString().split("T")[0],
-      endDate: endDate.toISOString().split("T")[0],
+      // Include the full end day in the range
+      endDate: endDate.toISOString().split("T")[0] + " 23:59:59",
     }
   }
 
   // Period format: YYYY-MM
   const [year, month] = period.split("-")
-  const startDate = `${year}-${month}-01`
-  const endDate = `${year}-${month}-31`
+  const start = new Date(year, Number(month) - 1, 1)
+  const end = new Date(year, Number(month), 0)
 
-  return { startDate, endDate }
+  return {
+    startDate: start.toISOString().split("T")[0],
+    endDate: end.toISOString().split("T")[0] + " 23:59:59",
+  }
 }
 
 // Dashboard endpoints
