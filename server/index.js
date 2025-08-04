@@ -367,8 +367,7 @@ app.get(
             SELECT COUNT(*)
             FROM clone_vendas_apprudnik v
             JOIN clone_propostas_apprudnik p ON p.id = v.code
-            WHERE v.is_contract_downloaded = true
-              AND v.status NOT IN (
+            WHERE v.status NOT IN (
                 'contrato_assinaturas',
                 'contrato_assinaturas_pendentes',
                 'checklist',
