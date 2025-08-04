@@ -379,7 +379,7 @@ app.get(
                 'contrato_preenchimento_contrato',
                 'suspenso'
               )
-              AND v.created_at BETWEEN $1 AND $2
+              AND p.created_at BETWEEN $1 AND $2
               AND p.seller IN (SELECT id FROM usuarios_filtrados)
           ) AS fechadas,
           (
@@ -387,7 +387,7 @@ app.get(
             FROM clone_vendas_apprudnik v
             JOIN clone_propostas_apprudnik p ON p.id = v.code
             WHERE v.status = 'suspenso'
-              AND v.created_at BETWEEN $1 AND $2
+              AND p.created_at BETWEEN $1 AND $2
               AND p.seller IN (SELECT id FROM usuarios_filtrados)
           ) AS canceladas,
           (
@@ -395,7 +395,7 @@ app.get(
             FROM clone_vendas_apprudnik v
             JOIN clone_propostas_apprudnik p ON p.id = v.code
             WHERE v.status = 'suspenso'
-              AND v.created_at BETWEEN $1 AND $2
+              AND p.created_at BETWEEN $1 AND $2
               AND p.seller IN (SELECT id FROM usuarios_filtrados)
           ) AS valor_canceladas
       `;
