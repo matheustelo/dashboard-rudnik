@@ -49,18 +49,12 @@
 
       <!-- Content -->
       <div class="mt-6">
-        <div v-if="loading" class="text-center py-10">
-          <div
-            class="inline-flex items-center px-4 py-2 font-semibold leading-6 text-sm shadow rounded-md text-blue-500 bg-blue-100">
-            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none"
-              viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-              </path>
-            </svg>
-            Carregando metas...
+       <div v-if="loading" class="space-y-6">
+          <div class="flex justify-between items-center mb-4 animate-pulse">
+            <div class="h-6 bg-gray-200 rounded w-1/3"></div>
+            <div class="h-8 bg-gray-200 rounded w-32"></div>
           </div>
+          <GoalListSkeleton />
         </div>
 
         <div v-else-if="error" class="text-center py-10">
@@ -730,6 +724,7 @@
 import { ref, onMounted, reactive, computed, watch } from "vue"
 import { goalsService, userService, teamLeaderService, performanceService } from "../services/api"
 import { useAuthStore } from "../stores/auth"
+import GoalListSkeleton from "../components/GoalListSkeleton.vue"
 
 // Initialize all reactive variables with proper default values
 const loading = ref(true)
@@ -761,17 +756,27 @@ const dashboardPath = computed(() => {
   return `/dashboard/${role}` 
 })
 
-const handlePeriodChange = () => {
+const handlePeriodChange = async () => {
   customStart.value = ''
   customEnd.value = ''
-  fetchGoals()
+  loading.value = true
+  try {
+    await fetchGoals()
+  } finally {
+    loading.value = false
+  }
 }
 
 
-const handleCustomDateChange = () => {
+const handleCustomDateChange = async () => {
   selectedPeriod.value = ''
   if (customStart.value && customEnd.value) {
-    fetchGoals()
+    loading.value = true
+    try {
+      await fetchGoals()
+    } finally {
+      loading.value = false
+    }
   }
 }
 
@@ -1364,6 +1369,7 @@ const saveGoal = async () => {
     }
 
     closeModal()
+    loading.value = true
     await fetchGoals()
     console.log('✅ Goal saved successfully with hierarchy support')
   } catch (err) {
@@ -1375,6 +1381,7 @@ const saveGoal = async () => {
       : base
     alert(msg)
   } finally {
+    loading.value = false
     saving.value = false
   }
 }
@@ -1387,11 +1394,14 @@ const deleteGoal = async (type, id) => {
   if (confirm(confirmMessage)) {
     try {
       await goalsService.deleteGoal(type, id)
+      loading.value = true
       await fetchGoals()
       console.log('✅ Goal deleted successfully')
     } catch (err) {
       console.error("❌ Error deleting goal:", err)
       alert("Falha ao excluir a meta.")
+    } finally {
+      loading.value = false
     }
   }
 }
