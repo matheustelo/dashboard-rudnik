@@ -31,6 +31,12 @@ const routes = [
     meta: { requiresAuth: true, role: "representante" },
   },
   {
+    path: "/dashboard/representante_premium",
+    name: "DashboardRepresentantePremium",
+    component: DashboardSupervisor,
+    meta: { requiresAuth: true, role: "representante_premium" },
+  },
+  {
     path: "/dashboard/supervisor",
     name: "DashboardSupervisor",
     component: DashboardSupervisor,

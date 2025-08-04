@@ -277,11 +277,16 @@ import BarChart from '../components/BarChart.vue'
 const router = useRouter()
 const authStore = useAuthStore()
 
-const dashboardTitle = computed(() =>
-  authStore.user?.role === 'parceiro_comercial'
-    ? 'Dashboard Parceiro Comercial'
-    : 'Dashboard Supervisor',
-)
+const dashboardTitle = computed(() => {
+  switch (authStore.user?.role) {
+    case 'parceiro_comercial':
+      return 'Dashboard Parceiro Comercial'
+    case 'representante_premium':
+      return 'Dashboard Representante Premium'
+    default:
+      return 'Dashboard Supervisor'
+  }
+})
 
 const loading = ref(true)
 const teamPerformance = ref(null)

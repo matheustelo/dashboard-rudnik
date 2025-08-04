@@ -197,7 +197,7 @@ app.get("/api/team-leaders", authenticateToken, authorize("admin", "gerente_come
 app.get(
   "/api/dashboard/revenue-vs-target",
   authenticateToken,
- authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium"),
   async (req, res) => {
     try {
       const { period, startDate, endDate } = req.query
@@ -246,7 +246,7 @@ app.get(
 app.get(
   "/api/dashboard/revenue-by-supervisor",
   authenticateToken,
-   authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial"),
+   authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium"),
   async (req, res) => {
     try {
       const { period, startDate, endDate } = req.query;
@@ -271,7 +271,7 @@ app.get(
         ON u.id = p.seller
        AND p.created_at BETWEEN $1 AND $2
       LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id AND p.has_generated_sale = true
-      WHERE sup.role IN ('supervisor', 'parceiro_comercial')
+       WHERE sup.role IN ('supervisor', 'parceiro_comercial', 'representante_premium')
         AND sup.is_active = true
       GROUP BY sup.id, sup.name
       ORDER BY total_revenue DESC;
@@ -446,7 +446,7 @@ app.get("/api/supervisors", authenticateToken, authorize("admin", "gerente_comer
 app.get(
   "/api/performance/team",
   authenticateToken,
-  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium"),
   async (req, res) => {
     console.log("--- Performance API: GET /api/performance/team started ---")
     try {
