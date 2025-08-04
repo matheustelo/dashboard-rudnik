@@ -7,7 +7,7 @@ export default defineConfig({
     port: 5173, // opcional
     proxy: {
       "/api": {
-        target: "http://localhost:3001",
+        target: "http://relatorios.rudniksolucoes.com.br:3001",
         changeOrigin: true,
       },
     },
