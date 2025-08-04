@@ -55,7 +55,7 @@ const authorize =
       next()
     }
 
-// Helper to get date range
+// Auxiliar para obter intervalo de datas
 function getDateRange(period, startDate, endDate) {
   if (startDate && endDate) {
     return { startDate, endDate }
@@ -92,7 +92,7 @@ function parseJsonField(field) {
   return []
 }
 
-// Helper to fetch a leader's active team members
+// Auxiliar para buscar os membros ativos da equipe de um líder
 async function getTeamMembers(leaderId) {
   const leaderQuery = `
     SELECT children
@@ -104,7 +104,7 @@ async function getTeamMembers(leaderId) {
 
   let children = parseJsonField(leaderResult.rows[0].children)
 
-  // Fallback to supervisor relationship if no children defined
+  // Retorno ao relacionamento de supervisor se nenhuma criança for definida
   if (!children || children.length === 0) {
     const fallbackQuery = `
       SELECT id, name, email, role
@@ -132,7 +132,7 @@ async function getTeamMembers(leaderId) {
   return teamResult.rows
 }
 
-// Helper to fetch a leader's team including prepostos of representante_premium members
+// Auxiliar para buscar a equipe de um líder, incluindo prepostos de membros representante_premium
 async function getTeamHierarchyIds(leaderId) {
   const baseTeam = await getTeamMembers(leaderId)
   const ids = baseTeam.map((m) => m.id)
@@ -193,7 +193,7 @@ app.get("/api/team-leaders", authenticateToken, authorize("admin", "gerente_come
   }
 })
 
-// Get Revenue vs. Target Chart Data
+// Obtenha dados do gráfico de receita versus meta
 app.get(
   "/api/dashboard/revenue-vs-target",
   authenticateToken,
@@ -242,7 +242,7 @@ app.get(
   },
 )
 
-// Get Revenue by Supervisor Chart Data
+// Obter dados do gráfico de receita por supervisor
 app.get(
   "/api/dashboard/revenue-by-supervisor",
   authenticateToken,
@@ -295,7 +295,7 @@ app.get(
   }
 );
 
-// Get proposal metrics for dashboard
+// Obter métricas de proposta para o painel
 app.get(
   "/api/dashboard/proposal-metrics",
   authenticateToken,
@@ -345,39 +345,43 @@ app.get(
               AND p.seller IN (SELECT id FROM usuarios_filtrados)
           ) AS convertidas,
           (
-          SELECT COUNT(*)
-          FROM clone_vendas_apprudnik v
-          WHERE (v.is_contract_downloaded = false OR v.is_contract_downloaded IS NULL)
-            AND v.status IN (
-              'contrato_assinaturas',
-              'contrato_assinaturas_pendentes',
-              'checklist',
-              'checklist_erro',
-              'conferencia_engenharia',
-              'conferencia_financeiro',
-              'conferencia_financeiro_engenharia',
-              'contrato_reprovado',
-              'contrato_preenchimento_contrato'
-            )
-            AND v.created_at BETWEEN $1 AND $2
+            SELECT COUNT(*)
+            FROM clone_vendas_apprudnik v
+            JOIN clone_propostas_apprudnik p ON p.id = v.code
+            WHERE (v.is_contract_downloaded = false OR v.is_contract_downloaded IS NULL)
+              AND v.status IN (
+                'contrato_assinaturas',
+                'contrato_assinaturas_pendentes',
+                'checklist',
+                'checklist_erro',
+                'conferencia_engenharia',
+                'conferencia_financeiro',
+                'conferencia_financeiro_engenharia',
+                'contrato_reprovado',
+                'contrato_preenchimento_contrato'
+              )
+              AND v.created_at BETWEEN $1 AND $2
+              AND p.seller IN (SELECT id FROM usuarios_filtrados)
           ) AS em_negociacao,
           (
-          SELECT COUNT(*)
-          FROM clone_vendas_apprudnik v
-          WHERE v.is_contract_downloaded = true
-            AND v.status NOT IN (
-              'contrato_assinaturas',
-              'contrato_assinaturas_pendentes',
-              'checklist',
-              'checklist_erro',
-              'conferencia_engenharia',
-              'conferencia_financeiro',
-              'conferencia_financeiro_engenharia',
-              'contrato_reprovado',
-              'contrato_preenchimento_contrato',
-              'suspenso'
-            )
-            AND v.created_at BETWEEN $1 AND $2
+            SELECT COUNT(*)
+            FROM clone_vendas_apprudnik v
+            JOIN clone_propostas_apprudnik p ON p.id = v.code
+            WHERE v.is_contract_downloaded = true
+              AND v.status NOT IN (
+                'contrato_assinaturas',
+                'contrato_assinaturas_pendentes',
+                'checklist',
+                'checklist_erro',
+                'conferencia_engenharia',
+                'conferencia_financeiro',
+                'conferencia_financeiro_engenharia',
+                'contrato_reprovado',
+                'contrato_preenchimento_contrato',
+                'suspenso'
+              )
+              AND v.created_at BETWEEN $1 AND $2
+              AND p.seller IN (SELECT id FROM usuarios_filtrados)
           ) AS fechadas,
           (
             SELECT COUNT(*)
