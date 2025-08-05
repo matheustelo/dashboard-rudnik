@@ -93,6 +93,14 @@
                         title="Propostas - Meta x Realizado"
                     />
                 </div>
+                <div class="flex-1">
+                    <TeamPerformanceChart
+                        v-if="salesChartData.labels.length"
+                        :data="salesChartData"
+                        :options="chartOptions"
+                        title="Vendas - Meta x Realizado"
+                    />
+                </div>
             </div>
         </main>
     </div>
@@ -172,6 +180,10 @@ const proposalGoals = computed(() =>
     sortedGoals.value.filter((g) => g.tipo_meta === 'propostas')
 )
 
+const salesGoals = computed(() =>
+    sortedGoals.value.filter((g) => g.tipo_meta === 'vendas')
+)
+
 const buildChartData = (items, labelPrefix) => {
     const labels = items.map((g) => g.data_inicio.slice(0, 7))
     return {
@@ -197,6 +209,7 @@ const buildChartData = (items, labelPrefix) => {
 
 const revenueChartData = computed(() => buildChartData(revenueGoals.value, 'Faturamento'))
 const proposalChartData = computed(() => buildChartData(proposalGoals.value, 'Propostas'))
+const salesChartData = computed(() => buildChartData(salesGoals.value, 'Vendas'))
 
 const chartOptions = {
     responsive: true,

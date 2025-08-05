@@ -139,7 +139,8 @@
                   <div class="mt-2 sm:flex sm:justify-between">
                     <div class="sm:flex">
                       <p class="flex items-center text-sm text-gray-500">
-                        Valor Total: {{ formatCurrency(goal.valor_meta) }}
+                        {{ goal.tipo_meta === 'faturamento' ? 'Valor Total' : 'Quantidade Total' }}:
+                        {{ formatGoalValue(goal.valor_meta, goal.tipo_meta) }}
                       </p>
                       <p class="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
                         Período: {{ formatDate(goal.data_inicio) }} a {{ formatDate(goal.data_fim) }}
@@ -195,7 +196,7 @@
                       </div>
                       <div class="ml-2 flex-shrink-0 flex space-x-4">
                         <div class="text-right">
-                          <div class="text-sm font-medium text-gray-900">{{ formatCurrency(goal.valor_meta) }}</div>
+                         <div class="text-sm font-medium text-gray-900">{{ formatGoalValue(goal.valor_meta, goal.tipo_meta) }}</div>
                           <div class="text-xs text-gray-500">{{ goal.tipo_meta }}</div>
                         </div>
                         <button @click="openGoalModal('individual', goal)"
@@ -241,7 +242,7 @@
             <li v-for="goal in items" :key="goal.id" class="px-4 py-4 sm:px-6 flex justify-between items-center">
               <div>
                 <p class="text-sm font-medium text-indigo-600">{{ goal.supervisor_name }} - {{ goal.tipo_meta }}</p>
-                <p class="text-xs text-gray-500">Valor: {{ formatCurrency(goal.valor_meta) }}</p>
+                 <p class="text-xs text-gray-500">{{ goal.tipo_meta === 'faturamento' ? 'Valor' : 'Quantidade' }}: {{ formatGoalValue(goal.valor_meta, goal.tipo_meta) }}</p>
               </div>
               <div class="space-x-4">
                 <button @click="deleteGoal('general', goal.id)"
@@ -474,6 +475,7 @@
                       class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
                       <option value="faturamento">Faturamento (R$)</option>
                       <option value="propostas">Propostas (Quantidade)</option>
+                      <option value="vendas">Vendas (Quantidade)</option>
                     </select>
                   </div>
 
@@ -569,7 +571,7 @@
                   </div>
                   <div>
                     <dt class="text-sm font-medium text-gray-500">
-                      {{ selectedGoal.tipo_meta === 'propostas' ? 'Quantidade Total' : 'Valor Total' }}
+                      {{ selectedGoal.tipo_meta === 'faturamento' ? 'Valor Total' : 'Quantidade Total' }}
                     </dt>
                     <dd class="mt-1 text-sm text-gray-900">
                       {{ formatGoalValue(selectedGoal.valor_meta, selectedGoal.tipo_meta) }}

@@ -29,8 +29,8 @@
             </div>
           </div>
           <div class="w-full bg-gray-200 rounded-full h-3 mt-2">
-            <div class="h-3 rounded-full transition-all duration-300" :class="getProgressColor(summary.progress)"
-              :style="{ width: Math.min(summary.progress, 100) + '%' }"></div>
+            <div class="h-3 rounded-full transition-all duration-300" :class="getProgressColor(revenueSummary.progress)"
+              :style="{ width: Math.min(revenueSummary.progress, 100) + '%' }"></div>
           </div>
         </div>
         <div class="border rounded-lg p-4 bg-gray-50">
@@ -50,12 +50,33 @@
               :style="{ width: Math.min(proposalSummary.progress, 100) + '%' }"></div>
           </div>
         </div>
+        <div class="border rounded-lg p-4 bg-gray-50">
+          <div class="flex justify-between items-center">
+            <div class="text-sm text-gray-600">Progresso Vendas</div>
+            <div class="text-right">
+              <div class="text-lg font-semibold text-gray-900">{{ salesSummary.progress.toFixed(1) }}%</div>
+              <div class="text-sm text-gray-500">
+                {{ formatValue(salesSummary.achieved, 'vendas') }} / {{ formatValue(salesSummary.target,
+                'vendas') }}
+              </div>
+            </div>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-3 mt-2">
+            <div class="h-3 rounded-full transition-all duration-300"
+              :class="getProgressColor(salesSummary.progress)"
+              :style="{ width: Math.min(salesSummary.progress, 100) + '%' }"></div>
+          </div>
+        </div>
       </div>
       <div v-for="goal in goals" :key="goal.id" class="border rounded-lg p-4">
         <div class="flex justify-between items-start mb-2">
           <div>
             <h4 class="font-medium text-gray-900">
-              {{ goal.tipo_meta === 'faturamento' ? 'Meta de Faturamento' : 'Meta de Propostas' }}
+              {{ goal.tipo_meta === 'faturamento'
+                ? 'Meta de Faturamento'
+                : goal.tipo_meta === 'propostas'
+                  ? 'Meta de Propostas'
+                  : 'Meta de Vendas' }}
             </h4>
             <p class="text-sm text-gray-500">
               {{ goal.isIndividual ? 'Meta Individual' : 'Meta Geral' }}
@@ -124,6 +145,10 @@ const revenueSummary = computed(() =>
 
 const proposalSummary = computed(() =>
   calcSummary(goals.value.filter((g) => g.tipo_meta === 'propostas')),
+)
+
+const salesSummary = computed(() =>
+  calcSummary(goals.value.filter((g) => g.tipo_meta === 'vendas')),
 )
 
 const loadGoals = async () => {

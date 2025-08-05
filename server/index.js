@@ -1436,7 +1436,7 @@ app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) =>
         COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento_total
       FROM clone_propostas_apprudnik p
       LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
-      WHERE p.seller = $1 AND p.created_at >= $2 AND p.created_at <= $3
+      WHERE p.seller = $1 AND timezone('America/Sao_Paulo', p.created_at) >= $2 AND timezone('America/Sao_Paulo', p.created_at) <= $3
     `
     const performance = await pool.query(performanceQuery, [id, startDate, endDate])
 
@@ -1450,6 +1450,8 @@ app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) =>
           achieved = Number.parseFloat(actualData.faturamento_total)
         } else if (goal.tipo_meta === "propostas") {
           achieved = Number.parseInt(actualData.total_propostas)
+        } else if (goal.tipo_meta === "vendas") {
+          achieved = Number.parseInt(actualData.propostas_convertidas)
         }
 
         const target = Number.parseFloat(goal.valor_meta)
@@ -1765,7 +1767,7 @@ app.get("/api/dashboard/vendedor/:id", authenticateToken, async (req, res) => {
         COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento_total
       FROM clone_propostas_apprudnik p
       LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
-      WHERE p.seller = $1 AND p.created_at >= $2 AND p.created_at <= $3
+      WHERE p.seller = $1 AND timezone('America/Sao_Paulo', p.created_at) >= $2 AND timezone('America/Sao_Paulo', p.created_at) <= $3
     `
 
     const propostas = await pool.query(proposalsQuery, [id, startDate, endDate])
@@ -1779,7 +1781,7 @@ app.get("/api/dashboard/vendedor/:id", authenticateToken, async (req, res) => {
     COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento
   FROM clone_propostas_apprudnik p
   LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
-  WHERE p.seller = $1 AND p.created_at >= $2 AND p.created_at <= $3
+  WHERE p.seller = $1 AND timezone('America/Sao_Paulo', p.created_at) >= $2 AND timezone('America/Sao_Paulo', p.created_at) <= $3
   GROUP BY DATE_TRUNC('month', p.created_at)
   ORDER BY mes
 `
@@ -1912,7 +1914,7 @@ app.get("/api/dashboard/supervisor/:id", authenticateToken, async (req, res) => 
     COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento
   FROM clone_propostas_apprudnik p
   LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
-  WHERE p.seller = ANY($1) AND p.created_at >= $2 AND p.created_at <= $3
+  WHERE p.seller = ANY($1) AND timezone('America/Sao_Paulo', p.created_at) >= $2 AND timezone('America/Sao_Paulo', p.created_at) <= $3
 `
 
     const rankingQuery = `
@@ -1923,7 +1925,7 @@ app.get("/api/dashboard/supervisor/:id", authenticateToken, async (req, res) => 
     COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento
   FROM clone_users_apprudnik u
   LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller
-    AND p.created_at >= $2 AND p.created_at <= $3
+    AND timezone('America/Sao_Paulo', p.created_at) >= $2 AND timezone('America/Sao_Paulo', p.created_at) <= $3
   LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
   WHERE u.id = ANY($1)
   GROUP BY u.id, u.name
@@ -1971,7 +1973,7 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
     COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento_total
   FROM clone_propostas_apprudnik p
   LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
-  WHERE p.created_at >= $1 AND p.created_at <= $2
+  WHERE timezone('America/Sao_Paulo', p.created_at) >= $1 AND timezone('America/Sao_Paulo', p.created_at) <= $2
 `
 
     const monthlyRevenueQuery = `
@@ -1981,7 +1983,7 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
     COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as vendas
   FROM clone_propostas_apprudnik p
   LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
-  WHERE p.created_at >= $1 AND p.created_at <= $2
+  WHERE timezone('America/Sao_Paulo', p.created_at) >= $1 AND timezone('America/Sao_Paulo', p.created_at) <= $2
   GROUP BY DATE_TRUNC('month', p.created_at)
   ORDER BY mes
 `
@@ -1994,7 +1996,7 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
     COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as vendas
   FROM clone_users_apprudnik u
   LEFT JOIN clone_propostas_apprudnik p ON u.id = p.seller
-    AND p.created_at >= $1 AND p.created_at <= $2
+    AND timezone('America/Sao_Paulo', p.created_at) >= $1 AND timezone('America/Sao_Paulo', p.created_at) <= $2
   LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
   WHERE u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium') AND u.is_active = true
   GROUP BY u.id, u.name, u.role
