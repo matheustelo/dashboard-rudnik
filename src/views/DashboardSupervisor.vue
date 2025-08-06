@@ -117,7 +117,7 @@
           </div>
         </div>
 
-        <!-- Pedidos em Negociação -->
+        <!-- Pendentes de Assinatura -->
         <div class="bg-white overflow-hidden shadow rounded-lg">
           <div class="p-5">
             <div class="flex items-center">
@@ -130,15 +130,20 @@
               </div>
               <div class="ml-5 w-0 flex-1">
                 <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Pedidos em Negociação</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.emNegociacao }}</dd>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Pendentes de Assinatura</dt>
+                  <dd class="text-2xl font-semibold text-gray-900">
+                    {{ proposalMetrics.emNegociacao }}
+                    <span class="block text-sm font-normal text-gray-500">
+                      {{ formatCurrency(proposalMetrics.valorEmNegociacao || 0) }}
+                    </span>
+                  </dd>
                 </dl>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Pedidos Fechados -->
+        <!-- Contratos Assinados -->
         <div class="bg-white overflow-hidden shadow rounded-lg">
           <div class="p-5">
             <div class="flex items-center">
@@ -151,8 +156,13 @@
               </div>
               <div class="ml-5 w-0 flex-1">
                 <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Pedidos Fechados</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.fechadas }}</dd>
+                    <dt class="text-sm font-medium text-gray-500 truncate">Contratos Assinados</dt>
+                    <dd class="text-2xl font-semibold text-gray-900">
+                      {{ proposalMetrics.fechadas }}
+                      <span class="block text-sm font-normal text-gray-500">
+                        {{ formatCurrency(proposalMetrics.valorFechadas || 0) }}
+                      </span>
+                    </dd>
                 </dl>
               </div>
             </div>
@@ -300,6 +310,8 @@ const proposalMetrics = ref({
   fechadas: 0,
   canceladas: 0,
   valorCanceladas: 0,
+  valorEmNegociacao: 0,
+  valorFechadas: 0,
 })
 
 const showDetailModal = ref(false)
