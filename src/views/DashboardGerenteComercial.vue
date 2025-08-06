@@ -1,265 +1,342 @@
 <template>
   <div class="min-h-screen bg-gray-50">
+    <!-- Header -->
     <header class="bg-white shadow">
       <div class="custom-max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between items-center py-6">
+          <!-- Título e Boas-vindas -->
           <div>
-            <h1 class="text-3xl font-bold text-gray-900">Dashboard Gerente Comercial</h1>
-            <p class="text-gray-600">Bem-vindo, {{ authStore.user?.name }}</p>
+            <h1 class="text-3xl font-bold text-gray-900">
+              Dashboard Gerente Comercial
+            </h1>
+            <p class="text-gray-600">
+              Bem-vindo, {{ authStore.user?.name }}
+            </p>
           </div>
+
+          <!-- Botões de ação -->
           <div class="flex items-center space-x-4">
-            <router-link to="/dashboard/metas"
-              class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 text-sm font-medium">Gerenciar Metas</router-link>
-            <router-link to="/dashboard/team-goals-history"
-              class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium">Histórico de Metas</router-link>
-            <button @click="logout" class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700">Sair</button>
+            <router-link
+              to="/dashboard/metas"
+              class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 text-sm font-medium"
+            >
+              Gerenciar Metas
+            </router-link>
+            <router-link
+              to="/dashboard/team-goals-history"
+              class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium"
+            >
+              Histórico de Metas
+            </router-link>
+            <button
+              @click="logout"
+              class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
+            >
+              Sair
+            </button>
           </div>
         </div>
       </div>
     </header>
 
+    <!-- Main -->
     <main class="custom-max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-      <!-- Filters -->
-      <div class="bg-white shadow rounded-lg p-4 mb-6 flex items-center justify-between space-x-4">
+      <!-- Filtros -->
+      <div
+        class="bg-white shadow rounded-lg p-4 mb-6 flex items-center justify-between space-x-4"
+      >
         <div class="flex items-center space-x-4">
           <h3 class="text-md font-medium text-gray-700">Filtros:</h3>
-          <select v-model="filters.supervisorId" @change="applyFilters"
-            class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+
+          <!-- Filtro de líder -->
+          <select
+            v-model="filters.supervisorId"
+            @change="applyFilters"
+            class="border border-gray-300 rounded-md px-3 py-2 text-sm"
+          >
             <option value="all">Todos os Líderes</option>
-            <option v-for="leader in teamLeaders" :key="leader.id" :value="leader.id">{{ leader.name }} ({{ leader.role
-            }})</option>
+            <option
+              v-for="leader in teamLeaders"
+              :key="leader.id"
+              :value="leader.id"
+            >
+              {{ leader.name }} ({{ leader.role }})
+            </option>
           </select>
-          <select v-model="filters.period" @change="applyFilters"
-            class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+
+          <!-- Filtro de período -->
+          <select
+            v-model="filters.period"
+            @change="applyFilters"
+            class="border border-gray-300 rounded-md px-3 py-2 text-sm"
+          >
             <option v-for="p in periods" :key="p" :value="p">
               {{ formatPeriodLabel(p) }}
             </option>
             <option value="">Período Personalizado</option>
           </select>
         </div>
+
+        <!-- Datas personalizadas -->
         <div class="flex items-center space-x-2">
-          <input v-model="filters.startDate" type="date" @change="applyFilters" :disabled="!!filters.period"
-            class="border border-gray-300 rounded-md px-3 py-2 text-sm disabled:bg-gray-100" />
+          <input
+            v-model="filters.startDate"
+            type="date"
+            @change="applyFilters"
+            :disabled="!!filters.period"
+            class="border border-gray-300 rounded-md px-3 py-2 text-sm disabled:bg-gray-100"
+          />
           <span class="text-gray-500">até</span>
-          <input v-model="filters.endDate" type="date" @change="applyFilters" :disabled="!!filters.period"
-            class="border border-gray-300 rounded-md px-3 py-2 text-sm disabled:bg-gray-100" />
+          <input
+            v-model="filters.endDate"
+            type="date"
+            @change="applyFilters"
+            :disabled="!!filters.period"
+            class="border border-gray-300 rounded-md px-3 py-2 text-sm disabled:bg-gray-100"
+          />
         </div>
       </div>
 
       <!-- KPIs Principais -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-
+      <div
+        v-if="dashboardData"
+        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6"
+      >
         <!-- Total de Propostas -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-          <div class="p-5">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
-                    </path>
-                  </svg>
-                </div>
-              </div>
-              <div class="ml-5 w-0 flex-1">
-                <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Total de Propostas</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">
-                    {{ teamPerformance?.teamStats?.totalPropostas || 0 }}
-                    <span class="block text-sm font-normal text-gray-500">
-                      {{ formatCurrency(teamPerformance?.teamStats?.totalValorPropostas || 0) }}
-                    </span>
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
+        <DashboardCard
+          title="Total de Propostas"
+          :value="dashboardData.resumo.totalPropostas || 0"
+          icon-bg="bg-blue-500"
+        >
+          <template #icon>
+            <svg
+              class="w-5 h-5 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 12h6m-6 4h6m2 5H7a2
+                   2 0 01-2-2V5a2 2 0 012-2h5.586a1
+                   1 0 01.707.293l5.414 5.414a1 1
+                   0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+          </template>
+        </DashboardCard>
+
+        <!-- Propostas Unitárias -->
+        <DashboardCard
+          title="Propostas Unitárias"
+          :value="proposalMetrics.unitarias"
+          :sub-value="formatCurrency(proposalMetrics.valorUnitarias)"
+          :progress="proposalProgress"
+          progress-color="bg-green-600"
+          :footer-text="proposalProgress.toFixed(1) + '% de ' + (proposalGoal.target || 0)"
+          icon-bg="bg-green-600"
+        >
+          <template #icon>
+            <svg
+              class="w-5 h-5 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          </template>
+        </DashboardCard>
 
         <!-- Propostas Convertidas -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-          <div class="p-5">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-              </div>
-              <div class="ml-5 w-0 flex-1">
-                <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Propostas Convertidas</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.convertidas }}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
+        <DashboardCard
+          title="Total de Propostas"
+          :value="dashboardData.resumo.propostasConvertidas || 0"
+          :sub-value="formatCurrency(dashboardData.resumo.faturamentoTotal || 0)"
+          icon-bg="bg-green-500"
+        >
+          <template #icon>
+            <svg
+              class="w-5 h-5 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M13 7h8m0 0v8m0-8l-8
+                   8-4-4-6 6"
+              />
+            </svg>
+          </template>
+        </DashboardCard>
 
-        <!-- Total de Vendas -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-          <div class="p-5">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
-                  </svg>
-                </div>
-              </div>
-              <div class="ml-5 w-0 flex-1">
-                <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Total de Vendas</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">
-                    {{ teamPerformance?.teamStats?.totalConvertidas || 0 }}
-                    <span class="block text-sm font-normal text-gray-500">
-                      {{ formatCurrency(teamPerformance?.teamStats?.totalFaturamento || 0) }}
-                    </span>
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
+        <!-- Pendentes de Assinatura -->
+        <DashboardCard
+          title="Pendentes de Assinatura"
+          :value="proposalMetrics.emNegociacao"
+          icon-bg="bg-yellow-500"
+        >
+          <template #icon>
+            <svg
+              class="w-5 h-5 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M8 9l3 3-3 3m5-6l3 3-3 3"
+              />
+            </svg>
+          </template>
+        </DashboardCard>
 
-        <!-- Pedidos em Negociação -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-          <div class="p-5">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M8 9l3 3-3 3m5-6l3 3-3 3" />
-                  </svg>
-                </div>
-              </div>
-              <div class="ml-5 w-0 flex-1">
-                <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Pedidos em Negociação</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.emNegociacao }}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Pedidos Fechados -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-          <div class="p-5">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M9 17v-2a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2zM7 7h10" />
-                  </svg>
-                </div>
-              </div>
-              <div class="ml-5 w-0 flex-1">
-                <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Pedidos Fechados</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.fechadas }}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
+        <!-- Contratos Assinados -->
+        <DashboardCard
+          title="Contratos Assinados"
+          :value="proposalMetrics.fechadas"
+          icon-bg="bg-blue-500"
+        >
+          <template #icon>
+            <svg
+              class="w-5 h-5 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 17v-2a2 2 0 012-2h2a2
+                   2 0 012 2v2a2 2 0 01-2 2h-2a2
+                   2 0 01-2-2zM7 7h10"
+              />
+            </svg>
+          </template>
+        </DashboardCard>
 
         <!-- Pedidos Cancelados -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-          <div class="p-5">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </div>
-              </div>
-              <div class="ml-5 w-0 flex-1">
-                <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Pedidos Cancelados</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.canceladas }}
-                    <span class='text-sm text-gray-600'>({{ formatCurrency(proposalMetrics.valorCanceladas) }})</span>
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
+        <DashboardCard
+          title="Pedidos Cancelados"
+          :value="proposalMetrics.canceladas"
+          :sub-value="'(' + formatCurrency(proposalMetrics.valorCanceladas) + ')'"
+          icon-bg="bg-red-500"
+        >
+          <template #icon>
+            <svg
+              class="w-5 h-5 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </template>
+        </DashboardCard>
 
         <!-- Taxa de Conversão -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-          <div class="p-5">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
-                  </svg>
-                </div>
-              </div>
-              <div class="ml-5 w-0 flex-1">
-                <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Taxa de Conversão</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">
-                    {{ teamPerformance?.teamStats?.teamConversionRate?.toFixed(1) || 0 }}%
-                    <span class="block text-sm font-normal text-gray-500">
-                      {{ formatCurrency(teamTicketMedio) }}
-                    </span>
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
+        <DashboardCard
+          title="Taxa de Conversão"
+          :value="(dashboardData.resumo.taxaConversao || 0) + '%'"
+          :sub-value="'Ticket Médio: ' + formatCurrency(dashboardData.resumo.ticketMedio || 0)"
+          :progress="salesProgress"
+          progress-color="bg-purple-600"
+          :footer-text="salesProgress.toFixed(1) + '% da meta'"
+          icon-bg="bg-purple-500"
+        >
+          <template #icon>
+            <svg
+              class="w-5 h-5 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M7 12l3-3 3 3 4-4M8
+                   21l4-4 4 4M3 4h18M4 4h16v12a1
+                   1 0 01-1 1H5a1 1 0 01-1-1V4z"
+              />
+            </svg>
+          </template>
+        </DashboardCard>
 
-        <!-- Faturamento Total -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-          <div class="p-5">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 00-2-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
-                    </path>
-                  </svg>
-                </div>
-              </div>
-              <div class="ml-5 w-0 flex-1">
-                <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Faturamento Total</dt>
-                  <dd class="flex items-baseline">
-                    <div class="text-2xl font-semibold text-gray-900">
-                      {{ formatCurrency(teamPerformance?.teamStats?.totalFaturamento || 0) }}
-                    </div>
-                    <div class="ml-2 flex items-baseline text-sm font-semibold"
-                      :class="faturamentoProgress >= 100 ? 'text-green-600' : 'text-yellow-600'">
-                      {{ faturamentoProgress.toFixed(1) }}% da meta
-                    </div>
-                  </dd>
-                  <div class="mt-2 w-full bg-gray-200 rounded-full h-2">
-                    <div class="bg-indigo-600 h-2 rounded-full transition-all duration-300"
-                      :style="{ width: Math.min(faturamentoProgress, 100) + '%' }"></div>
-                  </div>
-                </dl>
-              </div>
+        <!-- Vendas Válidadas -->
+        <DashboardCard
+          title="Vendas Válidadas"
+          value-class="flex items-baseline"
+          :progress="vendasValidasProgress"
+          progress-color="bg-indigo-600"
+          :footer-text="'Meta: ' + formatCurrency(revenueGoal.target || 0)"
+          icon-bg="bg-indigo-500"
+        >
+          <template #icon>
+            <svg
+              class="w-5 h-5 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 19v-6a2 2 0
+                   00-2-2H5a2 2 0
+                   00-2 2v6a2 2 0
+                   002 2h2a2 2 0
+                   002-2zm0 0V9a2
+                   2 0 012-2h2a2 2
+                   0 012 2v10m-6 0a2
+                   2 0 002 2h2a2 2 0
+                   00-2-2m0 0V5a2 2
+                   0 012-2h2a2 2 0
+                   012 2v14a2 2 0
+                   01-2 2h-2a2 2 0
+                   01-2-2z"
+              />
+            </svg>
+          </template>
+          <template #value>
+            <div class="text-2xl font-semibold text-gray-900">
+              {{ formatCurrency(proposalMetrics.valorFechadas || 0) }}
             </div>
-          </div>
-        </div>
+            <div
+              class="ml-2 flex items-baseline text-sm font-semibold"
+              :class="vendasValidasProgress >= 100 ? 'text-green-600' : 'text-yellow-600'"
+            >
+              {{ vendasValidasProgress.toFixed(1) }}% da meta
+            </div>
+          </template>
+        </DashboardCard>
       </div>
 
+      <!-- Conteúdo -->
       <div v-if="loading" class="text-center py-12">
         <div class="text-lg">Carregando dashboard...</div>
       </div>
       <div v-else class="space-y-6">
-        <!-- KPIs and Charts -->
+        <!-- Gráficos -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div class="bg-white shadow rounded-lg p-4">
             <LineChart :data="revenueVsTargetChartData" :options="lineChartOptions" />
@@ -269,13 +346,21 @@
           </div>
         </div>
 
-        <!-- Detailed Performance Table -->
-        <PerformanceTable v-if="teamPerformance" :team-members="teamPerformance.teamMembers"
-          @drill-down="handleDrillDown" />
+        <!-- Tabela -->
+        <PerformanceTable
+          v-if="teamPerformance"
+          :team-members="teamPerformance.teamMembers"
+          @drill-down="handleDrillDown"
+        />
 
-        <!-- Representative Detail Modal -->
-        <RepresentativeDetailModal :is-open="showDetailModal" :representative="selectedRepresentative"
-          :details="representativeDetails" :loading="detailLoading" @close="closeDetailModal" />
+        <!-- Modal Detalhes -->
+        <RepresentativeDetailModal
+          :is-open="showDetailModal"
+          :representative="selectedRepresentative"
+          :details="representativeDetails"
+          :loading="detailLoading"
+          @close="closeDetailModal"
+        />
       </div>
     </main>
   </div>
@@ -290,6 +375,7 @@ import PerformanceTable from '../components/PerformanceTable.vue'
 import RepresentativeDetailModal from '../components/RepresentativeDetailModal.vue'
 import LineChart from '../components/LineChart.vue'
 import BarChart from '../components/BarChart.vue'
+import DashboardCard from '../components/DashboardCard.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -305,6 +391,47 @@ const proposalMetrics = ref({
   fechadas: 0,
   canceladas: 0,
   valorCanceladas: 0,
+  unitarias: 0,
+  valorUnitarias: 0,
+  valorFechadas: 0,
+})
+
+const proposals = ref([])
+
+const proposalGoal = computed(() => {
+  const goals = goalsData.value.goals.filter(g => g.tipo_meta === 'propostas')
+  const target = goals.reduce((sum, g) => sum + parseFloat(g.valor_meta || 0), 0)
+  return { target }
+})
+
+const proposalProgress = computed(() => {
+  const meta = proposalGoal.value.target
+  if (!meta) return 0
+  return (proposalMetrics.value.unitarias / meta) * 100
+})
+
+const salesGoal = computed(() => {
+  const goals = goalsData.value.goals.filter(g => g.tipo_meta === 'vendas')
+  const target = goals.reduce((sum, g) => sum + parseFloat(g.valor_meta || 0), 0)
+  return { target }
+})
+
+const salesProgress = computed(() => {
+  const meta = salesGoal.value.target
+  if (!meta) return 0
+  return (proposalMetrics.value.fechadas / meta) * 100
+})
+
+const revenueGoal = computed(() => {
+  const goals = goalsData.value.goals.filter(g => g.tipo_meta === 'faturamento')
+  const target = goals.reduce((sum, g) => sum + parseFloat(g.valor_meta || 0), 0)
+  return { target }
+})
+
+const vendasValidasProgress = computed(() => {
+  const meta = revenueGoal.value.target
+  if (!meta) return 0
+  return (proposalMetrics.value.valorFechadas / meta) * 100
 })
 
 const showDetailModal = ref(false)
