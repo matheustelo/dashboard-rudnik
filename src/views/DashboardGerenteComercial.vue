@@ -98,16 +98,17 @@
       </div>
 
       <!-- KPIs Principais -->
-      <div
-        v-if="dashboardData"
-        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6"
-      >
-        <!-- Total de Propostas -->
-        <DashboardCard
-          title="Total de Propostas"
-          :value="dashboardData.resumo.totalPropostas || 0"
+        <div
+          v-if="dashboardData"
+          class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6"
           icon-bg="bg-blue-500"
         >
+          <!-- Total de Propostas -->
+          <DashboardCard
+            title="Total de Propostas"
+            :value="dashboardData?.resumo?.totalPropostas || 0"
+            icon-bg="bg-blue-500"
+          >
           <template #icon>
             <svg
               class="w-5 h-5 text-white"
@@ -158,8 +159,8 @@
         <!-- Total de Propostas -->
         <DashboardCard
           title="Total de Propostas"
-          :value="dashboardData.resumo.propostasConvertidas || 0"
-          :sub-value="formatCurrency(dashboardData.resumo.faturamentoTotal || 0)"
+          :value="dashboardData?.resumo?.propostasConvertidas || 0"
+          :sub-value="formatCurrency(dashboardData?.resumo?.faturamentoTotal || 0)"
           icon-bg="bg-green-500"
         >
           <template #icon>
@@ -255,8 +256,8 @@
         <!-- Taxa de Conversão -->
         <DashboardCard
           title="Taxa de Conversão"
-          :value="(dashboardData.resumo.taxaConversao || 0) + '%'"
-          :sub-value="'Ticket Médio: ' + formatCurrency(dashboardData.resumo.ticketMedio || 0)"
+          :value="(dashboardData?.resumo?.taxaConversao || 0) + '%'"
+          :sub-value="'Ticket Médio: ' + formatCurrency(dashboardData?.resumo?.ticketMedio || 0)"
           :progress="salesProgress"
           progress-color="bg-purple-600"
           :footer-text="salesProgress.toFixed(1) + '% da meta'"
