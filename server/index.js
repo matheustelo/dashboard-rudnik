@@ -349,6 +349,7 @@ app.get(
             AND p.seller IN (SELECT id FROM usuarios_filtrados)
             AND p.lead->>'phone' IS NOT NULL
             AND p.lead->>'phone' <> ''
+            AND p.created_at BETWEEN $1 AND $2
           GROUP BY p.lead->>'phone'
           ORDER BY cnt DESC
         ),
@@ -1898,25 +1899,25 @@ app.get("/api/dashboard/representante/:id", authenticateToken, async (req, res) 
     const { startDate, endDate } = getDateRange(period, start, end)
 
     const proposalsQuery = `
-  SELECT 
-    COUNT(*) as total, 
-    COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas,
-    COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento_total
-  FROM clone_propostas_apprudnik 
-  WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-`
+      SELECT 
+        COUNT(*) as total, 
+        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as convertidas,
+        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento_total
+      FROM clone_propostas_apprudnik 
+      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+    `
 
     const monthlySalesQuery = `
-  SELECT 
-    DATE_TRUNC('month', created_at) as mes,
-    COUNT(*) as total_propostas,
-    COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
-    COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento
-  FROM clone_propostas_apprudnik 
-  WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
-  GROUP BY DATE_TRUNC('month', created_at)
-  ORDER BY mes
-`
+      SELECT 
+        DATE_TRUNC('month', created_at) as mes,
+        COUNT(*) as total_propostas,
+        COUNT(CASE WHEN has_generated_sale = true THEN 1 END) as vendas,
+        COALESCE(SUM(CASE WHEN has_generated_sale = true THEN CAST(total_price AS DECIMAL) END), 0) as faturamento
+      FROM clone_propostas_apprudnik 
+      WHERE seller = $1 AND created_at >= $2 AND created_at <= $3
+      GROUP BY DATE_TRUNC('month', created_at)
+      ORDER BY mes
+    `
 
     const propostas = await pool.query(proposalsQuery, [id, startDate, endDate])
     const vendasMensais = await pool.query(monthlySalesQuery, [id, startDate, endDate])

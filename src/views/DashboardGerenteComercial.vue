@@ -105,7 +105,7 @@
         <!-- Total de Propostas -->
           <DashboardCard
             title="Total de Propostas"
-            :value="dashboardData?.resumo?.totalPropostas || 0"
+            :value="teamPerformance?.teamStats?.totalPropostas || 0"
             icon-bg="bg-blue-500"
           >
           <template #icon>
@@ -255,8 +255,8 @@
         <!-- Taxa de Conversão -->
         <DashboardCard
           title="Taxa de Conversão"
-          :value="(dashboardData?.resumo?.taxaConversao || 0) + '%'"
-          :sub-value="'Ticket Médio: ' + formatCurrency(dashboardData?.resumo?.ticketMedio || 0)"
+          :value="( teamPerformance?.teamStats?.teamConversionRate?.toFixed(1) || 0) + '%'"
+          :sub-value="'Ticket Médio: ' + formatCurrency( teamTicketMedio || 0)"
           :progress="salesProgress"
           progress-color="bg-purple-600"
           :footer-text="salesProgress.toFixed(1) + '% da meta'"
