@@ -42,214 +42,164 @@
 
 
       <!-- KPIs Principais -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+      <div v-if="dashboardData" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
         <!-- Total de Propostas -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-          <div class="p-5">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
-                    </path>
-                  </svg>
-                </div>
-              </div>
-              <div class="ml-5 w-0 flex-1">
-                <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Total de Propostas</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">
-                    {{ teamPerformance?.teamStats?.totalPropostas || 0 }}
-                    <span class="block text-sm font-normal text-gray-500">
-                      {{ formatCurrency(teamPerformance?.teamStats?.totalValorPropostas || 0) }}
-                    </span>
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
+        <DashboardCard
+          title="Total de Propostas"
+          :value="dashboardData.resumo.totalPropostas || 0"
+          icon-bg="bg-blue-500"
+        >
+          <template #icon>
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+          </template>
+        </DashboardCard>
 
-        <!-- Propostas Convertidas -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-          <div class="p-5">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-              </div>
-              <div class="ml-5 w-0 flex-1">
-                <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Propostas Convertidas</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.convertidas }}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
+        <!-- Propostas Unitárias -->
+        <DashboardCard
+          title="Propostas Unitárias"
+          :value="proposalMetrics.unitarias"
+          :sub-value="formatCurrency(proposalMetrics.valorUnitarias)"
+          :progress="proposalProgress"
+          progress-color="bg-green-600"
+          :footer-text="proposalProgress.toFixed(1) + '% de ' + (proposalGoal.target || 0)"
+          icon-bg="bg-green-600"
+        >
+          <template #icon>
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+          </template>
+        </DashboardCard>
 
-        <!-- Total de Vendas -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-          <div class="p-5">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
-                  </svg>
-                </div>
-              </div>
-              <div class="ml-5 w-0 flex-1">
-                <dl>
-                 <dt class="text-sm font-medium text-gray-500 truncate">Total de Vendas</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">
-                    {{ teamPerformance?.teamStats?.totalConvertidas || 0 }}
-                    <span class="block text-sm font-normal text-gray-500">
-                      {{ formatCurrency(teamPerformance?.teamStats?.totalFaturamento || 0) }}
-                    </span>
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
+        <!-- Total de Propostas -->
+        <DashboardCard
+          title="Total de Propostas"
+          :value="dashboardData.resumo.propostasConvertidas || 0"
+          :sub-value="formatCurrency(dashboardData.resumo.faturamentoTotal || 0)"
+          icon-bg="bg-green-500"
+        >
+          <template #icon>
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+              />
+            </svg>
+          </template>
+        </DashboardCard>
+       
         <!-- Pendentes de Assinatura -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-          <div class="p-5">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5-6l3 3-3 3"></path>
-                  </svg>
-                </div>
-              </div>
-              <div class="ml-5 w-0 flex-1">
-                <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Pendentes de Assinatura</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">
-                    {{ proposalMetrics.emNegociacao }}
-                    <span class="block text-sm font-normal text-gray-500">
-                      {{ formatCurrency(proposalMetrics.valorEmNegociacao || 0) }}
-                    </span>
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
+        <DashboardCard
+          title="Pendentes de Assinatura"
+          :value="proposalMetrics.emNegociacao"
+          icon-bg="bg-yellow-500"
+        >
+          <template #icon>
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M8 9l3 3-3 3m5-6l3 3-3 3"
+              />
+            </svg>
+          </template>
+        </DashboardCard>
 
         <!-- Contratos Assinados -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-          <div class="p-5">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                 <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2zM7 7h10" />
-                  </svg>
-                </div>
-              </div>
-              <div class="ml-5 w-0 flex-1">
-                <dl>
-                    <dt class="text-sm font-medium text-gray-500 truncate">Contratos Assinados</dt>
-                    <dd class="text-2xl font-semibold text-gray-900">
-                      {{ proposalMetrics.fechadas }}
-                      <span class="block text-sm font-normal text-gray-500">
-                        {{ formatCurrency(proposalMetrics.valorFechadas || 0) }}
-                      </span>
-                    </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
+        <DashboardCard
+          title="Contratos Assinados"
+          :value="proposalMetrics.fechadas"
+          icon-bg="bg-blue-500"
+        >
+          <template #icon>
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 17v-2a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2zM7 7h10"
+              />
+            </svg>
+          </template>
+        </DashboardCard>
 
         <!-- Pedidos Cancelados -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-          <div class="p-5">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                 <div class="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </div>
-              </div>
-              <div class="ml-5 w-0 flex-1">
-                <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Pedidos Cancelados</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.canceladas }} <span class='text-sm text-gray-600'>({{ formatCurrency(proposalMetrics.valorCanceladas) }})</span></dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
+        <DashboardCard
+          title="Pedidos Cancelados"
+          :value="proposalMetrics.canceladas"
+          :sub-value="'(' + formatCurrency(proposalMetrics.valorCanceladas) + ')'"
+          icon-bg="bg-red-500"
+        >
+          <template #icon>
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </template>
+        </DashboardCard>
 
         <!-- Taxa de Conversão -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-          <div class="p-5">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                 <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
-                  </svg>
-                </div>
-              </div>
-              <div class="ml-5 w-0 flex-1">
-                <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Taxa de Conversão</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">
-                    {{ teamPerformance?.teamStats?.teamConversionRate?.toFixed(1) || 0 }}%
-                    <span class="block text-sm font-normal text-gray-500">
-                      {{ formatCurrency(teamTicketMedio) }}
-                    </span>
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
+        <DashboardCard
+          title="Taxa de Conversão"
+          :value="(dashboardData.resumo.taxaConversao || 0) + '%'"
+          :sub-value="'Ticket Médio: ' + formatCurrency(dashboardData.resumo.ticketMedio || 0)"
+          :progress="salesProgress"
+          progress-color="bg-purple-600"
+          :footer-text="salesProgress.toFixed(1) + '% da meta'"
+          icon-bg="bg-purple-500"
+        >
+          <template #icon>
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"
+              />
+            </svg>
+          </template>
+        </DashboardCard>
 
-        <!-- Faturamento Total -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-          <div class="p-5">
-            <div class="flex items-center">
-              <div class="flex-shrink-0">
-                <div class="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center">
-                  <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 00-2-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
-                    </path>
-                  </svg>
-                </div>
-              </div>
-              <div class="ml-5 w-0 flex-1">
-                <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Faturamento Total</dt>
-                  <dd class="flex items-baseline">
-                    <div class="text-2xl font-semibold text-gray-900">
-                      {{ formatCurrency(teamPerformance?.teamStats?.totalFaturamento || 0) }}
-                    </div>
-                    <div class="ml-2 flex items-baseline text-sm font-semibold"
-                      :class="faturamentoProgress >= 100 ? 'text-green-600' : 'text-yellow-600'">
-                      {{ faturamentoProgress.toFixed(1) }}% da meta
-                    </div>
-                  </dd>
-                  <div class="mt-2 w-full bg-gray-200 rounded-full h-2">
-                    <div class="bg-indigo-600 h-2 rounded-full transition-all duration-300"
-                      :style="{ width: Math.min(faturamentoProgress, 100) + '%' }"></div>
-                  </div>
-                </dl>
-              </div>
+        <!-- Vendas Válidas -->
+        <DashboardCard
+          title="Vendas Válidas"
+          value-class="flex items-baseline"
+          :progress="vendasValidasProgress"
+          progress-color="bg-indigo-600"
+          :footer-text="'Meta: ' + formatCurrency(revenueGoal.target || 0)"
+          icon-bg="bg-indigo-500"
+        >
+          <template #icon>
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 00-2-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+              />
+            </svg>
+          </template>
+          <template #value>
+            <div class="text-2xl font-semibold text-gray-900">
+              {{ formatCurrency(proposalMetrics.valorFechadas || 0) }}
             </div>
-          </div>
-        </div>
+            <div
+              class="ml-2 flex items-baseline text-sm font-semibold"
+              :class="vendasValidasProgress >= 100 ? 'text-green-600' : 'text-yellow-600'"
+            >
+              {{ vendasValidasProgress.toFixed(1) }}% da meta
+            </div>
+          </template>
+        </DashboardCard>
       </div>
 
       <div v-if="loading" class="text-center py-12">
@@ -282,6 +232,7 @@ import { ref, onMounted, reactive, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { dashboardService, performanceService, goalsService } from '../services/api'
+import DashboardCard from '../components/DashboardCard.vue'
 import PerformanceTable from '../components/PerformanceTable.vue'
 import RepresentativeDetailModal from '../components/RepresentativeDetailModal.vue'
 import LineChart from '../components/LineChart.vue'
@@ -302,16 +253,55 @@ const dashboardTitle = computed(() => {
 })
 
 const loading = ref(true)
+const dashboardData = ref(null)
 const teamPerformance = ref(null)
 const revenueVsTarget = ref([])
 const proposalMetrics = ref({
-  convertidas: 0,
   emNegociacao: 0,
   fechadas: 0,
   canceladas: 0,
   valorCanceladas: 0,
-  valorEmNegociacao: 0,
   valorFechadas: 0,
+  unitarias: 0,
+  valorUnitarias: 0,
+})
+
+const goalsData = ref({ goals: [] })
+
+const proposalGoal = computed(() => {
+  const goals = goalsData.value.goals.filter(g => g.tipo_meta === 'propostas')
+  const target = goals.reduce((sum, g) => sum + parseFloat(g.valor_meta || 0), 0)
+  return { target }
+})
+
+const proposalProgress = computed(() => {
+  const meta = proposalGoal.value.target
+  if (!meta) return 0
+  return (proposalMetrics.value.unitarias / meta) * 100
+})
+
+const salesGoal = computed(() => {
+  const goals = goalsData.value.goals.filter(g => g.tipo_meta === 'vendas')
+  const target = goals.reduce((sum, g) => sum + parseFloat(g.valor_meta || 0), 0)
+  return { target }
+})
+
+const salesProgress = computed(() => {
+  const meta = salesGoal.value.target
+  if (!meta) return 0
+  return (proposalMetrics.value.fechadas / meta) * 100
+})
+
+const revenueGoal = computed(() => {
+  const goals = goalsData.value.goals.filter(g => g.tipo_meta === 'faturamento')
+  const target = goals.reduce((sum, g) => sum + parseFloat(g.valor_meta || 0), 0)
+  return { target }
+})
+
+const vendasValidasProgress = computed(() => {
+  const meta = revenueGoal.value.target
+  if (!meta) return 0
+  return (proposalMetrics.value.valorFechadas / meta) * 100
 })
 
 const showDetailModal = ref(false)
@@ -338,14 +328,27 @@ const applyFilters = async () => {
   loading.value = true
   try {
     const supervisorFilters = { ...filters, supervisorId: authStore.user.id }
-    const [perf, revVsTarget, metrics] = await Promise.all([
+    const [dashboardResp, perf, revVsTarget, metrics, goalsResp] = await Promise.all([
+      dashboardService.getSupervisorDashboard(
+        authStore.user.id,
+        filters.period || undefined,
+        filters.startDate || undefined,
+        filters.endDate || undefined
+      ),
       performanceService.getTeamPerformance(supervisorFilters),
       dashboardService.getRevenueVsTarget(supervisorFilters),
       dashboardService.getProposalMetrics(supervisorFilters),
+      goalsService.getGoals(
+        filters.period || undefined,
+        filters.startDate || undefined,
+        filters.endDate || undefined
+      ),
     ])
+    dashboardData.value = dashboardResp.data
     teamPerformance.value = perf.data
     revenueVsTarget.value = revVsTarget.data
     proposalMetrics.value = metrics.data
+    goalsData.value = { goals: goalsResp.data?.generalGoals || [] }
   } catch (error) {
     console.error('Erro ao aplicar filtros:', error)
   } finally {
@@ -357,14 +360,27 @@ const loadInitialData = async () => {
   loading.value = true
   try {
     const supervisorFilters = { ...filters, supervisorId: authStore.user.id }
-    const [perf, revVsTarget, metrics] = await Promise.all([
+    const [dashboardResp, perf, revVsTarget, metrics, goalsResp] = await Promise.all([
+      dashboardService.getSupervisorDashboard(
+        authStore.user.id,
+        filters.period || undefined,
+        filters.startDate || undefined,
+        filters.endDate || undefined
+      ),
       performanceService.getTeamPerformance(supervisorFilters),
       dashboardService.getRevenueVsTarget(supervisorFilters),
       dashboardService.getProposalMetrics(supervisorFilters),
+      goalsService.getGoals(
+        filters.period || undefined,
+        filters.startDate || undefined,
+        filters.endDate || undefined
+      ),
     ])
+    dashboardData.value = dashboardResp.data
     teamPerformance.value = perf.data
     revenueVsTarget.value = revVsTarget.data
     proposalMetrics.value = metrics.data
+    goalsData.value = { goals: goalsResp.data?.generalGoals || [] }
   } catch (error) {
     console.error('Erro ao carregar dashboard:', error)
   } finally {
@@ -449,19 +465,6 @@ const formatCurrency = (value) => {
     currency: 'BRL'
   }).format(value)
 }
-
-const faturamentoProgress = computed(() => {
-  if (!teamPerformance.value?.teamStats) return 0
-  const meta = teamPerformance.value.teamStats.totalMetaFaturamento || 150000
-  const atual = teamPerformance.value.teamStats.totalFaturamento || 0
-  return (atual / meta) * 100
-})
-
-const teamTicketMedio = computed(() => {
-  const stats = teamPerformance.value?.teamStats
-  if (!stats || !stats.totalConvertidas) return 0
-  return stats.totalFaturamento / stats.totalConvertidas
-})
 
 onMounted(async () => {
   authStore.initializeAuth()

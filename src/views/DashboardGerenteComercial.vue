@@ -155,7 +155,7 @@
           </template>
         </DashboardCard>
 
-        <!-- Propostas Convertidas -->
+        <!-- Total de Propostas -->
         <DashboardCard
           title="Total de Propostas"
           :value="dashboardData.resumo.propostasConvertidas || 0"
@@ -381,12 +381,12 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const loading = ref(true)
+const dashboardData = ref(null)
 const teamPerformance = ref(null)
 const teamLeaders = ref([])
 const revenueVsTarget = ref([])
 const revenueBySupervisor = ref([])
 const proposalMetrics = ref({
-  convertidas: 0,
   emNegociacao: 0,
   fechadas: 0,
   canceladas: 0,
@@ -396,7 +396,6 @@ const proposalMetrics = ref({
   valorFechadas: 0,
 })
 
-const proposals = ref([])
 const goalsData = ref({ goals: [] })
 
 const proposalGoal = computed(() => {
@@ -459,7 +458,12 @@ watch(() => filters.period, (newPeriod) => {
 const applyFilters = async () => {
   loading.value = true
   try {
-    const [perf, revVsTarget, revBySup, metrics, goalsResp] = await Promise.all([
+    const [dashboardResp, perf, revVsTarget, revBySup, metrics, goalsResp] = await Promise.all([
+      dashboardService.getGerenteComercialDashboard(
+        filters.period || undefined,
+        filters.startDate || undefined,
+        filters.endDate || undefined
+      ),
       performanceService.getTeamPerformance(filters),
       dashboardService.getRevenueVsTarget(filters),
       dashboardService.getRevenueBySupervisor(filters),
@@ -470,6 +474,7 @@ const applyFilters = async () => {
         filters.endDate || undefined
       ),
     ])
+    dashboardData.value = dashboardResp.data
     teamPerformance.value = perf.data
     revenueVsTarget.value = revVsTarget.data
     revenueBySupervisor.value = revBySup.data
@@ -485,7 +490,12 @@ const applyFilters = async () => {
 const loadInitialData = async () => {
   loading.value = true
   try {
-    const [leaders, perf, revVsTarget, revBySup, metrics, goalsResp] = await Promise.all([
+    const [dashboardResp, leaders, perf, revVsTarget, revBySup, metrics, goalsResp] = await Promise.all([
+      dashboardService.getGerenteComercialDashboard(
+        filters.period || undefined,
+        filters.startDate || undefined,
+        filters.endDate || undefined
+      ),
       teamLeaderService.getTeamLeaders(),
       performanceService.getTeamPerformance(filters),
       dashboardService.getRevenueVsTarget(filters),
@@ -497,6 +507,7 @@ const loadInitialData = async () => {
         filters.endDate || undefined
       ),
     ])
+    dashboardData.value = dashboardResp.data
     teamLeaders.value = leaders.data
     teamPerformance.value = perf.data
     revenueVsTarget.value = revVsTarget.data
@@ -574,19 +585,6 @@ const formatCurrency = (value) => {
     currency: 'BRL'
   }).format(value)
 }
-
-const faturamentoProgress = computed(() => {
-  if (!teamPerformance.value?.teamStats) return 0
-  const meta = teamPerformance.value.teamStats.totalMetaFaturamento || 150000
-  const atual = teamPerformance.value.teamStats.totalFaturamento || 0
-  return (atual / meta) * 100
-})
-
-const teamTicketMedio = computed(() => {
-  const stats = teamPerformance.value?.teamStats
-  if (!stats || !stats.totalConvertidas) return 0
-  return stats.totalFaturamento / stats.totalConvertidas
-})
 
 onMounted(async () => {
   authStore.initializeAuth()
