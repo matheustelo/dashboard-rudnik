@@ -340,13 +340,17 @@ app.get(
             ${supervisorFilter}
         ),
         propostas_agrupadas AS (
-          SELECT p.client_phone, COUNT(*) AS cnt,
-            SUM(CAST(p.total_price AS DECIMAL)) AS sum_price
+          SELECT 
+              p.lead->>'phone' AS client_phone,
+              COUNT(*) AS cnt,
+              SUM(CAST(p.total_price AS DECIMAL)) AS sum_price
           FROM clone_propostas_apprudnik p
           WHERE p.has_generated_sale = true
-            AND p.created_at BETWEEN $1 AND $2
             AND p.seller IN (SELECT id FROM usuarios_filtrados)
-          GROUP BY p.client_phone
+            AND p.lead->>'phone' IS NOT NULL
+            AND p.lead->>'phone' <> ''
+          GROUP BY p.lead->>'phone'
+          ORDER BY cnt DESC
         ),
         valor_fechadas_cte AS (
           SELECT COALESCE(SUM(CAST(p.total_price AS DECIMAL)), 0) AS valor
@@ -886,7 +890,11 @@ app.get("/api/performance/representative/:id", authenticateToken,
 )
 
 // Goals API endpoints
-app.get("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
+app.get(
+  "/api/goals",
+  authenticateToken,
+  authorize("admin", "gerente_comercial", "supervisor"),
+  async (req, res) => {
   console.log("--- Goals API: GET /api/goals started ---")
   try {
     const { period, startDate: start, endDate: end } = req.query
@@ -2041,7 +2049,7 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
     const monthlyRevenueQuery = `
   SELECT
     DATE_TRUNC('month', p.created_at) as mes,
-    COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN p.total_price END), 0) as faturamento,
+    COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento,
     COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as vendas
   FROM clone_propostas_apprudnik p
   LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id

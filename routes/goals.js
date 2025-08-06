@@ -143,7 +143,11 @@ const getTeamMembers = async (leaderId) => {
 }
 
 // GET /api/goals - Fetch all goals with enhanced hierarchy information
-router.get("/", authenticateToken, authorize("admin", "gerente_comercial"), async (req, res) => {
+router.get(
+  "/",
+  authenticateToken,
+  authorize("admin", "gerente_comercial", "supervisor"),
+  async (req, res) => {
   try {
     console.log("🎯 Goals API: Fetching all goals")
     const { period } = req.query
