@@ -199,7 +199,7 @@
         <!-- Taxa de Conversão -->
         <DashboardCard
           title="Taxa de Conversão"
-          :value="( teamPerformance?.teamStats?.teamConversionRate?.toFixed(1) || 0) + '%'"
+          :value="conversionRate.toFixed(1) + '%'"
           :sub-value="'Ticket Médio: ' + formatCurrency( teamTicketMedio || 0)"
           :progress="salesProgress"
           progress-color="bg-purple-600"
@@ -375,6 +375,12 @@ const vendasValidasProgress = computed(() => {
   const meta = revenueGoal.value.target
   if (!meta) return 0
   return (proposalMetrics.value.valorFechadas / meta) * 100
+})
+
+const conversionRate = computed(() => {
+  const { valorFechadas, valorUnitarias } = proposalMetrics.value
+  if (!valorUnitarias) return 0
+  return (valorFechadas / valorUnitarias) * 100
 })
 
 const showDetailModal = ref(false)
