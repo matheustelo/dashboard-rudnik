@@ -397,6 +397,7 @@ const proposalMetrics = ref({
 })
 
 const proposals = ref([])
+const goalsData = ref({ goals: [] })
 
 const proposalGoal = computed(() => {
   const goals = goalsData.value.goals.filter(g => g.tipo_meta === 'propostas')
@@ -458,16 +459,22 @@ watch(() => filters.period, (newPeriod) => {
 const applyFilters = async () => {
   loading.value = true
   try {
-    const [perf, revVsTarget, revBySup, metrics] = await Promise.all([
+    const [perf, revVsTarget, revBySup, metrics, goalsResp] = await Promise.all([
       performanceService.getTeamPerformance(filters),
       dashboardService.getRevenueVsTarget(filters),
       dashboardService.getRevenueBySupervisor(filters),
       dashboardService.getProposalMetrics(filters),
+      goalsService.getGoals(
+        filters.period || undefined,
+        filters.startDate || undefined,
+        filters.endDate || undefined
+      ),
     ])
     teamPerformance.value = perf.data
     revenueVsTarget.value = revVsTarget.data
     revenueBySupervisor.value = revBySup.data
     proposalMetrics.value = metrics.data
+    goalsData.value = { goals: goalsResp.data?.generalGoals || [] }
   } catch (error) {
     console.error('Erro ao aplicar filtros:', error)
   } finally {
@@ -478,18 +485,24 @@ const applyFilters = async () => {
 const loadInitialData = async () => {
   loading.value = true
   try {
-    const [leaders, perf, revVsTarget, revBySup, metrics] = await Promise.all([
+    const [leaders, perf, revVsTarget, revBySup, metrics, goalsResp] = await Promise.all([
       teamLeaderService.getTeamLeaders(),
       performanceService.getTeamPerformance(filters),
       dashboardService.getRevenueVsTarget(filters),
       dashboardService.getRevenueBySupervisor(filters),
       dashboardService.getProposalMetrics(filters),
+      goalsService.getGoals(
+        filters.period || undefined,
+        filters.startDate || undefined,
+        filters.endDate || undefined
+      ),
     ])
     teamLeaders.value = leaders.data
     teamPerformance.value = perf.data
     revenueVsTarget.value = revVsTarget.data
     revenueBySupervisor.value = revBySup.data
     proposalMetrics.value = metrics.data
+    goalsData.value = { goals: goalsResp.data?.generalGoals || [] }
   } catch (error) {
     console.error('Erro ao carregar dashboard:', error)
   } finally {
