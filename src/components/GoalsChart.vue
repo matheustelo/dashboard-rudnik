@@ -67,6 +67,23 @@
               :style="{ width: Math.min(salesSummary.progress, 100) + '%' }"></div>
           </div>
         </div>
+        <div class="border rounded-lg p-4 bg-gray-50">
+          <div class="flex justify-between items-center">
+            <div class="text-sm text-gray-600">Progresso Taxa de Conversão</div>
+            <div class="text-right">
+              <div class="text-lg font-semibold text-gray-900">{{ conversionSummary.progress.toFixed(1) }}%</div>
+              <div class="text-sm text-gray-500">
+                {{ formatValue(conversionSummary.achieved, 'taxa_conversao') }} /
+                {{ formatValue(conversionSummary.target, 'taxa_conversao') }}
+              </div>
+            </div>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-3 mt-2">
+            <div class="h-3 rounded-full transition-all duration-300"
+              :class="getProgressColor(conversionSummary.progress)"
+              :style="{ width: Math.min(conversionSummary.progress, 100) + '%' }"></div>
+          </div>
+        </div>
       </div>
       <div v-for="goal in goals" :key="goal.id" class="border rounded-lg p-4">
         <div class="flex justify-between items-start mb-2">
@@ -76,7 +93,9 @@
                 ? 'Meta de Faturamento'
                 : goal.tipo_meta === 'propostas'
                   ? 'Meta de Propostas'
-                  : 'Meta de Vendas' }}
+                  : goal.tipo_meta === 'vendas'
+                    ? 'Meta de Vendas'
+                    : 'Meta de Taxa de Conversão' }}
             </h4>
             <p class="text-sm text-gray-500">
               {{ goal.isIndividual ? 'Meta Individual' : 'Meta Geral' }}
@@ -151,6 +170,10 @@ const salesSummary = computed(() =>
   calcSummary(goals.value.filter((g) => g.tipo_meta === 'vendas')),
 )
 
+const conversionSummary = computed(() =>
+  calcSummary(goals.value.filter((g) => g.tipo_meta === 'taxa_conversao')),
+)
+
 const loadGoals = async () => {
   if (!props.userId) return
   loading.value = true
@@ -178,6 +201,9 @@ const formatValue = (value, type) => {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(value)}`
+  }
+  if (type === 'taxa_conversao') {
+    return `${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
   }
   return value.toString()
 }

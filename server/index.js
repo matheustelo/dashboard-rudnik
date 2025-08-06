@@ -338,6 +338,34 @@ app.get(
           WHERE u.is_active = true
             AND u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium')
             ${supervisorFilter}
+        ),
+        propostas_agrupadas AS (
+          SELECT p.client_phone, COUNT(*) AS cnt,
+            SUM(CAST(p.total_price AS DECIMAL)) AS sum_price
+          FROM clone_propostas_apprudnik p
+          WHERE p.has_generated_sale = true
+            AND p.created_at BETWEEN $1 AND $2
+            AND p.seller IN (SELECT id FROM usuarios_filtrados)
+          GROUP BY p.client_phone
+        ),
+        valor_fechadas_cte AS (
+          SELECT COALESCE(SUM(CAST(p.total_price AS DECIMAL)), 0) AS valor
+          FROM clone_vendas_apprudnik v
+          JOIN clone_propostas_apprudnik p ON p.id = v.code
+          WHERE v.status NOT IN (
+              'contrato_assinaturas',
+              'contrato_assinaturas_pendentes',
+              'checklist',
+              'checklist_erro',
+              'conferencia_engenharia',
+              'conferencia_financeiro',
+              'conferencia_financeiro_engenharia',
+              'contrato_reprovado',
+              'contrato_preenchimento_contrato',
+              'suspenso'
+            )
+            AND p.created_at BETWEEN $1 AND $2
+            AND p.seller IN (SELECT id FROM usuarios_filtrados)
         )
         SELECT
           (
@@ -400,7 +428,18 @@ app.get(
             WHERE v.status = 'suspenso'
               AND p.created_at BETWEEN $1 AND $2
               AND p.seller IN (SELECT id FROM usuarios_filtrados)
-          ) AS valor_canceladas
+          ) AS valor_canceladas,
+          (
+            SELECT COALESCE(SUM(CASE WHEN cnt > 1 THEN cnt ELSE 1 END), 0)
+            FROM propostas_agrupadas
+          ) AS unitarias,
+          (
+            SELECT COALESCE(SUM(sum_price), 0)
+            FROM propostas_agrupadas
+          ) AS valor_unitarias,
+          (
+            SELECT valor FROM valor_fechadas_cte
+          ) AS valor_fechadas
       `;
 
       const { rows } = await pool.query(metricsQuery, queryParams);
@@ -411,6 +450,9 @@ app.get(
         fechadas: parseInt(rows[0].fechadas, 10),
         canceladas: parseInt(rows[0].canceladas, 10),
         valorCanceladas: parseFloat(rows[0].valor_canceladas),
+        unitarias: parseInt(rows[0].unitarias, 10),
+        valorUnitarias: parseFloat(rows[0].valor_unitarias),
+        valorFechadas: parseFloat(rows[0].valor_fechadas),
       });
     } catch (error) {
       console.error("❌ Error fetching proposal metrics:", error);
@@ -1452,6 +1494,12 @@ app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) =>
           achieved = Number.parseInt(actualData.total_propostas)
         } else if (goal.tipo_meta === "vendas") {
           achieved = Number.parseInt(actualData.propostas_convertidas)
+        } else if (goal.tipo_meta === "taxa_conversao") {
+          const total = Number.parseInt(actualData.total_propostas)
+          const converted = Number.parseInt(actualData.propostas_convertidas)
+          achieved = total > 0 ? (converted / total) * 100 : 0
+        } else if (goal.tipo_meta === "vendas") {
+          achieved = Number.parseInt(actualData.propostas_convertidas)
         }
 
         const target = Number.parseFloat(goal.valor_meta)
@@ -1546,6 +1594,14 @@ app.get(
                  AND p.has_generated_sale = true
                  AND s.status <> 'suspenso'
                  AND p.created_at BETWEEN $2 AND $3`
+          } else if (goal.tipo_meta === "taxa_conversao") {
+            metricQuery = `
+              SELECT COUNT(*) AS total,
+                     COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) AS converted
+                FROM clone_propostas_apprudnik p
+                LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+               WHERE p.seller = ANY($1)
+                 AND p.created_at BETWEEN $2 AND $3`
           }
 
           if (metricQuery) {
@@ -1554,7 +1610,13 @@ app.get(
               goal.data_inicio,
               goal.data_fim,
             ])
-            actual = parseFloat(result.rows[0].value)
+            if (goal.tipo_meta === "taxa_conversao") {
+              const total = parseInt(result.rows[0].total)
+              const converted = parseInt(result.rows[0].converted)
+              actual = total > 0 ? (converted / total) * 100 : 0
+            } else {
+              actual = parseFloat(result.rows[0].value)
+            }
           }
         }
 

@@ -60,7 +60,7 @@
                         <td class="px-2 py-1">{{ g.supervisor_name }}</td>
                         <td class="px-2 py-1">{{ formatDate(g.data_inicio) }} - {{ formatDate(g.data_fim) }}</td>
                         <td class="px-2 py-1">{{ g.tipo_meta }}</td>
-                        <td class="px-2 py-1">{{ formatCurrency(g.valor_meta) }}</td>
+                        <td class="px-2 py-1">{{ formatValue(g.valor_meta, g.tipo_meta) }}</td>
                         <td class="px-2 py-1">{{ formatValue(g.achieved, g.tipo_meta) }}</td>
                         <td class="px-2 py-1">
                             <div class="w-32 bg-gray-200 rounded-full h-2">
@@ -99,6 +99,14 @@
                         :data="salesChartData"
                         :options="chartOptions"
                         title="Vendas - Meta x Realizado"
+                    />
+                </div>
+                <div class="flex-1">
+                    <TeamPerformanceChart
+                        v-if="conversionChartData.labels.length"
+                        :data="conversionChartData"
+                        :options="chartOptions"
+                        title="Taxa de Conversão - Meta x Realizado"
                     />
                 </div>
             </div>
@@ -163,7 +171,13 @@ const sortedGoals = computed(() => {
 
 const formatDate = (d) => new Date(d).toLocaleDateString('pt-BR')
 const formatCurrency = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-const formatValue = (v, type) => type === 'faturamento' ? formatCurrency(v) : v
+const formatValue = (v, type) => {
+    if (type === 'faturamento') return formatCurrency(v)
+    if (type === 'taxa_conversao') {
+        return `${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+    }
+    return v
+}
 
 const progressColor = (p) => {
     if (p >= 100) return 'bg-green-500'
@@ -182,6 +196,10 @@ const proposalGoals = computed(() =>
 
 const salesGoals = computed(() =>
     sortedGoals.value.filter((g) => g.tipo_meta === 'vendas')
+)
+
+const conversionGoals = computed(() =>
+    sortedGoals.value.filter((g) => g.tipo_meta === 'taxa_conversao')
 )
 
 const buildChartData = (items, labelPrefix) => {
@@ -210,6 +228,7 @@ const buildChartData = (items, labelPrefix) => {
 const revenueChartData = computed(() => buildChartData(revenueGoals.value, 'Faturamento'))
 const proposalChartData = computed(() => buildChartData(proposalGoals.value, 'Propostas'))
 const salesChartData = computed(() => buildChartData(salesGoals.value, 'Vendas'))
+const conversionChartData = computed(() => buildChartData(conversionGoals.value, 'Taxa de Conversão'))
 
 const chartOptions = {
     responsive: true,

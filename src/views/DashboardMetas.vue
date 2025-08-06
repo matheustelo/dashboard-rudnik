@@ -139,7 +139,11 @@
                   <div class="mt-2 sm:flex sm:justify-between">
                     <div class="sm:flex">
                       <p class="flex items-center text-sm text-gray-500">
-                        {{ goal.tipo_meta === 'faturamento' ? 'Valor Total' : 'Quantidade Total' }}:
+                        {{ goal.tipo_meta === 'faturamento'
+                          ? 'Valor Total'
+                          : goal.tipo_meta === 'taxa_conversao'
+                            ? 'Percentual Total'
+                            : 'Quantidade Total' }}:
                         {{ formatGoalValue(goal.valor_meta, goal.tipo_meta) }}
                       </p>
                       <p class="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
@@ -196,7 +200,7 @@
                       </div>
                       <div class="ml-2 flex-shrink-0 flex space-x-4">
                         <div class="text-right">
-                         <div class="text-sm font-medium text-gray-900">{{ formatGoalValue(goal.valor_meta, goal.tipo_meta) }}</div>
+                          <div class="text-sm font-medium text-gray-900">{{ formatGoalValue(goal.valor_meta, goal.tipo_meta) }}</div>
                           <div class="text-xs text-gray-500">{{ goal.tipo_meta }}</div>
                         </div>
                         <button @click="openGoalModal('individual', goal)"
@@ -242,7 +246,11 @@
             <li v-for="goal in items" :key="goal.id" class="px-4 py-4 sm:px-6 flex justify-between items-center">
               <div>
                 <p class="text-sm font-medium text-indigo-600">{{ goal.supervisor_name }} - {{ goal.tipo_meta }}</p>
-                 <p class="text-xs text-gray-500">{{ goal.tipo_meta === 'faturamento' ? 'Valor' : 'Quantidade' }}: {{ formatGoalValue(goal.valor_meta, goal.tipo_meta) }}</p>
+                <p class="text-xs text-gray-500">{{ goal.tipo_meta === 'faturamento'
+                  ? 'Valor'
+                  : goal.tipo_meta === 'taxa_conversao'
+                    ? 'Percentual'
+                    : 'Quantidade' }}: {{ formatGoalValue(goal.valor_meta, goal.tipo_meta) }}</p>
               </div>
               <div class="space-x-4">
                 <button @click="deleteGoal('general', goal.id)"
@@ -476,6 +484,7 @@
                       <option value="faturamento">Faturamento (R$)</option>
                       <option value="propostas">Propostas (Quantidade)</option>
                       <option value="vendas">Vendas (Quantidade)</option>
+                      <option value="taxa_conversao">Taxa de Conversão (%)</option>
                     </select>
                   </div>
 
@@ -571,7 +580,11 @@
                   </div>
                   <div>
                     <dt class="text-sm font-medium text-gray-500">
-                      {{ selectedGoal.tipo_meta === 'faturamento' ? 'Valor Total' : 'Quantidade Total' }}
+                      {{ selectedGoal.tipo_meta === 'faturamento'
+                        ? 'Valor Total'
+                        : selectedGoal.tipo_meta === 'taxa_conversao'
+                          ? 'Percentual Total'
+                          : 'Quantidade Total' }}
                     </dt>
                     <dd class="mt-1 text-sm text-gray-900">
                       {{ formatGoalValue(selectedGoal.valor_meta, selectedGoal.tipo_meta) }}
@@ -1437,6 +1450,10 @@ const formatCurrency = (value) => {
 
 const formatGoalValue = (value, type) => {
   if (type === 'faturamento') return formatCurrency(value)
+  if (type === 'taxa_conversao') {
+    const num = parseFloat(value) || 0
+    return `${num.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+  }
   const num = parseFloat(value) || 0
   return num.toLocaleString('pt-BR')
 }
@@ -1544,6 +1561,11 @@ const getMemberCurrentValue = (member, goalType) => {
   if (!member.performance) return 0
   if (goalType === 'propostas') return member.performance.totalPropostas || 0
   if (goalType === 'vendas') return member.performance.propostasConvertidas || 0
+    if (goalType === 'taxa_conversao') {
+    const total = member.performance.totalPropostas || 0
+    const converted = member.performance.propostasConvertidas || 0
+    return total > 0 ? (converted / total) * 100 : 0
+  }
   return member.performance.faturamentoTotal || 0
 }
 

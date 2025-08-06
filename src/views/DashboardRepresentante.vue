@@ -51,9 +51,6 @@
                   <dt class="text-sm font-medium text-gray-500 truncate">Total de Propostas</dt>
                   <dd class="text-2xl font-semibold text-gray-900">
                     {{ dashboardData.resumo.totalPropostas || 0 }}
-                    <span class="block text-sm font-normal text-gray-500">
-                      {{ formatCurrency(dashboardData.resumo.totalValorPropostas || 0) }}
-                    </span>
                   </dd>
                 </dl>
               </div>
@@ -61,7 +58,7 @@
           </div>
         </div>
 
-        <!-- Propostas Convertidas -->
+        <!-- Propostas Unitárias -->
         <div class="bg-white overflow-hidden shadow rounded-lg">
           <div class="p-5">
             <div class="flex items-center">
@@ -74,15 +71,27 @@
               </div>
               <div class="ml-5 w-0 flex-1">
                 <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Propostas Convertidas</dt>
-                  <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.convertidas }}</dd>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Propostas Unitárias</dt>
+                  <dd class="text-2xl font-semibold text-gray-900">
+                    {{ proposalMetrics.unitarias }}
+                    <span class="block text-sm font-normal text-gray-500">
+                      {{ formatCurrency(proposalMetrics.valorUnitarias) }}
+                    </span>
+                  </dd>
+                  <div class="mt-2 w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-green-600 h-2 rounded-full transition-all duration-300"
+                      :style="{ width: Math.min(proposalProgress, 100) + '%' }"></div>
+                  </div>
+                  <div class="text-sm text-gray-600 mt-1">
+                    {{ proposalProgress.toFixed(1) }}% de {{ proposalGoal.target || 0 }}
+                  </div>
                 </dl>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Total de Vendas -->
+        <!-- Total de Propostas -->
         <div class="bg-white overflow-hidden shadow rounded-lg">
           <div class="p-5">
             <div class="flex items-center">
@@ -96,7 +105,7 @@
               </div>
               <div class="ml-5 w-0 flex-1">
                 <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Total de Vendas</dt>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Total de Propostas</dt>
                   <dd class="text-2xl font-semibold text-gray-900">
                     {{ dashboardData.resumo.propostasConvertidas || 0 }}
                     <span class="block text-sm font-normal text-gray-500">
@@ -109,7 +118,7 @@
           </div>
         </div>
 
-        <!-- Pedidos em Negociação -->
+        <!-- Pendentes de Assinatura-->
         <div class="bg-white overflow-hidden shadow rounded-lg">
           <div class="p-5">
             <div class="flex items-center">
@@ -123,7 +132,7 @@
               </div>
               <div class="ml-5 w-0 flex-1">
                 <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Pedidos em Negociação</dt>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Pendentes de Assinatura</dt>
                   <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.emNegociacao }}</dd>
                 </dl>
               </div>
@@ -131,7 +140,7 @@
           </div>
         </div>
 
-        <!-- Pedidos Fechados -->
+        <!--  Contratos Assinados -->
         <div class="bg-white overflow-hidden shadow rounded-lg">
           <div class="p-5">
             <div class="flex items-center">
@@ -145,7 +154,7 @@
               </div>
               <div class="ml-5 w-0 flex-1">
                 <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Pedidos Fechados</dt>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Contratos Assinados</dt>
                   <dd class="text-2xl font-semibold text-gray-900">{{ proposalMetrics.fechadas }}</dd>
                 </dl>
               </div>
@@ -195,16 +204,23 @@
                   <dd class="text-2xl font-semibold text-gray-900">
                     {{ dashboardData.resumo.taxaConversao || 0 }}%
                     <span class="block text-sm font-normal text-gray-500">
-                      {{ formatCurrency(dashboardData.resumo.ticketMedio || 0) }}
+                     Ticket Médio: {{ formatCurrency(dashboardData.resumo.ticketMedio || 0) }}
                     </span>
                   </dd>
+                  <div class="mt-2 w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-purple-600 h-2 rounded-full transition-all duration-300"
+                      :style="{ width: Math.min(salesProgress, 100) + '%' }"></div>
+                  </div>
+                  <div class="text-sm text-gray-600 mt-1">
+                    {{ salesProgress.toFixed(1) }}% da meta
+                  </div>
                 </dl>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Faturamento Total -->
+        <!-- Vendas Válidadas -->
         <div class="bg-white overflow-hidden shadow rounded-lg">
           <div class="p-5">
             <div class="flex items-center">
@@ -218,19 +234,22 @@
               </div>
               <div class="ml-5 w-0 flex-1">
                 <dl>
-                  <dt class="text-sm font-medium text-gray-500 truncate">Faturamento Total</dt>
+                  <dt class="text-sm font-medium text-gray-500 truncate">Vendas Válidadas</dt>
                   <dd class="flex items-baseline">
                     <div class="text-2xl font-semibold text-gray-900">
-                      {{ formatCurrency(dashboardData.resumo.faturamentoTotal || 0) }}
+                      {{ formatCurrency(proposalMetrics.valorFechadas || 0) }}
                     </div>
                     <div class="ml-2 flex items-baseline text-sm font-semibold"
-                      :class="faturamentoProgress >= 100 ? 'text-green-600' : 'text-yellow-600'">
-                      {{ faturamentoProgress.toFixed(1) }}% da meta
+                      :class="vendasValidasProgress >= 100 ? 'text-green-600' : 'text-yellow-600'">
+                      {{ vendasValidasProgress.toFixed(1) }}% da meta
                     </div>
                   </dd>
                   <div class="mt-2 w-full bg-gray-200 rounded-full h-2">
                     <div class="bg-indigo-600 h-2 rounded-full transition-all duration-300"
-                      :style="{ width: Math.min(faturamentoProgress, 100) + '%' }"></div>
+                      :style="{ width: Math.min(vendasValidasProgress, 100) + '%' }"></div>
+                  </div>
+                  <div class="text-sm text-gray-600 mt-1">
+                    Meta: {{ formatCurrency(revenueGoal.target || 0) }}
                   </div>
                 </dl>
               </div>
@@ -323,13 +342,46 @@ const proposalMetrics = ref({
   fechadas: 0,
   canceladas: 0,
   valorCanceladas: 0,
+  unitarias: 0,
+  valorUnitarias: 0,
+  valorFechadas: 0,
 })
 const proposals = ref([])
 
-const faturamentoProgress = computed(() => {
-  const summary = goalsData.value.summary
-  if (!summary) return 0
-  return summary.progress || 0
+const proposalGoal = computed(() => {
+  const goals = goalsData.value.goals.filter(g => g.tipo_meta === 'propostas')
+  const target = goals.reduce((sum, g) => sum + parseFloat(g.valor_meta || 0), 0)
+  return { target }
+})
+
+const proposalProgress = computed(() => {
+  const meta = proposalGoal.value.target
+  if (!meta) return 0
+  return (proposalMetrics.value.unitarias / meta) * 100
+})
+
+const salesGoal = computed(() => {
+  const goals = goalsData.value.goals.filter(g => g.tipo_meta === 'vendas')
+  const target = goals.reduce((sum, g) => sum + parseFloat(g.valor_meta || 0), 0)
+  return { target }
+})
+
+const salesProgress = computed(() => {
+  const meta = salesGoal.value.target
+  if (!meta) return 0
+  return (proposalMetrics.value.fechadas / meta) * 100
+})
+
+const revenueGoal = computed(() => {
+  const goals = goalsData.value.goals.filter(g => g.tipo_meta === 'faturamento')
+  const target = goals.reduce((sum, g) => sum + parseFloat(g.valor_meta || 0), 0)
+  return { target }
+})
+
+const vendasValidasProgress = computed(() => {
+  const meta = revenueGoal.value.target
+  if (!meta) return 0
+  return (proposalMetrics.value.valorFechadas / meta) * 100
 })
 
 const chartData = computed(() => {
