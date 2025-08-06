@@ -387,6 +387,7 @@ const teamLeaders = ref([])
 const revenueVsTarget = ref([])
 const revenueBySupervisor = ref([])
 const proposalMetrics = ref({
+  convertidas: 0,
   emNegociacao: 0,
   fechadas: 0,
   canceladas: 0,
@@ -435,9 +436,15 @@ const vendasValidasProgress = computed(() => {
 })
 
 const conversionRate = computed(() => {
-  const { valorFechadas, valorUnitarias } = proposalMetrics.value
-  if (!valorUnitarias) return 0
-  return (valorFechadas / valorUnitarias) * 100
+  const { convertidas, unitarias } = proposalMetrics.value
+  if (!unitarias) return 0
+  return (convertidas / unitarias) * 100
+})
+
+const teamTicketMedio = computed(() => {
+  const { valorFechadas, convertidas } = proposalMetrics.value
+  if (!convertidas) return 0
+  return valorFechadas / convertidas
 })
 
 const showDetailModal = ref(false)
