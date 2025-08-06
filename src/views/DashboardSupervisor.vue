@@ -78,9 +78,9 @@
           </template>
         </DashboardCard>
 
-        <!-- Total de Propostas -->
+        <!-- Propostas Convertidas -->
         <DashboardCard
-          title="Total de Propostas"
+          title="Propostas Convertidas"
           :value="dashboardData.resumo.propostasConvertidas || 0"
           :sub-value="formatCurrency(dashboardData.resumo.faturamentoTotal || 0)"
           icon-bg="bg-green-500"
@@ -171,7 +171,7 @@
 
         <!-- Vendas Válidas -->
         <DashboardCard
-          title="Vendas Válidas"
+          title="Vendas Válidadas"
           value-class="flex items-baseline"
           :progress="vendasValidasProgress"
           progress-color="bg-indigo-600"

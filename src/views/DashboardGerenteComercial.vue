@@ -98,12 +98,11 @@
       </div>
 
       <!-- KPIs Principais -->
-        <div
-          v-if="dashboardData"
-          class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6"
-          icon-bg="bg-blue-500"
-        >
-          <!-- Total de Propostas -->
+      <div
+        v-if="dashboardData"
+        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6"
+      >
+        <!-- Total de Propostas -->
           <DashboardCard
             title="Total de Propostas"
             :value="dashboardData?.resumo?.totalPropostas || 0"
@@ -156,11 +155,11 @@
           </template>
         </DashboardCard>
 
-        <!-- Total de Propostas -->
+        <!-- Propostas Convertidas -->
         <DashboardCard
-          title="Total de Propostas"
-          :value="dashboardData?.resumo?.propostasConvertidas || 0"
-          :sub-value="formatCurrency(dashboardData?.resumo?.faturamentoTotal || 0)"
+          title="Propostas Convertidas"
+          :value="dashboardData?.indicadores?.totalVendas || 0"
+          :sub-value="formatCurrency(dashboardData?.indicadores?.faturamentoTotal || 0)"
           icon-bg="bg-green-500"
         >
           <template #icon>
