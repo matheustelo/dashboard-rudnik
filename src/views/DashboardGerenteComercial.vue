@@ -494,7 +494,8 @@ const applyFilters = async () => {
       goalsService.getGoals(
         filters.period || undefined,
         filters.startDate || undefined,
-        filters.endDate || undefined
+        filters.endDate || undefined,
+        filters.supervisorId !== 'all' ? filters.supervisorId : undefined
       ),
     ])
     dashboardData.value = dashboardResp.data
@@ -523,7 +524,8 @@ const loadInitialData = async () => {
       goalsService.getGoals(
         filters.period || undefined,
         filters.startDate || undefined,
-        filters.endDate || undefined
+        filters.endDate || undefined,
+        filters.supervisorId !== 'all' ? filters.supervisorId : undefined
       ),
     ])
     dashboardData.value = dashboardResp.data

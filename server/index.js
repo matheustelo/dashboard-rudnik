@@ -925,9 +925,13 @@ app.get(
   async (req, res) => {
   console.log("--- Goals API: GET /api/goals started ---")
   try {
-    const { period, startDate: start, endDate: end } = req.query
+    const { period, startDate: start, endDate: end, supervisorId } = req.query
 
     const { startDate, endDate } = getDateRange(period, start, end)
+    const supId =
+      supervisorId && supervisorId !== 'all'
+        ? Number.parseInt(supervisorId)
+        : null
 
     console.log("📅 Goals: Date range:", { startDate, endDate })
 
@@ -955,14 +959,18 @@ app.get(
       })
     }
 
-    const generalGoalsQuery = `
+    let generalGoalsQuery = `
       SELECT g.*, u.name AS supervisor_name, u.role AS supervisor_role, u.children
       FROM metas_gerais g
       JOIN clone_users_apprudnik u ON g.usuario_id = u.id
-      WHERE g.data_inicio <= $2 AND g.data_fim >= $1
-      ORDER BY g.data_inicio DESC
-    `
-    const generalResult = await pool.query(generalGoalsQuery, [startDate, endDate])
+      WHERE g.data_inicio <= $2 AND g.data_fim >= $1`
+    const generalParams = [startDate, endDate]
+    if (supId) {
+      generalGoalsQuery += ' AND g.usuario_id = $3'
+      generalParams.push(supId)
+    }
+    generalGoalsQuery += ' ORDER BY g.data_inicio DESC'
+    const generalResult = await pool.query(generalGoalsQuery, generalParams)
     console.log("✅ Goals: Fetched", generalResult.rows.length, "general goals")
 
     const enhancedGeneral = []
@@ -989,9 +997,10 @@ app.get(
           WHERE m.usuario_id = ANY($1)
             AND m.data_inicio <= $3 AND m.data_fim >= $2
             AND m.tipo_meta = $4
+            AND m.supervisor_id = $5
           ORDER BY u.name, m.data_inicio DESC
         `
-        const { rows } = await pool.query(childQuery, [memberIds, startDate, endDate, goal.tipo_meta])
+        const { rows } = await pool.query(childQuery, [memberIds, startDate, endDate, goal.tipo_meta, goal.usuario_id])
         childGoals = rows
       }
 
@@ -1004,16 +1013,20 @@ app.get(
       })
     }
 
-    const individualGoalsQuery = `
+    let individualGoalsQuery = `
       SELECT m.*, u.name as user_name, u.email as user_email, u.role as user_role, u.supervisors,
              s.name AS supervisor_name, s.role AS supervisor_role
       FROM metas_individuais m
       JOIN clone_users_apprudnik u ON m.usuario_id = u.id
       LEFT JOIN clone_users_apprudnik s ON m.supervisor_id = s.id
-      WHERE m.data_inicio <= $2 AND m.data_fim >= $1
-      ORDER BY u.name, m.data_inicio DESC
-    `
-    const individualResult = await pool.query(individualGoalsQuery, [startDate, endDate])
+      WHERE m.data_inicio <= $2 AND m.data_fim >= $1`
+    const individualParams = [startDate, endDate]
+    if (supId) {
+      individualGoalsQuery += ' AND m.supervisor_id = $3'
+      individualParams.push(supId)
+    }
+    individualGoalsQuery += ' ORDER BY u.name, m.data_inicio DESC'
+    const individualResult = await pool.query(individualGoalsQuery, individualParams)
     console.log("✅ Goals: Fetched", individualResult.rows.length, "individual goals")
 
     const enhancedIndividual = individualResult.rows.map((goal) => ({
@@ -1043,9 +1056,9 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
 
     const { tipo_meta } = goalData || {}
 
-  // Taxa de conversão sempre como meta de equipe sem distribuição
-  if (tipo_meta === "taxa_conversao") {
-    const { usuario_id, valor_meta, data_inicio, data_fim } = goalData
+    // Taxa de conversão: meta de equipe replicada para membros
+    if (tipo_meta === "taxa_conversao") {
+      const { usuario_id, valor_meta, data_inicio, data_fim } = goalData
 
     if (new Date(data_inicio) > new Date(data_fim)) {
       return res.status(400).json({
@@ -1067,13 +1080,81 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
       })
     }
 
-    const result = await pool.query(
-      `INSERT INTO metas_gerais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por, is_distributed)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, created_by, false],
-    )
-    return res.status(201).json(result.rows[0])
-  }
+      const client = await pool.connect()
+      try {
+        await client.query("BEGIN")
+
+        const generalInsertQuery = `
+          INSERT INTO metas_gerais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por, is_distributed)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          RETURNING *`
+        const generalGoalResult = await client.query(generalInsertQuery, [
+          usuario_id,
+          tipo_meta,
+          valor_meta,
+          data_inicio,
+          data_fim,
+          created_by,
+          true,
+        ])
+        const generalGoal = generalGoalResult.rows[0]
+
+        const childIds = await getTeamHierarchyIds(usuario_id)
+        if (!childIds.length) {
+          await client.query("ROLLBACK")
+          return res.status(400).json({
+            message: "Este líder não possui vendedores na equipe para registrar a meta.",
+          })
+        }
+
+        const hasDup = async (uid) => {
+          const { rows } = await client.query(
+            `SELECT 1 FROM metas_individuais
+             WHERE usuario_id = $1
+               AND supervisor_id = $2
+               AND tipo_meta = $3
+               AND date_trunc('month', data_inicio) = date_trunc('month', $4::date)
+             LIMIT 1`,
+            [uid, usuario_id, tipo_meta, data_inicio],
+          )
+          return rows.length > 0
+        }
+
+        const individualInsertQuery = `
+          INSERT INTO metas_individuais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por, supervisor_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)`
+
+        for (const childId of childIds) {
+          if (await hasDup(childId)) {
+            await client.query("ROLLBACK")
+            return res.status(400).json({
+              message: `Usuário ${childId} já possui meta cadastrada para este período e tipo`,
+            })
+          }
+          await client.query(individualInsertQuery, [
+            childId,
+            tipo_meta,
+            valor_meta,
+            data_inicio,
+            data_fim,
+            created_by,
+            usuario_id,
+          ])
+        }
+
+        await client.query("COMMIT")
+        return res.status(201).json(generalGoal)
+      } catch (error) {
+        await client.query("ROLLBACK")
+        console.error("❌ Goals: Error creating conversion goal:", error)
+        return res.status(500).json({
+          message: "Erro ao criar meta de taxa de conversão",
+          error: error.message,
+        })
+      } finally {
+        client.release()
+      }
+    }
 
   if (type === "general") {
     // This is now a Team Goal
