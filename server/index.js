@@ -345,8 +345,7 @@ app.get(
               COUNT(*) AS cnt,
               SUM(CAST(p.total_price AS DECIMAL)) AS sum_price
           FROM clone_propostas_apprudnik p
-          WHERE p.has_generated_sale = true
-            AND p.seller IN (SELECT id FROM usuarios_filtrados)
+          WHERE p.seller IN (SELECT id FROM usuarios_filtrados)
             AND p.lead->>'phone' IS NOT NULL
             AND p.lead->>'phone' <> ''
             AND p.created_at BETWEEN $1 AND $2

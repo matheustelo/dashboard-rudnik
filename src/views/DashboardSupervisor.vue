@@ -102,8 +102,8 @@
         <!-- Propostas Convertidas -->
         <DashboardCard
           title="Propostas Convertidas"
-          :value="dashboardData?.indicadores?.totalVendas || 0"
-          :sub-value="formatCurrency(dashboardData?.indicadores?.faturamentoTotal || 0)"
+          :value="dashboardData?.resumo?.propostasConvertidas || 0"
+          :sub-value="formatCurrency(dashboardData?.resumo?.faturamentoTotal || 0)"
           icon-bg="bg-green-500"
         >
           <template #icon>
@@ -357,7 +357,7 @@ const proposalProgress = computed(() => {
 })
 
 const conversionRate = computed(() => {
-  const totalVendas = dashboardData.value?.indicadores?.totalVendas || 0
+  const totalVendas = dashboardData.value?.resumo?.propostasConvertidas || 0
   const { unitarias } = proposalMetrics.value
   if (!unitarias) return 0
   return (totalVendas / unitarias) * 100
@@ -397,7 +397,7 @@ const vendasValidasProgress = computed(() => {
 })
 
 const teamTicketMedio = computed(() => {
-  const totalVendas = dashboardData.value?.indicadores?.totalVendas || 0
+  const totalVendas = dashboardData.value?.resumo?.propostasConvertidas || 0
   const { valorUnitarias } = proposalMetrics.value
   if (!valorUnitarias) return 0
   return valorUnitarias / totalVendas
