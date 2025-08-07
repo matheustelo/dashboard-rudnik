@@ -443,11 +443,18 @@ const vendasValidasProgress = computed(() => {
 })
 
 const conversionRate = computed(() => {
-  const { valorFechadas, valorUnitarias } = proposalMetrics.value
-  if (!valorUnitarias) return 0
-  return (valorFechadas / valorUnitarias) * 100
+  const totalVendas = dashboardData.value?.indicadores?.totalVendas || 0
+  const { unitarias } = proposalMetrics.value
+  if (!unitarias) return 0
+  return (totalVendas / unitarias) * 100
 })
 
+const teamTicketMedio = computed(() => {
+  const totalVendas = dashboardData.value?.indicadores?.totalVendas || 0
+  const { valorUnitarias } = proposalMetrics.value
+  if (!valorUnitarias) return 0
+  return valorUnitarias / totalVendas
+})
 const chartData = computed(() => {
   if (!dashboardData.value) return {}
 

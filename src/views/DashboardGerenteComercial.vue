@@ -436,15 +436,17 @@ const vendasValidasProgress = computed(() => {
 })
 
 const conversionRate = computed(() => {
-  const { convertidas, unitarias } = proposalMetrics.value
+  const totalVendas = dashboardData.value?.indicadores?.totalVendas || 0
+  const { unitarias } = proposalMetrics.value
   if (!unitarias) return 0
-  return (convertidas / unitarias) * 100
+  return (totalVendas / unitarias) * 100
 })
 
 const teamTicketMedio = computed(() => {
-  const { valorFechadas, convertidas } = proposalMetrics.value
-  if (!convertidas) return 0
-  return valorFechadas / convertidas
+  const totalVendas = dashboardData.value?.indicadores?.totalVendas || 0
+  const { valorUnitarias } = proposalMetrics.value
+  if (!valorUnitarias) return 0
+  return valorUnitarias / totalVendas
 })
 
 const showDetailModal = ref(false)
