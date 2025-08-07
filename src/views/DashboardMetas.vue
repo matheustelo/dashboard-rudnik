@@ -363,7 +363,12 @@
                             <div class="flex items-center space-x-2">
                               <span class="text-sm text-gray-600 flex-shrink-0">Nova Meta:</span>
                               <div class="relative">
-                                <input type="number" step="0.01" min="0" :value="member.goalAmount || 0"
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  :max="currentGoal.tipo_meta === 'taxa_conversao' ? 100 : null"
+                                  :value="member.goalAmount || 0"
                                   @input="updateMemberGoal(member.id, $event.target.value)"
                                   @blur="validateMemberGoal(member.id)"
                                   class="w-28 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
@@ -489,10 +494,20 @@
                   </div>
 
                   <div>
-                    <label for="value" class="block text-sm font-medium text-gray-700">Valor da Meta</label>
-                    <input type="number" step="0.01" id="value" v-model="currentGoal.valor_meta" required
+                    <label for="value" class="block text-sm font-medium text-gray-700">
+                      {{ currentGoal.tipo_meta === 'taxa_conversao' ? 'Taxa de Conversão (%)' : 'Valor da Meta' }}
+                    </label>
+                    <input
+                      type="number"
+                      id="value"
+                      v-model="currentGoal.valor_meta"
+                      :step="currentGoal.tipo_meta === 'taxa_conversao' ? 0.01 : 0.01"
+                      :min="currentGoal.tipo_meta === 'taxa_conversao' ? 0 : null"
+                      :max="currentGoal.tipo_meta === 'taxa_conversao' ? 100 : null"
+                      required
                       class="mt-1 focus:ring-blue-500 focus:border-blue-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
-                      @input="validateDistribution">
+                      @input="validateDistribution"
+                    />
                   </div>
 
                   <div>
@@ -1099,7 +1114,12 @@ const updateMemberGoal = (memberId, value) => {
 
   const member = teamMembers.value.find(m => m.id === memberId)
   if (member) {
-    member.goalAmount = parseFloat(value) || 0
+    let num = parseFloat(value) || 0
+    if (currentGoal.value.tipo_meta === 'taxa_conversao') {
+      if (num > 100) num = 100
+      if (num < 0) num = 0
+    }
+    member.goalAmount = num
     member.hasError = false
     member.errorMessage = ''
     validateDistribution()
@@ -1118,6 +1138,9 @@ const validateMemberGoal = (memberId) => {
     if (value < 0) {
       member.hasError = true
       member.errorMessage = 'Valor não pode ser negativo'
+    } else if (currentGoal.value.tipo_meta === 'taxa_conversao' && value > 100) {
+      member.hasError = true
+      member.errorMessage = 'Valor não pode exceder 100%'
     } else if (isNaN(value)) {
       member.hasError = true
       member.errorMessage = 'Valor inválido'
@@ -1126,6 +1149,17 @@ const validateMemberGoal = (memberId) => {
       member.errorMessage = ''
     }
   }
+}
+
+const validateGoalValue = () => {
+  if (currentGoal.value.tipo_meta === 'taxa_conversao') {
+    let val = parseFloat(currentGoal.value.valor_meta)
+    if (isNaN(val)) val = 0
+    if (val > 100) val = 100
+    if (val < 0) val = 0
+    currentGoal.value.valor_meta = val
+  }
+  validateDistribution()
 }
 
 const validateDistribution = () => {
@@ -1311,6 +1345,7 @@ const saveGoal = async () => {
   saving.value = true
 
   try {
+    validateGoalValue()
     validateDistribution()
 
     if (!Array.isArray(validationErrors.value)) {
@@ -1322,6 +1357,24 @@ const saveGoal = async () => {
       return
     }
 
+        if (currentGoal.value.tipo_meta === 'taxa_conversao') {
+      const value = parseFloat(currentGoal.value.valor_meta)
+      if (isNaN(value) || value < 0 || value > 100) {
+        alert('A taxa de conversão deve estar entre 0 e 100%.')
+        return
+      }
+      if (modal.type === 'team') {
+        const outOfRange = teamMembers.value.some(m => {
+          const v = parseFloat(m.goalAmount) || 0
+          return v < 0 || v > 100
+        })
+        if (outOfRange) {
+          alert('As metas distribuídas devem estar entre 0 e 100%.')
+          return
+        }
+      }
+    }
+    
     if (modal.type === 'team') {
       // Check if total matches
       const totalGoal = parseFloat(currentGoal.value.valor_meta) || 0
