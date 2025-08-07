@@ -423,7 +423,9 @@ const conversionRate = computed(() => {
 
 const conversionGoal = computed(() => {
   const goals = goalsData.value.goals.filter(g => g.tipo_meta === 'taxa_conversao')
-  const target = goals.reduce((sum, g) => sum + parseFloat(g.valor_meta || 0), 0)
+  if (!goals.length) return { target: 0 }
+  const total = goals.reduce((sum, g) => sum + parseFloat(g.valor_meta || 0), 0)
+  const target = total / goals.length
   return { target }
 })
 
