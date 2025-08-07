@@ -102,7 +102,9 @@
                     <div class="flex-1">
                       <div class="text-sm text-gray-900">{{ member.performance.conversionRate }}%</div>
                       <div class="w-full bg-gray-200 rounded-full h-2 mt-1">
-                        <div class="h-2 rounded-full" :class="getConversionRateColor(member.performance.conversionRate)"
+                        <div
+                          class="h-2 rounded-full"
+                          :class="getConversionRateColor(member.performance.conversionRate, member.targets.metaConversao)"
                           :style="{ width: Math.min(member.performance.conversionRate, 100) + '%' }"></div>
                       </div>
                     </div>
@@ -223,7 +225,12 @@ const getRoleLabel = (role) => ({
   representante_premium: 'Representante Premium',
 }[role] || role)
 const getRowClass = (index) => (index < 3 ? 'bg-yellow-50' : '')
-const getConversionRateColor = (rate) => (rate >= 20 ? 'bg-green-500' : rate >= 15 ? 'bg-yellow-500' : 'bg-red-500')
+const getConversionRateColor = (rate, meta) => {
+  if (!meta) return 'bg-gray-400'
+  if (rate >= meta) return 'bg-green-500'
+  if (rate >= meta * 0.75) return 'bg-yellow-500'
+  return 'bg-red-500'
+}
 const getAchievementColor = (percentage) => {
   const pct = parseFloat(percentage)
   if (pct >= 100) return 'text-green-600 font-medium'

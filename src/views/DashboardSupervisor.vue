@@ -203,9 +203,9 @@
           title="Taxa de Conversão"
           :value="conversionRate.toFixed(1) + '%'"
           :sub-value="'Ticket Médio: ' + formatCurrency( teamTicketMedio || 0)"
-          :progress="salesProgress"
-          progress-color="bg-purple-600"
-          :footer-text="salesProgress.toFixed(1) + '% da meta'"
+          :progress="conversionProgress"
+          :progress-color="conversionProgressColor"
+          :footer-text="'Meta: ' + (conversionGoal.target || 0) + '%'"
           icon-bg="bg-purple-500"
         >
           <template #icon>
@@ -356,16 +356,30 @@ const proposalProgress = computed(() => {
   return (proposalMetrics.value.unitarias / meta) * 100
 })
 
-const salesGoal = computed(() => {
-  const goals = goalsData.value.goals.filter(g => g.tipo_meta === 'vendas')
+const conversionRate = computed(() => {
+  const totalVendas = dashboardData.value?.indicadores?.totalVendas || 0
+  const { unitarias } = proposalMetrics.value
+  if (!unitarias) return 0
+  return (totalVendas / unitarias) * 100
+})
+
+const conversionGoal = computed(() => {
+  const goals = goalsData.value.goals.filter(g => g.tipo_meta === 'taxa_conversao')
   const target = goals.reduce((sum, g) => sum + parseFloat(g.valor_meta || 0), 0)
   return { target }
 })
 
-const salesProgress = computed(() => {
-  const meta = salesGoal.value.target
+const conversionProgress = computed(() => {
+  const meta = conversionGoal.value.target
   if (!meta) return 0
-  return (proposalMetrics.value.fechadas / meta) * 100
+  return (conversionRate.value / meta) * 100
+})
+
+const conversionProgressColor = computed(() => {
+  const progress = conversionProgress.value
+  if (progress >= 100) return 'bg-green-600'
+  if (progress >= 75) return 'bg-yellow-600'
+  return 'bg-red-600'
 })
 
 const revenueGoal = computed(() => {
@@ -378,13 +392,6 @@ const vendasValidasProgress = computed(() => {
   const meta = revenueGoal.value.target
   if (!meta) return 0
   return (proposalMetrics.value.valorFechadas / meta) * 100
-})
-
-const conversionRate = computed(() => {
-  const totalVendas = dashboardData.value?.indicadores?.totalVendas || 0
-  const { unitarias } = proposalMetrics.value
-  if (!unitarias) return 0
-  return (totalVendas / unitarias) * 100
 })
 
 const teamTicketMedio = computed(() => {

@@ -561,7 +561,8 @@ app.get(
         usuario_id,
         SUM(CASE WHEN tipo_meta = 'propostas' THEN valor_meta ELSE 0 END) AS meta_propostas,
         SUM(CASE WHEN tipo_meta = 'vendas' THEN valor_meta ELSE 0 END) AS meta_vendas,
-        SUM(CASE WHEN tipo_meta = 'faturamento' THEN valor_meta ELSE 0 END) AS meta_faturamento
+        SUM(CASE WHEN tipo_meta = 'faturamento' THEN valor_meta ELSE 0 END) AS meta_faturamento,
+        SUM(CASE WHEN tipo_meta = 'taxa_conversao' THEN valor_meta ELSE 0 END) AS meta_conversao
       FROM metas_individuais
       WHERE data_inicio <= $2 AND data_fim >= $1
       GROUP BY usuario_id
@@ -590,7 +591,8 @@ app.get(
       COALESCE(m.meta_faturamento,
         CASE WHEN u.role = 'vendedor' THEN 0
              WHEN u.role = 'representante' THEN 0
-             ELSE 0 END) AS meta_faturamento
+             ELSE 0 END) AS meta_faturamento,
+      COALESCE(m.meta_conversao, 0) AS meta_conversao
     FROM usuarios_com_supervisor u
     LEFT JOIN metas_agg m ON m.usuario_id = u.id
     LEFT JOIN clone_propostas_apprudnik p
@@ -600,7 +602,7 @@ app.get(
     WHERE u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium') 
       AND u.is_active = true
       ${supervisorFilter}
-    GROUP BY u.id, u.name, u.email, u.role, u.supervisor, u.supervisor_name, m.meta_propostas, m.meta_vendas, m.meta_faturamento
+    GROUP BY u.id, u.name, u.email, u.role, u.supervisor, u.supervisor_name, m.meta_propostas, m.meta_vendas, m.meta_faturamento, m.meta_conversao
     ORDER BY faturamento_total DESC;
     `
 
@@ -662,6 +664,7 @@ app.get(
             metaPropostas: Number.parseInt(member.meta_propostas),
             metaVendas: Number.parseInt(member.meta_vendas),
             metaFaturamento: Number.parseFloat(member.meta_faturamento),
+            metaConversao: Number.parseFloat(member.meta_conversao),
           },
           achievements: {
             propostasAchievement:
@@ -670,6 +673,10 @@ app.get(
               member.meta_vendas > 0 ? ((member.propostas_convertidas / member.meta_vendas) * 100).toFixed(1) : 0,
             faturamentoAchievement:
               member.meta_faturamento > 0 ? ((member.faturamento_total / member.meta_faturamento) * 100).toFixed(1) : 0,
+            conversaoAchievement:
+              member.meta_conversao > 0
+                ? ((Number.parseFloat(conversionRate) / member.meta_conversao) * 100).toFixed(1)
+                : 0,
           },
         }
       })
@@ -1067,7 +1074,7 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
     )
     return res.status(201).json(result.rows[0])
   }
-  
+
   if (type === "general") {
     // This is now a Team Goal
     const { usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, manualDistribution } = goalData
