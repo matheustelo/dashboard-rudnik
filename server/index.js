@@ -400,6 +400,25 @@ app.get(
               AND p.seller IN (SELECT id FROM usuarios_filtrados)
           ) AS em_negociacao,
           (
+            SELECT COALESCE(SUM(CAST(p.total_price AS DECIMAL)), 0)
+            FROM clone_vendas_apprudnik v
+            JOIN clone_propostas_apprudnik p ON p.id = v.code
+            WHERE (v.is_contract_downloaded = false OR v.is_contract_downloaded IS NULL)
+              AND v.status IN (
+                'contrato_assinaturas',
+                'contrato_assinaturas_pendentes',
+                'checklist',
+                'checklist_erro',
+                'conferencia_engenharia',
+                'conferencia_financeiro',
+                'conferencia_financeiro_engenharia',
+                'contrato_reprovado',
+                'contrato_preenchimento_contrato'
+              )
+              AND p.created_at BETWEEN $1 AND $2
+              AND p.seller IN (SELECT id FROM usuarios_filtrados)
+          ) AS valor_em_negociacao,
+          (
             SELECT COUNT(*)
             FROM clone_vendas_apprudnik v
             JOIN clone_propostas_apprudnik p ON p.id = v.code
@@ -449,14 +468,15 @@ app.get(
 
       const { rows } = await pool.query(metricsQuery, queryParams);
 
-      res.json({
-        convertidas: parseInt(rows[0].convertidas, 10),
-        emNegociacao: parseInt(rows[0].em_negociacao, 10),
-        fechadas: parseInt(rows[0].fechadas, 10),
-        canceladas: parseInt(rows[0].canceladas, 10),
-        valorCanceladas: parseFloat(rows[0].valor_canceladas),
-        unitarias: parseInt(rows[0].unitarias, 10),
-        valorUnitarias: parseFloat(rows[0].valor_unitarias),
+        res.json({
+          convertidas: parseInt(rows[0].convertidas, 10),
+          emNegociacao: parseInt(rows[0].em_negociacao, 10),
+          valorEmNegociacao: parseFloat(rows[0].valor_em_negociacao),
+          fechadas: parseInt(rows[0].fechadas, 10),
+          canceladas: parseInt(rows[0].canceladas, 10),
+          valorCanceladas: parseFloat(rows[0].valor_canceladas),
+          unitarias: parseInt(rows[0].unitarias, 10),
+          valorUnitarias: parseFloat(rows[0].valor_unitarias),
         valorFechadas: parseFloat(rows[0].valor_fechadas),
       });
     } catch (error) {

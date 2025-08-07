@@ -148,6 +148,7 @@
         <DashboardCard
           title="Pendentes de Assinatura"
           :value="proposalMetrics.emNegociacao"
+          :sub-value="formatCurrency(proposalMetrics.valorEmNegociacao)"
           icon-bg="bg-yellow-500"
         >
           <template #icon>
@@ -171,6 +172,7 @@
         <DashboardCard
           title="Contratos Assinados"
           :value="proposalMetrics.fechadas"
+          :sub-value="formatCurrency(proposalMetrics.valorFechadas)"
           icon-bg="bg-blue-500"
         >
           <template #icon>
@@ -397,12 +399,13 @@ const customEnd = ref('')
 const proposalMetrics = ref({
   convertidas: 0,
   emNegociacao: 0,
+  valorEmNegociacao: 0,
   fechadas: 0,
+  valorFechadas: 0,
   canceladas: 0,
   valorCanceladas: 0,
   unitarias: 0,
   valorUnitarias: 0,
-  valorFechadas: 0,
 })
 const proposals = ref([])
 
