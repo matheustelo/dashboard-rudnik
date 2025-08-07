@@ -1400,7 +1400,28 @@ const saveGoal = async () => {
       }
     }
 
-     if (modal.type === 'team' && currentGoal.value.tipo_meta !== 'taxa_conversao') {
+    if (currentGoal.value.tipo_meta === 'taxa_conversao') {
+      if (currentGoal.value.periodType === 'month') {
+        const month = currentGoal.value.target_month
+        if (month) {
+          const [y, m] = month.split('-')
+          currentGoal.value.data_inicio = `${month}-01`
+          const end = new Date(y, Number(m), 0)
+          currentGoal.value.data_fim = end.toISOString().split('T')[0]
+        }
+      } else {
+        if (!currentGoal.value.data_inicio || !currentGoal.value.data_fim) {
+          alert('Defina o período da meta.')
+          return
+        }
+        if (new Date(currentGoal.value.data_inicio) > new Date(currentGoal.value.data_fim)) {
+          alert('Data de fim deve ser posterior à data de início.')
+          return
+        }
+      }
+
+      await goalsService.saveGoal('general', currentGoal.value)
+    } else if (modal.type === 'team') {
       // Check if total matches
       const totalGoal = parseFloat(currentGoal.value.valor_meta) || 0
       if (Math.abs(totalDistributed.value - totalGoal) > 0.01) {

@@ -1034,6 +1034,40 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
   const { type, goalData } = req.body
   const created_by = req.user.id
 
+    const { tipo_meta } = goalData || {}
+
+  // Taxa de conversão sempre como meta de equipe sem distribuição
+  if (tipo_meta === "taxa_conversao") {
+    const { usuario_id, valor_meta, data_inicio, data_fim } = goalData
+
+    if (new Date(data_inicio) > new Date(data_fim)) {
+      return res.status(400).json({
+        message: "Data de início não pode ser maior que a data de fim",
+      })
+    }
+
+    const overlapCheck = await pool.query(
+      `SELECT 1 FROM metas_gerais
+       WHERE usuario_id = $1
+         AND tipo_meta = $4
+         AND NOT (data_fim < $2 OR data_inicio > $3)
+       LIMIT 1`,
+      [usuario_id, data_inicio, data_fim, tipo_meta],
+    )
+    if (overlapCheck.rows.length > 0) {
+      return res.status(400).json({
+        message: "Já existe uma meta de equipe cadastrada para este período",
+      })
+    }
+
+    const result = await pool.query(
+      `INSERT INTO metas_gerais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por, is_distributed)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, created_by, false],
+    )
+    return res.status(201).json(result.rows[0])
+  }
+  
   if (type === "general") {
     // This is now a Team Goal
     const { usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, manualDistribution } = goalData
@@ -1245,7 +1279,18 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
       client.release()
     }
   } else if (type === "individual") {
-    const { id, tipo_meta, valor_meta, data_inicio, data_fim, usuario_id } = goalData
+    const {
+      id,
+      tipo_meta,
+      valor_meta,
+      data_inicio,
+      data_fim,
+      usuario_id,
+      supervisor_id: rawSupervisorId,
+    } = goalData
+
+    const parsedSupervisorId = parseInt(rawSupervisorId, 10)
+    const supervisorId = Number.isNaN(parsedSupervisorId) ? null : parsedSupervisorId
 
     if (new Date(data_inicio) > new Date(data_fim)) {
       return res.status(400).json({
@@ -1262,8 +1307,8 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
            ${id ? 'AND id <> $6' : ''}
          LIMIT 1`,
       id
-        ? [usuario_id, goalData.supervisor_id, tipo_meta, data_inicio, data_fim, id]
-        : [usuario_id, goalData.supervisor_id, tipo_meta, data_inicio, data_fim],
+        ? [usuario_id, supervisorId, tipo_meta, data_inicio, data_fim, id]
+        : [usuario_id, supervisorId, tipo_meta, data_inicio, data_fim],
     )
     if (duplicateCheck.rows.length > 0) {
       return res.status(400).json({
@@ -1274,13 +1319,13 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
       result = await pool.query(
         `UPDATE metas_individuais SET tipo_meta = $1, valor_meta = $2, data_inicio = $3, data_fim = $4, usuario_id = $5, supervisor_id = $6, atualizado_em = NOW()
          WHERE id = $7 RETURNING *`,
-        [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, goalData.supervisor_id, id],
+        [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, supervisorId, id],
       )
     } else {
       result = await pool.query(
         `INSERT INTO metas_individuais (tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, criado_por, supervisor_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, created_by, goalData.supervisor_id],
+        [tipo_meta, valor_meta, data_inicio, data_fim, usuario_id, created_by, supervisorId],
       )
     }
     res.status(201).json(result.rows[0])
@@ -1340,7 +1385,17 @@ app.put("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerente_c
       res.status(500).json({ message: "Erro ao atualizar meta" })
     }
   } else if (type === "individual") {
-    const { usuario_id, tipo_meta, valor_meta, data_inicio, data_fim } = goalData
+    const {
+      usuario_id,
+      tipo_meta,
+      valor_meta,
+      data_inicio,
+      data_fim,
+      supervisor_id: rawSupervisorId,
+    } = goalData
+
+    const parsedSupervisorId = parseInt(rawSupervisorId, 10)
+    const supervisorId = Number.isNaN(parsedSupervisorId) ? null : parsedSupervisorId
 
     if (new Date(data_inicio) > new Date(data_fim)) {
       return res.status(400).json({
@@ -1356,14 +1411,14 @@ app.put("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerente_c
            AND id<>$2
            AND NOT (data_fim < $3 OR data_inicio > $4)
          LIMIT 1`,
-        [usuario_id, id, data_inicio, data_fim, tipo_meta, goalData.supervisor_id],
+        [usuario_id, id, data_inicio, data_fim, tipo_meta, supervisorId],
       )
       if (conflict.rows.length > 0) {
         return res.status(400).json({ message: "Já existe uma meta cadastrada para este período" })
       }
       await pool.query(
         `UPDATE metas_individuais SET usuario_id=$1, tipo_meta=$2, valor_meta=$3, data_inicio=$4, data_fim=$5, supervisor_id=$6 WHERE id=$7`,
-        [usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, goalData.supervisor_id, id],
+        [usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, supervisorId, id],
       )
       res.json({ success: true })
     } catch (error) {
