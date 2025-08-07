@@ -349,6 +349,16 @@ app.get(
             AND p.lead->>'phone' IS NOT NULL
             AND p.lead->>'phone' <> ''
             AND p.created_at BETWEEN $1 AND $2
+            AND p.lead->>'phone' IN (
+              SELECT phone
+              FROM (
+                SELECT lead->>'phone' AS phone, COUNT(*) AS total
+                FROM clone_propostas_apprudnik
+                WHERE created_at BETWEEN $1 AND $2
+                GROUP BY lead->>'phone'
+              ) AS phone_counts
+              WHERE phone_counts.total = 1
+            )
           GROUP BY p.lead->>'phone'
           ORDER BY cnt DESC
         ),
