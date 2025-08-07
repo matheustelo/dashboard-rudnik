@@ -226,9 +226,13 @@ const getRoleLabel = (role) => ({
 }[role] || role)
 const getRowClass = (index) => (index < 3 ? 'bg-yellow-50' : '')
 const getConversionRateColor = (rate, meta) => {
-  if (!meta) return 'bg-gray-400'
-  if (rate >= meta) return 'bg-green-500'
-  if (rate >= meta * 0.75) return 'bg-yellow-500'
+  if (meta) {
+    if (rate >= meta) return 'bg-green-500'
+    if (rate >= meta * 0.75) return 'bg-yellow-500'
+    return 'bg-red-500'
+  }
+  if (rate >= 75) return 'bg-green-500'
+  if (rate >= 50) return 'bg-yellow-500'
   return 'bg-red-500'
 }
 const getAchievementColor = (percentage) => {

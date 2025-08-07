@@ -2115,19 +2115,39 @@ app.get("/api/dashboard/supervisor/:id", authenticateToken, async (req, res) => 
 
 app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) => {
   try {
-    const { period, startDate: start, endDate: end } = req.query
+    const { period, startDate: start, endDate: end, supervisorId } = req.query
 
     const { startDate, endDate } = getDateRange(period, start, end)
 
+    let sellerFilter = ""
+    let userFilter = ""
+    const params = [startDate, endDate]
+    if (supervisorId && supervisorId !== "all") {
+      const teamIds = await getTeamHierarchyIds(supervisorId)
+      if (teamIds.length > 0) {
+        sellerFilter = "AND p.seller = ANY($3)"
+        userFilter = "AND u.id = ANY($3)"
+        params.push(teamIds)
+      } else {
+        const existsClause =
+          "AND EXISTS (SELECT 1 FROM jsonb_array_elements(u.supervisors::jsonb) elem WHERE (elem->>'id')::bigint = $3)"
+        sellerFilter = existsClause
+        userFilter = existsClause
+        params.push(supervisorId)
+      }
+    }
+
     const globalQuery = `
-  SELECT
-    COUNT(*) as total_propostas,
-    COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as vendas,
-    COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento_total
-  FROM clone_propostas_apprudnik p
-  LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
-  WHERE p.created_at >= $1 AND p.created_at <= $2
-`
+      SELECT
+        COUNT(*) as total_propostas,
+        COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as vendas,
+        COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) as faturamento_total
+      FROM clone_propostas_apprudnik p
+      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+      LEFT JOIN clone_users_apprudnik u ON u.id = p.seller
+      WHERE p.created_at >= $1 AND p.created_at <= $2
+      ${sellerFilter}
+    `
 
     const monthlyRevenueQuery = `
   SELECT
@@ -2136,7 +2156,9 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
     COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) as vendas
   FROM clone_propostas_apprudnik p
   LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+  LEFT JOIN clone_users_apprudnik u ON u.id = p.seller
   WHERE p.created_at >= $1 AND p.created_at <= $2
+  ${sellerFilter}
   GROUP BY DATE_TRUNC('month', p.created_at)
   ORDER BY mes
 `
@@ -2152,14 +2174,15 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
     AND p.created_at >= $1 AND p.created_at <= $2
   LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
   WHERE u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium') AND u.is_active = true
+  ${userFilter}
   GROUP BY u.id, u.name, u.role
   ORDER BY faturamento DESC
   LIMIT 10
 `
 
-    const indicadores = await pool.query(globalQuery, [startDate, endDate])
-    const faturamentoMensal = await pool.query(monthlyRevenueQuery, [startDate, endDate])
-    const topVendedores = await pool.query(topPerformersQuery, [startDate, endDate])
+    const indicadores = await pool.query(globalQuery, params)
+    const faturamentoMensal = await pool.query(monthlyRevenueQuery, params)
+    const topVendedores = await pool.query(topPerformersQuery, params)
 
 
     const response = {

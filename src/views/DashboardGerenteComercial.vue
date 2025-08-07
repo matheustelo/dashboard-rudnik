@@ -484,11 +484,7 @@ const applyFilters = async () => {
   loading.value = true
   try {
     const [dashboardResp, perf, revVsTarget, revBySup, metrics, goalsResp] = await Promise.all([
-      dashboardService.getGerenteComercialDashboard(
-        filters.period || undefined,
-        filters.startDate || undefined,
-        filters.endDate || undefined
-      ),
+      dashboardService.getGerenteComercialDashboard(filters),
       performanceService.getTeamPerformance(filters),
       dashboardService.getRevenueVsTarget(filters),
       dashboardService.getRevenueBySupervisor(filters),
@@ -516,11 +512,7 @@ const loadInitialData = async () => {
   loading.value = true
   try {
     const [dashboardResp, leaders, perf, revVsTarget, revBySup, metrics, goalsResp] = await Promise.all([
-      dashboardService.getGerenteComercialDashboard(
-        filters.period || undefined,
-        filters.startDate || undefined,
-        filters.endDate || undefined
-      ),
+      dashboardService.getGerenteComercialDashboard(filters),
       teamLeaderService.getTeamLeaders(),
       performanceService.getTeamPerformance(filters),
       dashboardService.getRevenueVsTarget(filters),

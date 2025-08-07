@@ -48,8 +48,8 @@ export const dashboardService = {
     api.get(`/dashboard/representante/${id}`, { params: { period, startDate, endDate } }),
   getSupervisorDashboard: (id, period, startDate, endDate) =>
     api.get(`/dashboard/supervisor/${id}`, { params: { period, startDate, endDate } }),
-  getGerenteComercialDashboard: (period, startDate, endDate) =>
-    api.get("/dashboard/gerente_comercial", { params: { period, startDate, endDate } }),
+  getGerenteComercialDashboard: (filters) =>
+    api.get("/dashboard/gerente_comercial", { params: filters }),
   getGestorDashboard: (period, startDate, endDate) =>
     api.get("/dashboard/gerente_comercial", { params: { period, startDate, endDate } }),
   getRevenueVsTarget: (filters) => api.get("/dashboard/revenue-vs-target", { params: filters }),
