@@ -294,8 +294,8 @@
                       class="mt-4 p-4 bg-gray-50 rounded-lg border">
                       <h4 class="text-sm font-medium text-gray-900 mb-3">Distribuição Manual de Metas</h4>
 
-                      <!-- Summary Section -->
-                      <div class="mb-4 p-3 bg-white rounded border">
+                      <!-- Summary Section (hidden for conversion rate goals) -->
+                      <div v-if="currentGoal.tipo_meta !== 'taxa_conversao'" class="mb-4 p-3 bg-white rounded border">
                         <div class="grid grid-cols-3 gap-4 text-sm">
                           <div>
                             <span class="text-gray-600">Meta Total:</span>
@@ -361,13 +361,16 @@
                             </div>
                             <!-- Goal Input -->
                             <div class="flex items-center space-x-2">
-                              <span class="text-sm text-gray-600 flex-shrink-0">Nova Meta:</span>
+                              <span class="text-sm text-gray-600 flex-shrink-0">
+                                {{ currentGoal.tipo_meta === 'taxa_conversao' ? 'Taxa de Conversão (%)' : 'Nova Meta:' }}
+                              </span>
                               <div class="relative">
                                 <input
                                   type="number"
                                   step="0.01"
-                                  min="0"
+                                  :min="currentGoal.tipo_meta === 'taxa_conversao' ? 0 : 0"
                                   :max="currentGoal.tipo_meta === 'taxa_conversao' ? 100 : null"
+                                  :placeholder="currentGoal.tipo_meta === 'taxa_conversao' ? '0-100 (%)' : ''"
                                   :value="member.goalAmount || 0"
                                   @input="updateMemberGoal(member.id, $event.target.value)"
                                   @blur="validateMemberGoal(member.id)"
@@ -389,15 +392,15 @@
                           class="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500">
                           Distribuir Igualmente
                         </button>
-                        <button type="button" @click="distributeByPerformance"
+                        <button v-if="currentGoal.tipo_meta !== 'taxa_conversao'" type="button" @click="distributeByPerformance"
                           class="px-3 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-green-500">
                           Por Performance
                         </button>
-                        <button type="button" @click="clearAllGoals"
+                        <button v-if="currentGoal.tipo_meta !== 'taxa_conversao'" type="button" @click="clearAllGoals"
                           class="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500">
                           Limpar Tudo
                         </button>
-                        <button type="button" @click="autoAdjustRemainder" v-if="remainingAmount !== 0"
+                        <button v-if="currentGoal.tipo_meta !== 'taxa_conversao' && remainingAmount !== 0" type="button" @click="autoAdjustRemainder"
                           class="px-3 py-1 text-xs bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 focus:outline-none focus:ring-2 focus:ring-yellow-500">
                           Ajustar Restante
                         </button>
@@ -504,9 +507,11 @@
                       :step="currentGoal.tipo_meta === 'taxa_conversao' ? 0.01 : 0.01"
                       :min="currentGoal.tipo_meta === 'taxa_conversao' ? 0 : null"
                       :max="currentGoal.tipo_meta === 'taxa_conversao' ? 100 : null"
+                       :placeholder="currentGoal.tipo_meta === 'taxa_conversao' ? '0-100 (%)' : ''"
                       required
                       class="mt-1 focus:ring-blue-500 focus:border-blue-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
                       @input="validateDistribution"
+                      @blur="validateGoalValue"
                     />
                   </div>
 
@@ -850,10 +855,12 @@ const totalDistributed = computed(() => {
 })
 
 const remainingAmount = computed(() => {
+  if (currentGoal.value.tipo_meta === 'taxa_conversao') return 0
   return (parseFloat(currentGoal.value.valor_meta) || 0) - totalDistributed.value
 })
 
 const distributionProgress = computed(() => {
+  if (currentGoal.value.tipo_meta === 'taxa_conversao') return 0
   const total = parseFloat(currentGoal.value.valor_meta) || 0
   return total > 0 ? (totalDistributed.value / total) * 100 : 0
 })
@@ -1186,10 +1193,20 @@ const validateDistribution = () => {
     validationErrors.value.push('Alguns valores são inválidos')
   }
 
-  // Check total distribution
-  const totalGoal = parseFloat(currentGoal.value.valor_meta) || 0
-  if (totalDistributed.value > totalGoal) {
-    validationErrors.value.push('Total distribuído excede a meta total')
+  if (currentGoal.value.tipo_meta === 'taxa_conversao') {
+    const outOfRange = teamMembers.value.filter(m => {
+      const v = parseFloat(m.goalAmount) || 0
+      return v < 0 || v > 100
+    })
+    if (outOfRange.length > 0) {
+      validationErrors.value.push('Valores devem estar entre 0 e 100%')
+    }
+  } else {
+    // Check total distribution
+    const totalGoal = parseFloat(currentGoal.value.valor_meta) || 0
+    if (totalDistributed.value > totalGoal) {
+      validationErrors.value.push('Total distribuído excede a meta total')
+    }
   }
 }
 
@@ -1202,15 +1219,23 @@ const distributeEqually = () => {
   const totalGoal = parseFloat(currentGoal.value.valor_meta) || 0
   const memberCount = teamMembers.value.length
 
-  if (memberCount > 0 && totalGoal > 0) {
-    const equalAmount = Math.floor((totalGoal / memberCount) * 100) / 100
-    const remainder = parseFloat((totalGoal - (equalAmount * memberCount)).toFixed(2))
+  if (memberCount > 0) {
+    if (currentGoal.value.tipo_meta === 'taxa_conversao') {
+      teamMembers.value.forEach(member => {
+        member.goalAmount = totalGoal
+        member.hasError = false
+        member.errorMessage = ''
+      })
+    } else if (totalGoal > 0) {
+      const equalAmount = Math.floor((totalGoal / memberCount) * 100) / 100
+      const remainder = parseFloat((totalGoal - (equalAmount * memberCount)).toFixed(2))
 
-    teamMembers.value.forEach((member, index) => {
-      member.goalAmount = index === 0 ? equalAmount + remainder : equalAmount
-      member.hasError = false
-      member.errorMessage = ''
-    })
+      teamMembers.value.forEach((member, index) => {
+        member.goalAmount = index === 0 ? equalAmount + remainder : equalAmount
+        member.hasError = false
+        member.errorMessage = ''
+      })
+    }
 
     validateDistribution()
   }
@@ -1374,8 +1399,8 @@ const saveGoal = async () => {
         }
       }
     }
-    
-    if (modal.type === 'team') {
+
+     if (modal.type === 'team' && currentGoal.value.tipo_meta !== 'taxa_conversao') {
       // Check if total matches
       const totalGoal = parseFloat(currentGoal.value.valor_meta) || 0
       if (Math.abs(totalDistributed.value - totalGoal) > 0.01) {
