@@ -351,11 +351,11 @@ const uniqueProposals = computed(() => {
   const result = []
   Object.values(groups).forEach((list) => {
     list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    const activeConversions = list.filter(
-      (p) => p.status === 'Convertida' && p.saleStatus !== 'suspenso'
+    const generatedSales = list.filter(
+      (p) => p.hasGeneratedSale && p.saleStatus !== 'suspenso'
     )
-    if (activeConversions.length > 1) {
-      result.push(...activeConversions)
+    if (generatedSales.length) {
+      result.push(...generatedSales)
     } else {
       result.push(list[0])
     }
