@@ -610,8 +610,12 @@ app.get(
     LEFT JOIN clone_propostas_apprudnik p
       ON u.id = p.seller
       AND p.created_at BETWEEN $1 AND $2
-    LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
-    WHERE u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium') 
+    LEFT JOIN (
+      SELECT DISTINCT ON (code) code, status, created_at
+      FROM clone_vendas_apprudnik
+      ORDER BY code, created_at DESC
+    ) s ON s.code = p.id
+    WHERE u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium')
       AND u.is_active = true
       ${supervisorFilter}
     GROUP BY u.id, u.name, u.email, u.role, u.supervisor, u.supervisor_name, m.meta_propostas, m.meta_vendas, m.meta_faturamento, m.meta_conversao
@@ -800,7 +804,11 @@ app.get("/api/performance/representative/:id", authenticateToken,
           COALESCE(AVG(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) AS ticket_medio
       FROM
           clone_propostas_apprudnik p
-      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+      LEFT JOIN (
+          SELECT DISTINCT ON (code) code, status, created_at
+          FROM clone_vendas_apprudnik
+          ORDER BY code, created_at DESC
+      ) s ON s.code = p.id
       WHERE
           p.seller = $1
           AND p.created_at >= $2
@@ -821,7 +829,11 @@ app.get("/api/performance/representative/:id", authenticateToken,
           COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) AS faturamento
       FROM
           clone_propostas_apprudnik p
-      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+      LEFT JOIN (
+          SELECT DISTINCT ON (code) code, status, created_at
+          FROM clone_vendas_apprudnik
+          ORDER BY code, created_at DESC
+      ) s ON s.code = p.id
       WHERE
           p.seller = $1
           AND p.created_at >= $2
@@ -842,7 +854,11 @@ app.get("/api/performance/representative/:id", authenticateToken,
           COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) AS valor_vendas
       FROM
           clone_propostas_apprudnik p
-      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
+      LEFT JOIN (
+          SELECT DISTINCT ON (code) code, status, created_at
+          FROM clone_vendas_apprudnik
+          ORDER BY code, created_at DESC
+      ) s ON s.code = p.id
       WHERE
           p.seller = $1
           AND p.created_at >= $2
