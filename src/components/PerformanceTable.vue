@@ -105,7 +105,7 @@
                         <div
                           class="h-2 rounded-full"
                           :class="getConversionRateColor(member.performance.conversionRate, member.targets.metaConversao)"
-                          :style="{ width: Math.min(member.performance.conversionRate, 100) + '%' }"></div>
+                          :style="{ width: getConversionRateWidth(member.performance.conversionRate, member.targets.metaConversao) }"></div>
                       </div>
                     </div>
                   </div>
@@ -235,6 +235,12 @@ const getConversionRateColor = (rate, meta) => {
   if (rate >= 50) return 'bg-yellow-500'
   return 'bg-red-500'
 }
+
+const getConversionRateWidth = (rate, meta) => {
+  if (meta) return Math.min((rate / meta) * 100, 100) + '%'
+  return Math.min(rate, 100) + '%'
+}
+
 const getAchievementColor = (percentage) => {
   const pct = parseFloat(percentage)
   if (pct >= 100) return 'text-green-600 font-medium'
