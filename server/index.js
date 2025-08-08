@@ -545,12 +545,15 @@ app.get(
 
       if (supervisor && supervisor !== "all") {
         const teamIds = await getTeamHierarchyIds(supervisor)
+        const supervisorIdNum = Number(supervisor)
         if (teamIds.length > 0) {
+          if (!teamIds.includes(supervisorIdNum)) teamIds.push(supervisorIdNum)
           supervisorFilter = "AND u.id = ANY($3)"
           queryParams.push(teamIds)
         } else {
-          supervisorFilter = "AND EXISTS (SELECT 1 FROM jsonb_array_elements(u.supervisors::jsonb) elem WHERE (elem->>'id')::bigint = $3)"
-          queryParams.push(supervisor)
+          supervisorFilter =
+            "AND (u.id = $3 OR EXISTS (SELECT 1 FROM jsonb_array_elements(u.supervisors::jsonb) elem WHERE (elem->>'id')::bigint = $3))"
+          queryParams.push(supervisorIdNum)
         }
       }
 
