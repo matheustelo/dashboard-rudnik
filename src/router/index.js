@@ -1,12 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router"
 import { useAuthStore } from "../stores/auth"
-import Login from "../views/Login.vue"
-import DashboardVendedor from "../views/DashboardVendedor.vue"
-import DashboardSupervisor from "../views/DashboardSupervisor.vue"
-import DashboardGerenteComercial from "../views/DashboardGerenteComercial.vue"
-import DashboardRepresentante from "../views/DashboardRepresentante.vue"
-import DashboardMetas from "../views/DashboardMetas.vue"
-import TeamGoalsHistory from "../views/TeamGoalsHistory.vue"
 
 const routes = [
   {
@@ -16,60 +9,60 @@ const routes = [
   {
     path: "/login",
     name: "Login",
-    component: Login,
+    component: () => import("../views/Login.vue"),
   },
   {
     path: "/dashboard/vendedor",
     name: "DashboardVendedor",
-    component: DashboardRepresentante,
+    component: () => import("../views/DashboardVendedor.vue"),
     meta: { requiresAuth: true, role: "vendedor" },
   },
   {
     path: "/dashboard/representante",
     name: "DashboardRepresentante",
-    component: DashboardRepresentante,
+    component:() => import("../views/DashboardRepresentante.vue"),
     meta: { requiresAuth: true, role: "representante" },
   },
   {
     path: "/dashboard/representante_premium",
     name: "DashboardRepresentantePremium",
-    component: DashboardSupervisor,
+    component: () => import("../views/DashboardSupervisor.vue"),
     meta: { requiresAuth: true, role: "representante_premium" },
   },
   {
     path: "/dashboard/supervisor",
     name: "DashboardSupervisor",
-    component: DashboardSupervisor,
+    component: () => import("../views/DashboardSupervisor.vue"),
     meta: { requiresAuth: true, role: "supervisor" },
   },
   {
     path: "/dashboard/parceiro_comercial",
     name: "DashboardParceiroComercial",
-    component: DashboardSupervisor,
+    component:() => import("../views/DashboardSupervisor.vue"),
     meta: { requiresAuth: true, role: "parceiro_comercial" },
   },
   {
     path: "/dashboard/gerente_comercial",
     name: "DashboardGerenteComercial",
-    component: DashboardGerenteComercial,
+    component:() => import("../views/DashboardGerenteComercial.vue"),
     meta: { requiresAuth: true, roles: ["admin", "gerente_comercial"] },
   },
   {
     path: "/dashboard/admin",
     name: "DashboardAdmin",
-    component: DashboardGerenteComercial,
+    component: () => import("../views/DashboardGerenteComercial.vue"),
     meta: { requiresAuth: true, roles: ["admin", "gerente_comercial"] },
   },
   {
     path: "/dashboard/metas",
     name: "DashboardMetas",
-    component: DashboardMetas,
+    component: () => import("../views/DashboardMetas.vue"),
     meta: { requiresAuth: true, roles: ["admin", "gerente_comercial"] }, // New
   },
   {
     path: "/dashboard/team-goals-history",
     name: "TeamGoalsHistory",
-    component: TeamGoalsHistory,
+    component: () => import("../views/TeamGoalsHistory.vue"),
     meta: { requiresAuth: true, roles: ["admin", "gerente_comercial", "supervisor", "parceiro_comercial"] }
   },
 ]

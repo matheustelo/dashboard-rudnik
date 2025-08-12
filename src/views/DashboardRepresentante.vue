@@ -48,7 +48,6 @@
           type="date"
           v-model="customStart"
           :disabled="!!selectedPeriod"
-          @change="loadDashboard"
           class="border border-gray-300 rounded-md px-2 py-1"
         />
         <span class="text-gray-500">até</span>
@@ -56,7 +55,6 @@
           type="date"
           v-model="customEnd"
           :disabled="!!selectedPeriod"
-          @change="loadDashboard"
           class="border border-gray-300 rounded-md px-2 py-1"
         />
       </div>
@@ -383,6 +381,7 @@ import BarChart from '../components/BarChart.vue'
 import GoalsChart from '../components/GoalsChart.vue'
 import DashboardCard from '../components/DashboardCard.vue'
 import { isDateRangeWithinLimit } from '../../utils/date.js'
+import debounce from 'lodash/debounce'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -396,6 +395,11 @@ const periods = ref([])
 const selectedPeriod = ref('')
 const customStart = ref('')
 const customEnd = ref('')
+
+const handlePeriodChange = () => {
+  customStart.value = ''
+  customEnd.value = ''
+}
 
 const proposalMetrics = ref({
   convertidas: 0,
@@ -645,21 +649,23 @@ const formatPeriodLabel = (p) => {
   return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
 }
 
-watch(
-  [selectedPeriod, customStart, customEnd],
-  () => {
-    loadDashboard()
-    loadProposalMetrics()
+const fetchAll = () =>
+  Promise.all([
+    loadDashboard(),
+    loadProposalMetrics(),
     loadProposals()
-  }
-)
+  ])
+
+const debouncedFetchAll = debounce(fetchAll, 500)
+
+watch([selectedPeriod, customStart, customEnd], () => {
+  debouncedFetchAll()
+})
 
 onMounted(async () => {
   authStore.initializeAuth()
   await loadPeriods()
-  loadDashboard()
-  loadProposalMetrics()
-  loadProposals()
+  fetchAll()
 })
 </script>
 <style>
