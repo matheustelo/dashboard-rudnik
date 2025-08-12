@@ -1068,106 +1068,6 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
 
     const { tipo_meta } = goalData || {}
 
-    // Taxa de conversão: meta de equipe replicada para membros
-    if (tipo_meta === "taxa_conversao") {
-      const { usuario_id, valor_meta, data_inicio, data_fim } = goalData
-
-    if (new Date(data_inicio) > new Date(data_fim)) {
-      return res.status(400).json({
-        message: "Data de início não pode ser maior que a data de fim",
-      })
-    }
-
-    const overlapCheck = await pool.query(
-      `SELECT 1 FROM metas_gerais
-       WHERE usuario_id = $1
-         AND tipo_meta = $4
-         AND NOT (data_fim < $2 OR data_inicio > $3)
-       LIMIT 1`,
-      [usuario_id, data_inicio, data_fim, tipo_meta],
-    )
-    if (overlapCheck.rows.length > 0) {
-      return res.status(400).json({
-        message: "Já existe uma meta de equipe cadastrada para este período",
-      })
-    }
-
-      const client = await pool.connect()
-      try {
-        await client.query("BEGIN")
-
-        const generalInsertQuery = `
-          INSERT INTO metas_gerais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por, is_distributed)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
-          RETURNING *`
-        const generalGoalResult = await client.query(generalInsertQuery, [
-          usuario_id,
-          tipo_meta,
-          valor_meta,
-          data_inicio,
-          data_fim,
-          created_by,
-          true,
-        ])
-        const generalGoal = generalGoalResult.rows[0]
-
-        const childIds = await getTeamHierarchyIds(usuario_id)
-        if (!childIds.length) {
-          await client.query("ROLLBACK")
-          return res.status(400).json({
-            message: "Este líder não possui vendedores na equipe para registrar a meta.",
-          })
-        }
-
-        const hasDup = async (uid) => {
-          const { rows } = await client.query(
-            `SELECT 1 FROM metas_individuais
-             WHERE usuario_id = $1
-               AND supervisor_id = $2
-               AND tipo_meta = $3
-               AND date_trunc('month', data_inicio) = date_trunc('month', $4::date)
-             LIMIT 1`,
-            [uid, usuario_id, tipo_meta, data_inicio],
-          )
-          return rows.length > 0
-        }
-
-        const individualInsertQuery = `
-          INSERT INTO metas_individuais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por, supervisor_id)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)`
-
-        for (const childId of childIds) {
-          if (await hasDup(childId)) {
-            await client.query("ROLLBACK")
-            return res.status(400).json({
-              message: `Usuário ${childId} já possui meta cadastrada para este período e tipo`,
-            })
-          }
-          await client.query(individualInsertQuery, [
-            childId,
-            tipo_meta,
-            valor_meta,
-            data_inicio,
-            data_fim,
-            created_by,
-            usuario_id,
-          ])
-        }
-
-        await client.query("COMMIT")
-        return res.status(201).json(generalGoal)
-      } catch (error) {
-        await client.query("ROLLBACK")
-        console.error("❌ Goals: Error creating conversion goal:", error)
-        return res.status(500).json({
-          message: "Erro ao criar meta de taxa de conversão",
-          error: error.message,
-        })
-      } finally {
-        client.release()
-      }
-    }
-
   if (type === "general") {
     // This is now a Team Goal
     const { usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, manualDistribution } = goalData
@@ -1202,22 +1102,6 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
     try {
       await client.query("BEGIN")
 
-      // 1. Insert the main team goal
-      const teamGoalQuery = `
-        INSERT INTO metas_gerais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por, is_distributed)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING *`
-      const teamGoalResult = await client.query(teamGoalQuery, [
-        usuario_id,
-        tipo_meta,
-        valor_meta,
-        data_inicio,
-        data_fim,
-        created_by,
-        true,
-      ])
-      const teamGoal = teamGoalResult.rows[0]
-
       let childrenIds = []
       let distributionMethod = "automatic"
 
@@ -1228,6 +1112,16 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
           id: Number(item.usuario_id),
           goalAmount: Number.parseFloat(item.valor_meta) || 0,
         }))
+
+        if (tipo_meta === "taxa_conversao") {
+          const outOfRange = childrenIds.some((c) => c.goalAmount < 0 || c.goalAmount > 100)
+          if (outOfRange) {
+            await client.query("ROLLBACK")
+            return res.status(400).json({
+              message: "Valores de taxa de conversão devem estar entre 0 e 100.",
+            })
+          }
+        }
 
         const leaderData = await client.query(
           "SELECT children FROM clone_users_apprudnik WHERE id = $1 AND is_active = true",
@@ -1288,16 +1182,25 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
           return res.status(400).json({ message: "Este líder não possui vendedores na equipe para distribuir a meta." })
         }
 
-        // Calculate equal distribution
-        const totalAmount = Number.parseFloat(valor_meta)
-        const childCount = childrenIdsOnly.length
-        const individualAmount = Math.floor((totalAmount / childCount) * 100) / 100
-        const remainder = Number.parseFloat((totalAmount - individualAmount * childCount).toFixed(2))
+        if (tipo_meta === "taxa_conversao") {
+          const value = Number.parseFloat(valor_meta)
+          if (isNaN(value) || value < 0 || value > 100) {
+            await client.query("ROLLBACK")
+            return res.status(400).json({ message: "Valor da taxa de conversão deve estar entre 0 e 100." })
+          }
+          childrenIds = childrenIdsOnly.map((id) => ({ id, goalAmount: value }))
+        } else {
+          // Calculate equal distribution
+          const totalAmount = Number.parseFloat(valor_meta)
+          const childCount = childrenIdsOnly.length
+          const individualAmount = Math.floor((totalAmount / childCount) * 100) / 100
+          const remainder = Number.parseFloat((totalAmount - individualAmount * childCount).toFixed(2))
 
-        childrenIds = childrenIdsOnly.map((id, index) => ({
-          id: id,
-          goalAmount: index === 0 ? individualAmount + remainder : individualAmount,
-        }))
+          childrenIds = childrenIdsOnly.map((id, index) => ({
+            id: id,
+            goalAmount: index === 0 ? individualAmount + remainder : individualAmount,
+          }))
+        }
       }
 
       // 4. Expand representante_premium to their preposto children
@@ -1320,6 +1223,27 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
       }
 
       finalChildren = mergeById(finalChildren)
+
+            let teamGoalValue = Number.parseFloat(valor_meta)
+      if (tipo_meta === "taxa_conversao") {
+        const sumGoals = finalChildren.reduce((sum, child) => sum + child.goalAmount, 0)
+        teamGoalValue = finalChildren.length > 0 ? sumGoals / finalChildren.length : 0
+      }
+
+      const teamGoalQuery = `
+        INSERT INTO metas_gerais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por, is_distributed)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *`
+      const teamGoalResult = await client.query(teamGoalQuery, [
+        usuario_id,
+        tipo_meta,
+        teamGoalValue,
+        data_inicio,
+        data_fim,
+        created_by,
+        true,
+      ])
+      const teamGoal = teamGoalResult.rows[0]
 
       // Insert individual goals for each resolved child
       const individualGoalQuery = `
@@ -1366,7 +1290,7 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
         teamGoal: teamGoal,
         distribution: {
           method: distributionMethod,
-          totalGoal: Number.parseFloat(valor_meta),
+          totalGoal: teamGoalValue,
           totalDistributed: totalDistributed,
           childrenCount: finalChildren.length,
         },

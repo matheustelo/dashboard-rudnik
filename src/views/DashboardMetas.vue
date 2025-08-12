@@ -355,9 +355,7 @@
                             <!-- Current Goal Display -->
                             <div v-if="member.currentGoalValue" class="text-right">
                               <div class="text-xs text-gray-500">Meta Atual:</div>
-                              <div class="text-sm font-medium text-blue-600">{{ formatCurrency(member.currentGoalValue)
-                                }}
-                              </div>
+                              <div class="text-sm font-medium text-blue-600">{{ formatCurrency(member.currentGoalValue) }}</div>
                             </div>
                             <!-- Goal Input -->
                             <div class="flex items-center space-x-2">
@@ -510,6 +508,7 @@
                        :placeholder="currentGoal.tipo_meta === 'taxa_conversao' ? '0-100 (%)' : ''"
                       required
                       class="mt-1 focus:ring-blue-500 focus:border-blue-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
+                      :readonly="modal.type === 'team' && currentGoal.tipo_meta === 'taxa_conversao'"
                       @input="validateDistribution"
                       @blur="validateGoalValue"
                     />
@@ -1201,6 +1200,10 @@ const validateDistribution = () => {
     if (outOfRange.length > 0) {
       validationErrors.value.push('Valores devem estar entre 0 e 100%')
     }
+    const values = teamMembers.value.map(m => parseFloat(m.goalAmount) || 0)
+    const sum = values.reduce((acc, v) => acc + v, 0)
+    const avg = values.length > 0 ? sum / values.length : 0
+    currentGoal.value.valor_meta = parseFloat(avg.toFixed(2))
   } else {
     // Check total distribution
     const totalGoal = parseFloat(currentGoal.value.valor_meta) || 0
@@ -1400,7 +1403,7 @@ const saveGoal = async () => {
       }
     }
 
-    if (currentGoal.value.tipo_meta === 'taxa_conversao') {
+    if (modal.type === 'team' && currentGoal.value.tipo_meta === 'taxa_conversao') {
       if (currentGoal.value.periodType === 'month') {
         const month = currentGoal.value.target_month
         if (month) {
@@ -1420,7 +1423,20 @@ const saveGoal = async () => {
         }
       }
 
-      await goalsService.saveGoal('general', currentGoal.value)
+      const distribution = Array.isArray(teamMembers.value) ? teamMembers.value.map(member => ({
+        usuario_id: member.id,
+        valor_meta: parseFloat(member.goalAmount) || 0
+      })) : []
+      const sum = distribution.reduce((acc, m) => acc + m.valor_meta, 0)
+      const avg = distribution.length > 0 ? sum / distribution.length : 0
+      currentGoal.value.valor_meta = parseFloat(avg.toFixed(2))
+
+      const goalDataWithDistribution = {
+        ...currentGoal.value,
+        manualDistribution: distribution
+      }
+
+      await goalsService.saveGoal('general', goalDataWithDistribution)
     } else if (modal.type === 'team') {
       // Check if total matches
       const totalGoal = parseFloat(currentGoal.value.valor_meta) || 0
