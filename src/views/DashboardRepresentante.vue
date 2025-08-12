@@ -304,7 +304,7 @@
 
       <!-- ---------- GRÁFICOS ---------- -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <GoalsChart :goals="goalsData.goals" :summary="goalsData.summary" />
+        <GoalsChart :goals="goalsData.goals" :summary="goalsData.summary" :show-summary="false" />
 
         <div class="bg-white p-6 rounded-lg shadow">
           <h3 class="text-lg font-medium text-gray-900 mb-4">Vendas Mensais</h3>
