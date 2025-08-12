@@ -24,7 +24,7 @@
         <input type="date" v-model="customEnd" @change="handleCustomDateChange"
           class="border border-gray-300 rounded-md px-2 py-1" />
         <label class="text-sm font-medium text-gray-700">Tipo de Meta:</label>
-       <select v-model="selectedGoalType" @change="fetchGoalsWithLoading"
+        <select v-model="selectedGoalType" @change="fetchGoalsWithLoading"
           class="border border-gray-300 rounded-md px-3 py-2 text-sm">
           <option value="">Todos</option>
           <option value="faturamento">Faturamento</option>
@@ -32,7 +32,7 @@
         </select>
 
         <label class="text-sm font-medium text-gray-700">Líder:</label>
-        <select v-model="selectedLeader" @change="fetchGoalsWithLoading"
+       <select v-model="selectedLeader" @change="fetchGoalsWithLoading"
           class="border border-gray-300 rounded-md px-3 py-2 text-sm">
           <option value="">Todos</option>
           <option v-for="leader in teamLeaders" :key="leader.id" :value="leader.id">{{ leader.name }}</option>

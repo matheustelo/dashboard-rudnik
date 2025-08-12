@@ -976,17 +976,17 @@ app.get(
       FROM metas_gerais g
       JOIN clone_users_apprudnik u ON g.usuario_id = u.id
       WHERE g.data_inicio <= $2 AND g.data_fim >= $1`
-    generalGoalsQuery += ` AND g.usuario_id = $${generalParams.length + 1}`
+    const generalQueryParams = [startDate, endDate]
     if (supId) {
-      generalGoalsQuery += ' AND g.usuario_id = $3'
-      generalParams.push(supId)
+      generalGoalsQuery += ` AND g.usuario_id = $${generalQueryParams.length + 1}`
+      generalQueryParams.push(supId)
     }
     if (goalType) {
-      generalGoalsQuery += ` AND g.tipo_meta = $${generalParams.length + 1}`
-      generalParams.push(goalType)
+      generalGoalsQuery += ` AND g.tipo_meta = $${generalQueryParams.length + 1}`
+      generalQueryParams.push(goalType)
     }
     generalGoalsQuery += ' ORDER BY g.data_inicio DESC'
-    const generalResult = await pool.query(generalGoalsQuery, generalParams)
+    const generalResult = await pool.query(generalGoalsQuery, generalQueryParams)
     console.log("✅ Goals: Fetched", generalResult.rows.length, "general goals")
 
     const enhancedGeneral = []
