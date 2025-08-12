@@ -250,33 +250,6 @@
         </div>
       </div>
 
-      <!-- Summary by Month -->
-      <div class="mt-10">
-        <h2 class="text-xl font-semibold mb-4">Resumo de Metas por Mês</h2>
-        <div v-if="Object.keys(groupedGeneralGoals).length === 0" class="text-center text-gray-500">
-          Nenhuma meta encontrada para o período selecionado
-        </div>
-        <div v-for="(items, month) in groupedGeneralGoals" :key="month" class="mb-6">
-          <h3 class="text-md font-medium text-gray-800 mb-2">{{ formatPeriodLabel(month) }}</h3>
-          <ul class="bg-white shadow overflow-hidden sm:rounded-lg divide-y divide-gray-200">
-            <li v-for="goal in items" :key="goal.id" class="px-4 py-4 sm:px-6 flex justify-between items-center">
-              <div>
-                <p class="text-sm font-medium text-indigo-600">{{ goal.supervisor_name }} - {{ goal.tipo_meta }}</p>
-                <p class="text-xs text-gray-500">{{ goal.tipo_meta === 'faturamento'
-                  ? 'Valor'
-                  : goal.tipo_meta === 'taxa_conversao'
-                    ? 'Percentual'
-                    : 'Quantidade' }}: {{ formatGoalValue(goal.valor_meta, goal.tipo_meta) }}</p>
-              </div>
-              <div class="space-x-4">
-                <button @click="deleteGoal('general', goal.id)"
-                  class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
-              </div>
-            </li>
-          </ul>
-        </div>
-      </div>
-
       <!-- Goal Modal -->
       <div v-if="showModal" class="fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog"
         aria-modal="true">
@@ -869,17 +842,6 @@ const distributionProgress = computed(() => {
   if (currentGoal.value.tipo_meta === 'taxa_conversao') return 0
   const total = parseFloat(currentGoal.value.valor_meta) || 0
   return total > 0 ? (totalDistributed.value / total) * 100 : 0
-})
-
-
-const groupedGeneralGoals = computed(() => {
-  if (!Array.isArray(goals.value.generalGoals)) return {}
-  return goals.value.generalGoals.reduce((acc, g) => {
-    const month = g.data_inicio?.slice(0, 7) || 'unknown'
-    if (!acc[month]) acc[month] = []
-    acc[month].push(g)
-    return acc
-  }, {})
 })
 
 // Map of all users for quick lookup by ID
