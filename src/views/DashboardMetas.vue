@@ -11,7 +11,7 @@
     </header>
 
     <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-      <div class="bg-white shadow rounded-lg p-4 mb-6 flex items-center space-x-4">
+      <div class="bg-white shadow rounded-lg p-4 mb-6 flex items-center space-x-4 flex-wrap">
         <label class="text-sm font-medium text-gray-700">Mês:</label>
         <select v-model="selectedPeriod" @change="handlePeriodChange"
           class="border border-gray-300 rounded-md px-3 py-2 text-sm">
@@ -23,6 +23,20 @@
         <span class="text-gray-500">até</span>
         <input type="date" v-model="customEnd" @change="handleCustomDateChange"
           class="border border-gray-300 rounded-md px-2 py-1" />
+        <label class="text-sm font-medium text-gray-700">Tipo de Meta:</label>
+        <select v-model="selectedGoalType" @change="fetchGoals"
+          class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+          <option value="">Todos</option>
+          <option value="faturamento">Faturamento</option>
+          <option value="propostas">Propostas</option>
+        </select>
+
+        <label class="text-sm font-medium text-gray-700">Líder:</label>
+        <select v-model="selectedLeader" @change="fetchGoals"
+          class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+          <option value="">Todos</option>
+          <option v-for="leader in teamLeaders" :key="leader.id" :value="leader.id">{{ leader.name }}</option>
+        </select>
       </div>
 
       <!-- Tabs -->
@@ -773,6 +787,8 @@ const goals = ref({
 const allUsers = ref([]) // Initialize as empty array
 const teamLeaders = ref([]) // Initialize as empty array
 const showModal = ref(false)
+const selectedLeader = ref("")
+const selectedGoalType = ref("")
 const showDetailsModal = ref(false)
 const selectedGoal = ref(null)
 const modal = reactive({ title: "", type: "" })
@@ -813,6 +829,15 @@ const handleCustomDateChange = async () => {
     }
   }
 }
+
+watch([selectedLeader, selectedGoalType], async () => {
+  loading.value = true
+  try {
+    await fetchGoals()
+  } finally {
+    loading.value = false
+  }
+})
 
 watch(
   () => [currentGoal.value.target_month, currentGoal.value.periodType],
@@ -963,7 +988,9 @@ const fetchGoals = async () => {
     const periodParam = selectedPeriod.value || undefined
     const start = selectedPeriod.value ? undefined : customStart.value || undefined
     const end = selectedPeriod.value ? undefined : customEnd.value || undefined
-    const { data } = await goalsService.getGoals(periodParam, start, end)
+    const supervisor = selectedLeader.value || undefined
+    const tipo = selectedGoalType.value || undefined
+    const { data } = await goalsService.getGoals(periodParam, start, end, supervisor, tipo)
     console.log('✅ Goals fetched with hierarchy:', data)
 
     // Normalize goal IDs in case the backend returns `_id`

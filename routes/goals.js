@@ -150,11 +150,13 @@ router.get(
   async (req, res) => {
   try {
     console.log("🎯 Goals API: Fetching all goals")
-    const { period } = req.query
+   const { period, goalType, supervisorId } = req.query
 
-    let dateFilter = ""
-    const params = []
-
+    // --- Build dynamic filters for queries ---
+    const generalConditions = ["u.is_active = true"]
+    const generalParams = []
+    const individualConditions = ["u.is_active = true"]
+    const individualParams = []
     if (period) {
       const now = new Date()
       let startDate
@@ -177,13 +179,31 @@ router.get(
           startDate = new Date(now.getFullYear(), now.getMonth(), 1)
       }
 
-      dateFilter = "AND g.data_inicio >= $1"
-      params.push(startDate.toISOString().split("T")[0])
+      const formatted = startDate.toISOString().split("T")[0]
+      generalConditions.push(`g.data_inicio >= $${generalParams.length + 1}`)
+      generalParams.push(formatted)
+      individualConditions.push(`g.data_inicio >= $${individualParams.length + 1}`)
+      individualParams.push(formatted)
     }
+
+    if (goalType) {
+      generalConditions.push(`g.tipo_meta = $${generalParams.length + 1}`)
+      generalParams.push(goalType)
+      individualConditions.push(`g.tipo_meta = $${individualParams.length + 1}`)
+      individualParams.push(goalType)
+    }
+
+    if (supervisorId) {
+      generalConditions.push(`g.usuario_id = $${generalParams.length + 1}`)
+      generalParams.push(supervisorId)
+    }
+
+    const generalWhere = generalConditions.join(" AND ")
+    const individualWhere = individualConditions.join(" AND ")
 
     // Fetch general goals (team goals)
     const generalGoalsQuery = `
-      SELECT 
+      SELECT
         g.id,
         g.usuario_id,
         g.tipo_meta,
@@ -196,13 +216,13 @@ router.get(
         u.children
       FROM metas_gerais g
       JOIN clone_users_apprudnik u ON g.usuario_id = u.id
-      WHERE u.is_active = true ${dateFilter}
+      WHERE ${generalWhere}
       ORDER BY g.created_at DESC
     `
 
     // Fetch individual goals
     const individualGoalsQuery = `
-      SELECT 
+      SELECT
         g.id,
         g.usuario_id,
         g.tipo_meta,
@@ -215,17 +235,17 @@ router.get(
         u.supervisors
       FROM metas_individuais g
       JOIN clone_users_apprudnik u ON g.usuario_id = u.id
-      WHERE u.is_active = true ${dateFilter}
+      WHERE ${individualWhere}
       ORDER BY g.created_at DESC
     `
 
     const [generalResult, individualResult] = await Promise.all([
-      query(generalGoalsQuery, params),
-      query(individualGoalsQuery, params),
+      query(generalGoalsQuery, generalParams),
+      query(individualGoalsQuery, individualParams),
     ])
 
     // Enhance general goals with team information
-    const enhancedGeneralGoals = await Promise.all(
+    let enhancedGeneralGoals = await Promise.all(
       generalResult.rows.map(async (goal) => {
         const teamMembers = await getTeamMembers(goal.usuario_id)
         return {
@@ -237,12 +257,28 @@ router.get(
       }),
     )
 
+    // Filter by supervisor if provided (extra safety)
+    if (supervisorId) {
+      const supIdNum = Number(supervisorId)
+      enhancedGeneralGoals = enhancedGeneralGoals.filter(
+        (g) => Number(g.usuario_id) === supIdNum,
+      )
+    }
+
     // Enhance individual goals with supervisor information
-    const enhancedIndividualGoals = individualResult.rows.map((goal) => ({
+    let enhancedIndividualGoals = individualResult.rows.map((goal) => ({
       ...goal,
       supervisors: parseJsonField(goal.supervisors),
     }))
 
+        // Filter individual goals by supervisor if provided
+    if (supervisorId) {
+      const supIdNum = Number(supervisorId)
+      enhancedIndividualGoals = enhancedIndividualGoals.filter((g) =>
+        Array.isArray(g.supervisors) ? g.supervisors.includes(supIdNum) : false,
+      )
+    }
+    
     console.log(
       "✅ Goals API: Fetched",
       enhancedGeneralGoals.length,
