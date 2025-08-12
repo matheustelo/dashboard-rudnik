@@ -20,8 +20,14 @@ const routes = [
   {
     path: "/dashboard/representante",
     name: "DashboardRepresentante",
-    component:() => import("../views/DashboardRepresentante.vue"),
-    meta: { requiresAuth: true, role: "representante" },
+    component: () => import("../views/DashboardRepresentante.vue"),
+    meta: { requiresAuth: true, roles: ["representante", "preposto"] },
+  },
+  {
+    path: "/dashboard/preposto",
+    name: "DashboardPreposto",
+    component: () => import("../views/DashboardRepresentante.vue"),
+    meta: { requiresAuth: true, roles: ["representante", "preposto"] },
   },
   {
     path: "/dashboard/representante_premium",

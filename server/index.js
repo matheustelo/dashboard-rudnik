@@ -140,19 +140,45 @@ async function getTeamMembers(leaderId) {
   return teamResult.rows
 }
 
-// Auxiliar para buscar a equipe de um líder, incluindo prepostos de membros representante_premium
+// Auxiliar para buscar a equipe de um líder em todos os níveis de hierarquia usando uma única consulta
 async function getTeamHierarchyIds(leaderId) {
-  const baseTeam = await getTeamMembers(leaderId)
-  const ids = baseTeam.map((m) => m.id)
-  for (const member of baseTeam) {
-    if (member.role === "representante_premium") {
-      const prepostos = await getTeamMembers(member.id)
-      prepostos
-        .filter((p) => p.role === "preposto")
-        .forEach((p) => ids.push(p.id))
-    }
-  }
-  return ids
+  const query = `
+    WITH RECURSIVE hierarchy AS (
+      SELECT u.id, u.role, u.children
+      FROM clone_users_apprudnik l
+      JOIN clone_users_apprudnik u
+        ON u.is_active = true AND (
+          EXISTS (
+            SELECT 1 FROM jsonb_array_elements(COALESCE(l.children, '[]'::jsonb)) c
+            WHERE (c->>'id')::bigint = u.id
+          )
+          OR EXISTS (
+            SELECT 1 FROM jsonb_array_elements(COALESCE(u.supervisors, '[]'::jsonb)) s
+            WHERE (s->>'id')::bigint = l.id
+          )
+        )
+      WHERE l.id = $1
+
+      UNION ALL
+
+      SELECT u2.id, u2.role, u2.children
+      FROM hierarchy h
+      JOIN clone_users_apprudnik u2
+        ON u2.is_active = true AND (
+          EXISTS (
+            SELECT 1 FROM jsonb_array_elements(COALESCE(h.children, '[]'::jsonb)) c
+            WHERE (c->>'id')::bigint = u2.id
+          )
+          OR EXISTS (
+            SELECT 1 FROM jsonb_array_elements(COALESCE(u2.supervisors, '[]'::jsonb)) s
+            WHERE (s->>'id')::bigint = h.id
+          )
+        )
+    )
+    SELECT DISTINCT id FROM hierarchy
+  `
+  const { rows } = await pool.query(query, [leaderId])
+  return rows.map((r) => r.id)
 }
 
 // API Endpoints
@@ -307,7 +333,7 @@ app.get(
 app.get(
   "/api/dashboard/proposal-metrics",
   authenticateToken,
-  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor", "preposto"),
   async (req, res) => {
     try {
       const { period, startDate, endDate, supervisorId, supervisor, sellerId } = req.query;
@@ -730,7 +756,7 @@ app.get(
 
 // Get detailed representative performance (drill-down)
 app.get("/api/performance/representative/:id", authenticateToken,
-  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor", "preposto"),
   async (req, res) => {
     console.log("--- Performance API: GET /api/performance/representative started ---")
     try {
@@ -1258,40 +1284,42 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
       ])
       const teamGoal = teamGoalResult.rows[0]
 
-      // Insert individual goals for each resolved child
-      const individualGoalQuery = `
-        INSERT INTO metas_individuais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por, supervisor_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)`
+      // Insert individual goals for each resolved child using a single bulk insert
+      if (finalChildren.length > 0) {
+        await client.query(
+          `CREATE UNIQUE INDEX IF NOT EXISTS metas_individuais_unique_idx
+           ON metas_individuais (usuario_id, supervisor_id, tipo_meta, data_inicio)`,
+          )
+        const values = []
+        const placeholders = finalChildren.map((child, idx) => {
+          const base = idx * 7
+          values.push(
+            child.id,
+            tipo_meta,
+            child.goalAmount,
+            data_inicio,
+            data_fim,
+            created_by,
+            supervisorId,
+          )
+          return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`
+        })
 
-      const hasDup = async (uid) => {
-        const { rows } = await client.query(
-          `SELECT 1 FROM metas_individuais
-            WHERE usuario_id = $1
-              AND supervisor_id = $2
-              AND tipo_meta = $3
-              AND date_trunc('month', data_inicio) = date_trunc('month', $4::date)
-            LIMIT 1`,
-          [uid, supervisorId, tipo_meta, data_inicio],
-        )
-        return rows.length > 0
-      }
+        const individualGoalQuery = `
+          INSERT INTO metas_individuais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por, supervisor_id)
+          VALUES ${placeholders.join(",")}
+          ON CONFLICT (usuario_id, supervisor_id, tipo_meta, data_inicio) DO NOTHING
+          RETURNING id`
 
-      for (const child of finalChildren) {
-        if (await hasDup(child.id)) {
+        const insertResult = await client.query(individualGoalQuery, values)
+
+        // Ensure all goals were inserted; if not, rollback due to conflicts
+        if (insertResult.rowCount !== finalChildren.length) {
           await client.query('ROLLBACK')
-          return res.status(400).json({
-            message: `Usuário ${child.id} já possui meta cadastrada para este período e tipo`,
+          return res.status(409).json({
+            message: 'Alguns usuários já possuem meta cadastrada para este período e tipo',
           })
         }
-        await client.query(individualGoalQuery, [
-          child.id,
-          tipo_meta,
-          child.goalAmount,
-          data_inicio,
-          data_fim,
-          created_by,
-          supervisorId,
-        ])
       }
 
       await client.query("COMMIT")
@@ -1666,7 +1694,7 @@ app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) =>
 app.get(
   "/api/goals/team/:id",
   authenticateToken,
-  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor", "preposto"),
   async (req, res) => {
     console.log("--- Goals API: GET /api/goals/team/:id started ---")
     try {
@@ -2261,11 +2289,10 @@ app.use("*", (req, res) => {
   res.status(404).json({ message: "Route not found" })
 })
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`)
-  console.log(`📊 Dashboard API available at http://localhost:${PORT}/api/dashboard`)
-  console.log(`🎯 Goals API available at http://localhost:${PORT}/api/goals`)
-  console.log(`👤 Users API available at http://localhost:${PORT}/api/users`)
-  console.log(`📈 Performance API available at http://localhost:${PORT}/api/performance`)
-  console.log(`🏥 Health check at http://localhost:${PORT}/health`)
-})
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`)
+  })
+}
+
+module.exports = { app, getTeamHierarchyIds, pool }
