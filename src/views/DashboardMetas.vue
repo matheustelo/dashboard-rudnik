@@ -29,6 +29,8 @@
           <option value="">Todos</option>
           <option value="faturamento">Faturamento</option>
           <option value="propostas">Propostas</option>
+          <option value="vendas">Vendas</option>
+          <option value="taxa_conversao">Taxa de Conversão</option>
         </select>
 
         <label class="text-sm font-medium text-gray-700">Líder:</label>
