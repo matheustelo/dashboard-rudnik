@@ -58,8 +58,13 @@ const authorize =
 // Auxiliar para obter intervalo de datas
 function getDateRange(period, startDate, endDate) {
   if (startDate && endDate) {
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    const maxEnd = new Date(start)
+    maxEnd.setDate(maxEnd.getDate() + 60)
+    const finalEnd = end > maxEnd ? maxEnd : end
     // Ensure the end date includes the entire day
-    return { startDate, endDate: `${endDate} 23:59:59` }
+    return { startDate, endDate: `${finalEnd.toISOString().split('T')[0]} 23:59:59` }
   }
   if (period) {
     const [year, month] = period.split("-")
@@ -933,7 +938,7 @@ app.get("/api/performance/representative/:id", authenticateToken,
 app.get(
   "/api/goals",
   authenticateToken,
-  authorize("admin", "gerente_comercial", "supervisor"),
+  authorize("admin", "gerente_comercial", "supervisor", "representante_premium"),
   async (req, res) => {
   console.log("--- Goals API: GET /api/goals started ---")
   try {

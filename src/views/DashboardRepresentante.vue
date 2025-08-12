@@ -68,7 +68,7 @@
       >
         <!-- Total de Propostas -->
         <DashboardCard
-          title="Total de Propostas"
+          title="Propostas Convertidas"
           :value="dashboardData.resumo.totalPropostas || 0"
           icon-bg="bg-blue-500"
         >
@@ -382,6 +382,7 @@ import { dashboardService, goalsService, performanceService } from '../services/
 import BarChart from '../components/BarChart.vue'
 import GoalsChart from '../components/GoalsChart.vue'
 import DashboardCard from '../components/DashboardCard.vue'
+import { isDateRangeWithinLimit } from '../../utils/date.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -516,6 +517,11 @@ const loadDashboard = async () => {
     const periodParam = selectedPeriod.value ? selectedPeriod.value : undefined
     const start = selectedPeriod.value ? undefined : customStart.value || undefined
     const end = selectedPeriod.value ? undefined : customEnd.value || undefined
+    if (!periodParam && !isDateRangeWithinLimit(start, end)) {
+      alert('O intervalo máximo permitido é de 60 dias.')
+      loading.value = false
+      return
+    }
     const [dashboardResponse, goalsResponse] = await Promise.all([
       dashboardService.getRepresentanteDashboard(
         authStore.user.id,
