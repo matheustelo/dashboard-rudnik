@@ -937,7 +937,7 @@ app.get(
   async (req, res) => {
   console.log("--- Goals API: GET /api/goals started ---")
   try {
-    const { period, startDate: start, endDate: end, supervisorId } = req.query
+    const { period, startDate: start, endDate: end, supervisorId, goalType } = req.query
 
     const { startDate, endDate } = getDateRange(period, start, end)
     const supId =
@@ -976,10 +976,14 @@ app.get(
       FROM metas_gerais g
       JOIN clone_users_apprudnik u ON g.usuario_id = u.id
       WHERE g.data_inicio <= $2 AND g.data_fim >= $1`
-    const generalParams = [startDate, endDate]
+    generalGoalsQuery += ` AND g.usuario_id = $${generalParams.length + 1}`
     if (supId) {
       generalGoalsQuery += ' AND g.usuario_id = $3'
       generalParams.push(supId)
+    }
+    if (goalType) {
+      generalGoalsQuery += ` AND g.tipo_meta = $${generalParams.length + 1}`
+      generalParams.push(goalType)
     }
     generalGoalsQuery += ' ORDER BY g.data_inicio DESC'
     const generalResult = await pool.query(generalGoalsQuery, generalParams)
@@ -1034,8 +1038,12 @@ app.get(
       WHERE m.data_inicio <= $2 AND m.data_fim >= $1`
     const individualParams = [startDate, endDate]
     if (supId) {
-      individualGoalsQuery += ' AND m.supervisor_id = $3'
+      individualGoalsQuery += ` AND m.supervisor_id = $${individualParams.length + 1}`
       individualParams.push(supId)
+    }
+    if (goalType) {
+      individualGoalsQuery += ` AND m.tipo_meta = $${individualParams.length + 1}`
+      individualParams.push(goalType)
     }
     individualGoalsQuery += ' ORDER BY u.name, m.data_inicio DESC'
     const individualResult = await pool.query(individualGoalsQuery, individualParams)
