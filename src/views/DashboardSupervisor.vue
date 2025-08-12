@@ -312,6 +312,7 @@ import PerformanceTable from '../components/PerformanceTable.vue'
 import RepresentativeDetailModal from '../components/RepresentativeDetailModal.vue'
 import LineChart from '../components/LineChart.vue'
 import BarChart from '../components/BarChart.vue'
+import { isDateRangeWithinLimit } from '../../utils/date.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -426,6 +427,11 @@ watch(() => filters.period, (newPeriod) => {
 const applyFilters = async () => {
   loading.value = true
   try {
+    if (!filters.period && !isDateRangeWithinLimit(filters.startDate, filters.endDate)) {
+      alert('O intervalo máximo permitido é de 60 dias.')
+      loading.value = false
+      return
+    }
     const supervisorFilters = { ...filters, supervisorId: authStore.user.id }
     const [dashboardResp, perf, revVsTarget, metrics, goalsResp] = await Promise.all([
       dashboardService.getSupervisorDashboard(

@@ -16,7 +16,7 @@
     </div>
 
     <div v-else class="space-y-4">
-      <div v-if="goals.length" class="space-y-4">
+       <div v-if="showSummary && goals.length" class="space-y-4">
         <div class="border rounded-lg p-4 bg-gray-50">
           <div class="flex justify-between items-center">
             <div class="text-sm text-gray-600">Progresso Faturamento</div>
@@ -144,6 +144,10 @@ const props = defineProps({
   summary: {
     type: Object,
     default: null
+  },
+  showSummary: {
+    type: Boolean,
+    default: true
   }
 })
 

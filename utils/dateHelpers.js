@@ -10,10 +10,15 @@ const moment = require("moment")
 const getDateRange = (period, startDate, endDate) => {
   // If explicit dates are provided, use them
   if (startDate && endDate) {
+    const start = moment(startDate)
+    let end = moment(endDate)
+    if (end.diff(start, 'days') > 60) {
+      end = start.clone().add(60, 'days')
+    }
     return {
-      startDate: moment(startDate).format("YYYY-MM-DD"),
+      startDate: start.format("YYYY-MM-DD"),
       // Use end of day to include the full end date in comparisons
-      endDate: moment(endDate).endOf("day").format("YYYY-MM-DD HH:mm:ss"),
+      endDate: end.endOf("day").format("YYYY-MM-DD HH:mm:ss"),
     }
   }
 

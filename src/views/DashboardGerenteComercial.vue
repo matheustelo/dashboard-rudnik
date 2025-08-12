@@ -378,6 +378,7 @@ import RepresentativeDetailModal from '../components/RepresentativeDetailModal.v
 import LineChart from '../components/LineChart.vue'
 import BarChart from '../components/BarChart.vue'
 import DashboardCard from '../components/DashboardCard.vue'
+import { isDateRangeWithinLimit } from '../../utils/date.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -485,6 +486,11 @@ watch(() => filters.period, (newPeriod) => {
 const applyFilters = async () => {
   loading.value = true
   try {
+    if (!filters.period && !isDateRangeWithinLimit(filters.startDate, filters.endDate)) {
+      alert('O intervalo máximo permitido é de 60 dias.')
+      loading.value = false
+      return
+    }
     const [dashboardResp, perf, revVsTarget, revBySup, metrics, goalsResp] = await Promise.all([
       dashboardService.getGerenteComercialDashboard(filters),
       performanceService.getTeamPerformance(filters),

@@ -4,13 +4,20 @@
       <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
         {{ title }}
       </h3>
-      <div class="mb-4">
+      <div class="mb-4 flex flex-col md:flex-row md:items-center md:space-x-4">
         <input
-          v-model="searchTerm"
+          v-model="nameFilter"
           type="text"
-          placeholder="Filtrar por nome ou tipo"
-          class="border border-gray-300 rounded-md px-3 py-2 text-sm w-full md:w-1/3"
+          placeholder="Filtrar por nome"
+          class="border border-gray-300 rounded-md px-3 py-2 text-sm w-full md:w-1/3 mb-2 md:mb-0"
         />
+        <select
+          v-model="roleFilter"
+          class="border border-gray-300 rounded-md px-3 py-2 text-sm w-full md:w-1/3"
+        >
+          <option value="">Todas as Funções</option>
+          <option v-for="role in roleOptions" :key="role" :value="role">{{ getRoleLabel(role) }}</option>
+        </select>
       </div>
       <!-- Table layout for medium screens and up -->
       <div class="hidden md:block">
@@ -37,19 +44,19 @@
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
-              <tr v-for="(member, index) in sortedTeamMembers" :key="member.id" :class="getRowClass(index)"
+             <tr v-for="(member, index) in paginatedTeamMembers" :key="member.id" :class="getRowClass((currentPage - 1) * perPage + index)"
                 class="hover:bg-gray-50">
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  <span v-if="index === 0"
+                  <span v-if="(currentPage - 1) * perPage + index === 0"
                     class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">🥇
                     1º</span>
-                  <span v-else-if="index === 1"
+                  <span v-else-if="(currentPage - 1) * perPage + index === 1"
                     class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">🥈
                     2º</span>
-                  <span v-else-if="index === 2"
+                  <span v-else-if="(currentPage - 1) * perPage + index === 2"
                     class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">🥉
                     3º</span>
-                  <span v-else class="text-gray-500">{{ index + 1 }}º</span>
+                  <span v-else class="text-gray-500">{{ (currentPage - 1) * perPage + index + 1 }}º</span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="flex items-center">
@@ -133,9 +140,9 @@
 
       <!-- Condensed cards for small screens -->
       <div class="md:hidden space-y-4">
-        <div v-for="(member, index) in sortedTeamMembers" :key="member.id" class="p-4 bg-gray-50 rounded shadow">
+        <div v-for="(member, index) in paginatedTeamMembers" :key="member.id" class="p-4 bg-gray-50 rounded shadow">
           <div class="flex items-center mb-2">
-            <span class="text-sm font-medium text-gray-700 mr-2">{{ index + 1 }}º</span>
+           <span class="text-sm font-medium text-gray-700 mr-2">{{ (currentPage - 1) * perPage + index + 1 }}º</span>
             <button @click="$emit('drill-down', member)" class="text-sm font-medium text-blue-600 hover:text-blue-800">
               {{ member.name }}
             </button>
@@ -177,12 +184,17 @@
           </div>
         </div>
       </div>
+      <div class="mt-4 flex items-center justify-between" v-if="totalPages > 1">
+        <button @click="prevPage" :disabled="currentPage === 1" class="px-3 py-1 bg-gray-200 rounded disabled:opacity-50">Anterior</button>
+        <span class="text-sm text-gray-600">Página {{ currentPage }} de {{ totalPages }}</span>
+        <button @click="nextPage" :disabled="currentPage === totalPages" class="px-3 py-1 bg-gray-200 rounded disabled:opacity-50">Próxima</button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
   teamMembers: { type: Array, required: true },
@@ -191,15 +203,22 @@ const props = defineProps({
 
 const emit = defineEmits(['drill-down'])
 
-const searchTerm = ref('')
+const nameFilter = ref('')
+const roleFilter = ref('')
+const currentPage = ref(1)
+const perPage = 10
+
+const roleOptions = computed(() => {
+  const roles = props.teamMembers.map(m => m.role)
+  return [...new Set(roles)]
+})
 
 const filteredTeamMembers = computed(() => {
-  if (!searchTerm.value) return props.teamMembers
-  const term = searchTerm.value.toLowerCase()
-  return props.teamMembers.filter(m =>
-    m.name.toLowerCase().includes(term) ||
-    getRoleLabel(m.role).toLowerCase().includes(term)
-  )
+  return props.teamMembers.filter(m => {
+    const matchesName = !nameFilter.value || m.name.toLowerCase().includes(nameFilter.value.toLowerCase())
+    const matchesRole = !roleFilter.value || m.role === roleFilter.value
+    return matchesName && matchesRole
+  })
 })
 
 const sortedTeamMembers = computed(() =>
@@ -207,6 +226,23 @@ const sortedTeamMembers = computed(() =>
     (a, b) => b.performance.faturamentoTotal - a.performance.faturamentoTotal
   )
 )
+
+const totalPages = computed(() => Math.ceil(sortedTeamMembers.value.length / perPage))
+const paginatedTeamMembers = computed(() =>
+  sortedTeamMembers.value.slice((currentPage.value - 1) * perPage, currentPage.value * perPage)
+)
+
+function nextPage() {
+  if (currentPage.value < totalPages.value) currentPage.value++
+}
+
+function prevPage() {
+  if (currentPage.value > 1) currentPage.value--
+}
+
+watch([nameFilter, roleFilter], () => {
+  currentPage.value = 1
+})
 const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value || 0)
 const getRoleClass = (role) => ({
   vendedor: 'bg-blue-100 text-blue-800',
