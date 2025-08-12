@@ -778,7 +778,7 @@ const customEnd = ref("")
 
 const dashboardPath = computed(() => {
   const role = authStore.user?.role
-  return `/dashboard/${role}` 
+  return `/dashboard/${role === 'preposto' ? 'representante' : role}`
 })
 
 const handlePeriodChange = async () => {

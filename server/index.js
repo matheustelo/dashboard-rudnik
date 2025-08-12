@@ -333,7 +333,7 @@ app.get(
 app.get(
   "/api/dashboard/proposal-metrics",
   authenticateToken,
-  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor", "preposto"),
   async (req, res) => {
     try {
       const { period, startDate, endDate, supervisorId, supervisor, sellerId } = req.query;
@@ -756,7 +756,7 @@ app.get(
 
 // Get detailed representative performance (drill-down)
 app.get("/api/performance/representative/:id", authenticateToken,
-  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor", "preposto"),
   async (req, res) => {
     console.log("--- Performance API: GET /api/performance/representative started ---")
     try {
@@ -1304,7 +1304,7 @@ app.post("/api/goals", authenticateToken, authorize("admin", "gerente_comercial"
           )
           return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`
         })
-        
+
         const individualGoalQuery = `
           INSERT INTO metas_individuais (usuario_id, tipo_meta, valor_meta, data_inicio, data_fim, criado_por, supervisor_id)
           VALUES ${placeholders.join(",")}
@@ -1694,7 +1694,7 @@ app.get("/api/goals/tracking/seller/:id", authenticateToken, async (req, res) =>
 app.get(
   "/api/goals/team/:id",
   authenticateToken,
-  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor"),
+  authorize("admin", "gerente_comercial", "supervisor", "parceiro_comercial", "representante_premium", "representante", "vendedor", "preposto"),
   async (req, res) => {
     console.log("--- Goals API: GET /api/goals/team/:id started ---")
     try {
