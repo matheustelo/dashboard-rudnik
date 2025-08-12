@@ -205,7 +205,7 @@
           :sub-value="'Ticket Médio: ' + formatCurrency( teamTicketMedio || 0)"
           :progress="conversionProgress"
           :progress-color="conversionProgressColor"
-          :footer-text="'Meta: ' + (conversionGoal.target || 0) + '%'"
+          :footer-text="'Meta: ' + (conversionGoal.target.toFixed(2) || 0) + '%'"
           icon-bg="bg-purple-500"
         >
           <template #icon>

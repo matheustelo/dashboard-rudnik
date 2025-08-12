@@ -2210,9 +2210,11 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
   LIMIT 10
 `
 
-    const indicadores = await pool.query(globalQuery, params)
-    const faturamentoMensal = await pool.query(monthlyRevenueQuery, params)
-    const topVendedores = await pool.query(topPerformersQuery, params)
+    const [indicadores, faturamentoMensal, topVendedores] = await Promise.all([
+      pool.query(globalQuery, params),
+      pool.query(monthlyRevenueQuery, params),
+      pool.query(topPerformersQuery, params),
+    ])
 
 
     const response = {

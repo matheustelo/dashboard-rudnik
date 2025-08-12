@@ -223,7 +223,7 @@
           :sub-value="'Ticket Médio: ' + formatCurrency(dashboardData.resumo.ticketMedio || 0)"
           :progress="conversionProgress"
           :progress-color="conversionProgressColor"
-          :footer-text="'Meta: ' + (conversionGoal.target || 0) + '%'"
+          :footer-text="'Meta: ' + (conversionGoal.target.toFixed(2) || 0) + '%'"
           icon-bg="bg-purple-500"
         >
           <template #icon>
@@ -340,7 +340,7 @@
                 </tr>
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
-                <tr v-for="p in proposals" :key="p.id">
+                 <tr v-for="p in paginatedProposals" :key="p.id">
                   <td class="px-6 py-4 whitespace-normal break-words text-sm font-medium text-gray-900">
                     {{ p.clientName + ' #' + p.id }}
                   </td>
@@ -364,6 +364,38 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-4">
+            <div class="mb-2 sm:mb-0">
+              <label class="mr-2 text-sm text-gray-700">Itens por página:</label>
+              <select
+                v-model.number="pageSize"
+                class="border border-gray-300 rounded-md px-2 py-1 text-sm"
+              >
+                <option :value="10">10</option>
+                <option :value="25">25</option>
+                <option :value="50">50</option>
+              </select>
+            </div>
+            <div class="flex items-center space-x-2">
+              <button
+                @click="prevPage"
+                :disabled="currentPage === 1"
+                class="px-3 py-1 text-sm rounded-md border border-gray-300 text-gray-700 disabled:opacity-50"
+              >
+                Anterior
+              </button>
+              <span class="text-sm text-gray-700">
+                Página {{ currentPage }} de {{ totalPages }}
+              </span>
+              <button
+                @click="nextPage"
+                :disabled="currentPage === totalPages"
+                class="px-3 py-1 text-sm rounded-md border border-gray-300 text-gray-700 disabled:opacity-50"
+              >
+                Próxima
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -413,6 +445,26 @@ const proposalMetrics = ref({
   valorUnitarias: 0,
 })
 const proposals = ref([])
+
+const currentPage = ref(1)
+const pageSize = ref(10)
+
+const paginatedProposals = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return proposals.value.slice(start, start + pageSize.value)
+})
+
+const totalPages = computed(() =>
+  Math.max(1, Math.ceil(proposals.value.length / pageSize.value))
+)
+
+const nextPage = () => {
+  if (currentPage.value < totalPages.value) currentPage.value++
+}
+
+const prevPage = () => {
+  if (currentPage.value > 1) currentPage.value--
+}
 
 const proposalGoal = computed(() => {
   const goals = goalsData.value.goals.filter(g => g.tipo_meta === 'propostas')
@@ -660,6 +712,10 @@ const debouncedFetchAll = debounce(fetchAll, 500)
 
 watch([selectedPeriod, customStart, customEnd], () => {
   debouncedFetchAll()
+})
+
+watch([proposals, pageSize], () => {
+  currentPage.value = 1
 })
 
 onMounted(async () => {
