@@ -11,7 +11,7 @@
     </header>
 
     <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-      <div class="bg-white shadow rounded-lg p-4 mb-6 flex items-center space-x-4">
+      <div class="bg-white shadow rounded-lg p-4 mb-6 flex items-center space-x-4 flex-wrap">
         <label class="text-sm font-medium text-gray-700">Mês:</label>
         <select v-model="selectedPeriod" @change="handlePeriodChange"
           class="border border-gray-300 rounded-md px-3 py-2 text-sm">
@@ -23,6 +23,22 @@
         <span class="text-gray-500">até</span>
         <input type="date" v-model="customEnd" @change="handleCustomDateChange"
           class="border border-gray-300 rounded-md px-2 py-1" />
+        <label class="text-sm font-medium text-gray-700">Tipo de Meta:</label>
+        <select v-model="selectedGoalType" @change="fetchGoalsWithLoading"
+          class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+          <option value="">Todos</option>
+          <option value="faturamento">Faturamento</option>
+          <option value="propostas">Propostas</option>
+          <option value="vendas">Vendas</option>
+          <option value="taxa_conversao">Taxa de Conversão</option>
+        </select>
+
+        <label class="text-sm font-medium text-gray-700">Líder:</label>
+       <select v-model="selectedLeader" @change="fetchGoalsWithLoading"
+          class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+          <option value="">Todos</option>
+          <option v-for="leader in teamLeaders" :key="leader.id" :value="leader.id">{{ leader.name }}</option>
+        </select>
       </div>
 
       <!-- Tabs -->
@@ -231,33 +247,6 @@
               </ul>
             </div>
           </div>
-        </div>
-      </div>
-
-      <!-- Summary by Month -->
-      <div class="mt-10">
-        <h2 class="text-xl font-semibold mb-4">Resumo de Metas por Mês</h2>
-        <div v-if="Object.keys(groupedGeneralGoals).length === 0" class="text-center text-gray-500">
-          Nenhuma meta encontrada para o período selecionado
-        </div>
-        <div v-for="(items, month) in groupedGeneralGoals" :key="month" class="mb-6">
-          <h3 class="text-md font-medium text-gray-800 mb-2">{{ formatPeriodLabel(month) }}</h3>
-          <ul class="bg-white shadow overflow-hidden sm:rounded-lg divide-y divide-gray-200">
-            <li v-for="goal in items" :key="goal.id" class="px-4 py-4 sm:px-6 flex justify-between items-center">
-              <div>
-                <p class="text-sm font-medium text-indigo-600">{{ goal.supervisor_name }} - {{ goal.tipo_meta }}</p>
-                <p class="text-xs text-gray-500">{{ goal.tipo_meta === 'faturamento'
-                  ? 'Valor'
-                  : goal.tipo_meta === 'taxa_conversao'
-                    ? 'Percentual'
-                    : 'Quantidade' }}: {{ formatGoalValue(goal.valor_meta, goal.tipo_meta) }}</p>
-              </div>
-              <div class="space-x-4">
-                <button @click="deleteGoal('general', goal.id)"
-                  class="text-sm font-medium text-red-500 hover:text-red-700">Excluir</button>
-              </div>
-            </li>
-          </ul>
         </div>
       </div>
 
@@ -773,6 +762,8 @@ const goals = ref({
 const allUsers = ref([]) // Initialize as empty array
 const teamLeaders = ref([]) // Initialize as empty array
 const showModal = ref(false)
+const selectedLeader = ref("")
+const selectedGoalType = ref("")
 const showDetailsModal = ref(false)
 const selectedGoal = ref(null)
 const modal = reactive({ title: "", type: "" })
@@ -793,24 +784,13 @@ const dashboardPath = computed(() => {
 const handlePeriodChange = async () => {
   customStart.value = ''
   customEnd.value = ''
-  loading.value = true
-  try {
-    await fetchGoals()
-  } finally {
-    loading.value = false
-  }
+  await fetchGoalsWithLoading()
 }
-
 
 const handleCustomDateChange = async () => {
   selectedPeriod.value = ''
   if (customStart.value && customEnd.value) {
-    loading.value = true
-    try {
-      await fetchGoals()
-    } finally {
-      loading.value = false
-    }
+    await fetchGoalsWithLoading()
   }
 }
 
@@ -862,17 +842,6 @@ const distributionProgress = computed(() => {
   if (currentGoal.value.tipo_meta === 'taxa_conversao') return 0
   const total = parseFloat(currentGoal.value.valor_meta) || 0
   return total > 0 ? (totalDistributed.value / total) * 100 : 0
-})
-
-
-const groupedGeneralGoals = computed(() => {
-  if (!Array.isArray(goals.value.generalGoals)) return {}
-  return goals.value.generalGoals.reduce((acc, g) => {
-    const month = g.data_inicio?.slice(0, 7) || 'unknown'
-    if (!acc[month]) acc[month] = []
-    acc[month].push(g)
-    return acc
-  }, {})
 })
 
 // Map of all users for quick lookup by ID
@@ -963,7 +932,9 @@ const fetchGoals = async () => {
     const periodParam = selectedPeriod.value || undefined
     const start = selectedPeriod.value ? undefined : customStart.value || undefined
     const end = selectedPeriod.value ? undefined : customEnd.value || undefined
-    const { data } = await goalsService.getGoals(periodParam, start, end)
+    const supervisor = selectedLeader.value || undefined
+    const tipo = selectedGoalType.value || undefined
+    const { data } = await goalsService.getGoals(periodParam, start, end, supervisor, tipo)
     console.log('✅ Goals fetched with hierarchy:', data)
 
     // Normalize goal IDs in case the backend returns `_id`
@@ -983,6 +954,15 @@ const fetchGoals = async () => {
     console.error('❌ Error fetching goals:', err)
     goals.value = { generalGoals: [], individualGoals: [] }
     throw err
+  }
+}
+
+const fetchGoalsWithLoading = async () => {
+  loading.value = true
+  try {
+    await fetchGoals()
+  } finally {
+    loading.value = false
   }
 }
 
