@@ -60,9 +60,9 @@ export const dashboardService = {
 
 // Goals service
 export const goalsService = {
- getGoals: (period, startDate, endDate, supervisorId, goalType) =>
+getGoals: (period, startDate, endDate, supervisorId, goalType, page, limit) =>
     api.get("/goals", {
-       params: { period, startDate, endDate, supervisorId, goalType },
+       params: { period, startDate, endDate, supervisorId, goalType, page, limit },
     }),
   getGeneralGoals: async (period) => {
     const response = await api.get("/goals", { params: { period } })

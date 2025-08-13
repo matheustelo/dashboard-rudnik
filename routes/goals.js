@@ -149,42 +149,31 @@ router.get(
   authorize("admin", "gerente_comercial", "supervisor"),
   async (req, res) => {
   try {
-    console.log("🎯 Goals API: Fetching all goals")
-   const { period, goalType, supervisorId } = req.query
+    const { period, goalType, supervisorId, startDate, endDate,  page = 1, limit = 10 } = req.query
+
+    // Validate and normalize date range
+    const { startDate: normalizedStart, endDate: normalizedEnd } = getDateRange(
+      period,
+      startDate,
+      endDate,
+    )
 
     // --- Build dynamic filters for queries ---
     const generalConditions = ["u.is_active = true"]
     const generalParams = []
     const individualConditions = ["u.is_active = true"]
     const individualParams = []
-    if (period) {
-      const now = new Date()
-      let startDate
 
-      switch (period) {
-        case "week":
-          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7)
-          break
-        case "month":
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-          break
-        case "quarter":
-          const quarter = Math.floor(now.getMonth() / 3)
-          startDate = new Date(now.getFullYear(), quarter * 3, 1)
-          break
-        case "year":
-          startDate = new Date(now.getFullYear(), 0, 1)
-          break
-        default:
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-      }
+    // Apply date range filters
+    generalConditions.push(`g.data_inicio >= $${generalParams.length + 1}`)
+    generalParams.push(normalizedStart)
+    generalConditions.push(`g.data_fim <= $${generalParams.length + 1}`)
+    generalParams.push(normalizedEnd)
 
-      const formatted = startDate.toISOString().split("T")[0]
-      generalConditions.push(`g.data_inicio >= $${generalParams.length + 1}`)
-      generalParams.push(formatted)
-      individualConditions.push(`g.data_inicio >= $${individualParams.length + 1}`)
-      individualParams.push(formatted)
-    }
+    individualConditions.push(`g.data_inicio >= $${individualParams.length + 1}`)
+    individualParams.push(normalizedStart)
+    individualConditions.push(`g.data_fim <= $${individualParams.length + 1}`)
+    individualParams.push(normalizedEnd)
 
     if (goalType) {
       generalConditions.push(`g.tipo_meta = $${generalParams.length + 1}`)
@@ -197,6 +186,8 @@ router.get(
       generalConditions.push(`g.usuario_id = $${generalParams.length + 1}`)
       generalParams.push(supervisorId)
     }
+
+    const offset = (page - 1) * limit
 
     const generalWhere = generalConditions.join(" AND ")
     const individualWhere = individualConditions.join(" AND ")
@@ -218,6 +209,7 @@ router.get(
       JOIN clone_users_apprudnik u ON g.usuario_id = u.id
       WHERE ${generalWhere}
       ORDER BY g.created_at DESC
+      LIMIT $${generalParams.length + 1} OFFSET $${generalParams.length + 2}
     `
 
     // Fetch individual goals
@@ -237,12 +229,15 @@ router.get(
       JOIN clone_users_apprudnik u ON g.usuario_id = u.id
       WHERE ${individualWhere}
       ORDER BY g.created_at DESC
+      LIMIT $${individualParams.length + 1} OFFSET $${individualParams.length + 2}
     `
 
     const [generalResult, individualResult] = await Promise.all([
-      query(generalGoalsQuery, generalParams),
-      query(individualGoalsQuery, individualParams),
+      query(generalGoalsQuery, [...generalParams, limit, offset]),
+      query(individualGoalsQuery, [...individualParams, limit, offset]),
     ])
+
+    const total = generalResult.rowCount + individualResult.rowCount
 
     // Enhance general goals with team information
     let enhancedGeneralGoals = await Promise.all(
@@ -288,6 +283,9 @@ router.get(
     )
 
     res.json({
+      page: Number.parseInt(page),
+      limit: Number.parseInt(limit),
+      total,
       generalGoals: enhancedGeneralGoals,
       individualGoals: enhancedIndividualGoals,
     })
