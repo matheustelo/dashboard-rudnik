@@ -1544,8 +1544,9 @@ app.delete("/api/goals/:type/:id", authenticateToken, authorize("admin", "gerent
          WHERE usuario_id = ANY($1)
            AND tipo_meta = $2
            AND data_inicio = $3
-           AND data_fim = $4`,
-        [allIds, goalInfo.tipo_meta, goalInfo.data_inicio, goalInfo.data_fim],
+           AND data_fim = $4
+           AND supervisor_id = $5`,
+        [allIds, goalInfo.tipo_meta, goalInfo.data_inicio, goalInfo.data_fim, userId],
       )
 
       await pool.query("DELETE FROM metas_gerais WHERE id = $1", [id])
