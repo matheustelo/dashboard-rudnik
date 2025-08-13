@@ -1,5 +1,6 @@
 const express = require("express")
 const cors = require("cors")
+const compression = require("compression")
 const jwt = require("jsonwebtoken")
 const { Pool } = require("pg")
 require("dotenv").config()
@@ -27,6 +28,7 @@ app.use(
     credentials: true,
   }),
 )
+app.use(compression())
 app.use(express.json())
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`)
