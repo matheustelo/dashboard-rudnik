@@ -140,37 +140,26 @@ async function getTeamMembers(leaderId) {
   return teamResult.rows
 }
 
-// Auxiliar para buscar a equipe de um líder em todos os níveis de hierarquia usando uma única consulta
+// Auxiliar para buscar a equipe de um líder (incluindo o próprio líder) em todos os níveis de hierarquia
 async function getTeamHierarchyIds(leaderId) {
   const query = `
     WITH RECURSIVE hierarchy AS (
+      SELECT l.id, l.role, l.children
+        FROM clone_users_apprudnik l
+       WHERE l.id = $1 AND l.is_active = true
+
+      UNION ALL
+
       SELECT u.id, u.role, u.children
-      FROM clone_users_apprudnik l
+      FROM hierarchy h
       JOIN clone_users_apprudnik u
         ON u.is_active = true AND (
           EXISTS (
-            SELECT 1 FROM jsonb_array_elements(COALESCE(l.children, '[]'::jsonb)) c
+            SELECT 1 FROM jsonb_array_elements(COALESCE(h.children, '[]'::jsonb)) c
             WHERE (c->>'id')::bigint = u.id
           )
           OR EXISTS (
             SELECT 1 FROM jsonb_array_elements(COALESCE(u.supervisors, '[]'::jsonb)) s
-            WHERE (s->>'id')::bigint = l.id
-          )
-        )
-      WHERE l.id = $1
-
-      UNION ALL
-
-      SELECT u2.id, u2.role, u2.children
-      FROM hierarchy h
-      JOIN clone_users_apprudnik u2
-        ON u2.is_active = true AND (
-          EXISTS (
-            SELECT 1 FROM jsonb_array_elements(COALESCE(h.children, '[]'::jsonb)) c
-            WHERE (c->>'id')::bigint = u2.id
-          )
-          OR EXISTS (
-            SELECT 1 FROM jsonb_array_elements(COALESCE(u2.supervisors, '[]'::jsonb)) s
             WHERE (s->>'id')::bigint = h.id
           )
         )
