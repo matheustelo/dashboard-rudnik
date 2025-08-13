@@ -81,7 +81,7 @@
                     <div class="ml-5 w-0 flex-1">
                       <dl>
                         <dt class="text-sm font-medium text-gray-500 truncate">
-                          Vendas Fechadas
+                          Propostas Convertidas
                         </dt>
                         <dd class="text-lg font-medium text-gray-900">
                           {{ filteredSummary.vendasFechadas }}
@@ -125,7 +125,7 @@
                     <div class="ml-5 w-0 flex-1">
                       <dl>
                         <dt class="text-sm font-medium text-gray-500 truncate">
-                          Faturamento Total
+                          Valor Convertido
                         </dt>
                         <dd class="text-lg font-medium text-gray-900">
                           R$ {{ formatCurrency(filteredSummary.faturamentoTotal) }}
