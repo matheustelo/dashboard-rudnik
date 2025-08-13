@@ -13,9 +13,10 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import LineChart from './LineChart.vue'
-import BarChart from './BarChart.vue'
+import { computed, defineAsyncComponent } from 'vue'
+
+const LineChart = defineAsyncComponent(() => import('./LineChart.vue'))
+const BarChart = defineAsyncComponent(() => import('./BarChart.vue'))
 
 const props = defineProps({
   data: {

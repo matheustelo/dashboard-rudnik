@@ -6,30 +6,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  LineController,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-} from 'chart.js'
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  LineController,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-)
 
 const props = defineProps({
   data: {
@@ -44,8 +21,39 @@ const props = defineProps({
 
 const chartRef = ref(null)
 let chartInstance = null
+let ChartJS = null
 
-const createChart = () => {
+const loadChartJs = async () => {
+  if (ChartJS) return
+  const chartJs = await import('chart.js')
+  const {
+    Chart,
+    CategoryScale,
+    LinearScale,
+    PointElement,
+    LineElement,
+    LineController,
+    Title,
+    Tooltip,
+    Legend,
+    Filler
+  } = chartJs
+  Chart.register(
+    CategoryScale,
+    LinearScale,
+    PointElement,
+    LineElement,
+    LineController,
+    Title,
+    Tooltip,
+    Legend,
+    Filler
+  )
+  ChartJS = Chart
+}
+
+const createChart = async () => {
+  await loadChartJs()
   if (chartInstance) {
     chartInstance.destroy()
   }
@@ -68,9 +76,13 @@ onUnmounted(() => {
   }
 })
 
-watch(() => props.data, () => {
-  createChart()
-}, { deep: true })
+watch(
+  () => props.data,
+  () => {
+    createChart()
+  },
+  { deep: true }
+)
 </script>
 
 <style scoped>

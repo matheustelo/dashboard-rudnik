@@ -303,16 +303,17 @@
 </template>
 
 <script setup>
-import { ref, onMounted, reactive, computed, watch } from 'vue'
+import { ref, onMounted, reactive, computed, watch, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { dashboardService, performanceService, goalsService } from '../services/api'
 import DashboardCard from '../components/DashboardCard.vue'
 import PerformanceTable from '../components/PerformanceTable.vue'
 import RepresentativeDetailModal from '../components/RepresentativeDetailModal.vue'
-import LineChart from '../components/LineChart.vue'
-import BarChart from '../components/BarChart.vue'
 import { isDateRangeWithinLimit } from '../../utils/date.js'
+
+const LineChart = defineAsyncComponent(() => import('../components/LineChart.vue'))
+const BarChart = defineAsyncComponent(() => import('../components/BarChart.vue'))
 
 const router = useRouter()
 const authStore = useAuthStore()

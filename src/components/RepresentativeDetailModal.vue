@@ -309,9 +309,10 @@
 </template>
 
 <script setup>
-import { computed, watch, ref } from 'vue'
-import LineChart from './LineChart.vue'
-import BarChart from './BarChart.vue'
+import { computed, watch, ref, defineAsyncComponent } from 'vue'
+
+const LineChart = defineAsyncComponent(() => import('./LineChart.vue'))
+const BarChart = defineAsyncComponent(() => import('./BarChart.vue'))
 
 const normalize = (text) => {
   return (text || '')

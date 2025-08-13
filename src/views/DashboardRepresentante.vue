@@ -405,15 +405,16 @@
 
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, defineAsyncComponent } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { dashboardService, goalsService, performanceService } from '../services/api'
-import BarChart from '../components/BarChart.vue'
-import GoalsChart from '../components/GoalsChart.vue'
 import DashboardCard from '../components/DashboardCard.vue'
 import { isDateRangeWithinLimit } from '../../utils/date.js'
 import debounce from 'lodash/debounce'
+
+const BarChart = defineAsyncComponent(() => import('../components/BarChart.vue'))
+const GoalsChart = defineAsyncComponent(() => import('../components/GoalsChart.vue'))
 
 const router = useRouter()
 const authStore = useAuthStore()
