@@ -590,64 +590,110 @@ app.get(
 
       // Get all active sales representatives with targets
       const teamMembersQuery = `
-    WITH usuarios_com_supervisor AS (
-      SELECT
-        u.*,
-        (
-          SELECT string_agg(elem->>'name', ', ')
-          FROM jsonb_array_elements(u.supervisors::jsonb) elem
-        ) AS supervisor_name
-      FROM clone_users_apprudnik u
-    ),
-    metas_agg AS (
-      SELECT
-        usuario_id,
-        SUM(CASE WHEN tipo_meta = 'propostas' THEN valor_meta ELSE 0 END) AS meta_propostas,
-        SUM(CASE WHEN tipo_meta = 'vendas' THEN valor_meta ELSE 0 END) AS meta_vendas,
-        SUM(CASE WHEN tipo_meta = 'faturamento' THEN valor_meta ELSE 0 END) AS meta_faturamento,
-        SUM(CASE WHEN tipo_meta = 'taxa_conversao' THEN valor_meta ELSE 0 END) AS meta_conversao
-      FROM metas_individuais
-      WHERE data_inicio <= $2 AND data_fim >= $1
-      GROUP BY usuario_id
-    )
-    SELECT
-      u.id,
-      u.name,
-      u.email,
-      u.role,
-      u.supervisor,
-      u.supervisor_name,
-      COUNT(p.*) AS total_propostas,
-      COUNT(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN 1 END) AS propostas_convertidas,
-      COALESCE(SUM(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) AS faturamento_total,
-      COALESCE(AVG(CASE WHEN p.has_generated_sale = true AND s.status <> 'suspenso' THEN CAST(p.total_price AS DECIMAL) END), 0) AS ticket_medio,
-      COALESCE(SUM(CAST(p.total_price AS DECIMAL)), 0) AS valor_total_propostas,
-      COUNT(CASE WHEN s.status = 'suspenso' THEN 1 END) AS vendas_canceladas,
-      COALESCE(m.meta_propostas,
-        CASE WHEN u.role = 'vendedor' THEN 0
-             WHEN u.role = 'representante' THEN 0
-             ELSE 0 END) AS meta_propostas,
-      COALESCE(m.meta_vendas,
-        CASE WHEN u.role = 'vendedor' THEN 0
-             WHEN u.role = 'representante' THEN 0
-             ELSE 0 END) AS meta_vendas,
-      COALESCE(m.meta_faturamento,
-        CASE WHEN u.role = 'vendedor' THEN 0
-             WHEN u.role = 'representante' THEN 0
-             ELSE 0 END) AS meta_faturamento,
-      COALESCE(m.meta_conversao, 0) AS meta_conversao
-    FROM usuarios_com_supervisor u
-    LEFT JOIN metas_agg m ON m.usuario_id = u.id
-    LEFT JOIN clone_propostas_apprudnik p
-      ON u.id = p.seller
-      AND p.created_at BETWEEN $1 AND $2
-    LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id
-    WHERE u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium') 
-      AND u.is_active = true
-      ${supervisorFilter}
-    GROUP BY u.id, u.name, u.email, u.role, u.supervisor, u.supervisor_name, m.meta_propostas, m.meta_vendas, m.meta_faturamento, m.meta_conversao
-    ORDER BY faturamento_total DESC;
-    `
+        WITH usuarios_com_supervisor AS (
+          SELECT
+            u.*,
+            (
+              SELECT string_agg(elem->>'name', ', ')
+              FROM jsonb_array_elements(u.supervisors::jsonb) elem
+            ) AS supervisor_name
+          FROM clone_users_apprudnik u
+        ),
+        metas_agg AS (
+          SELECT
+            usuario_id,
+            SUM(CASE WHEN tipo_meta = 'propostas' THEN valor_meta ELSE 0 END) AS meta_propostas,
+            SUM(CASE WHEN tipo_meta = 'vendas' THEN valor_meta ELSE 0 END) AS meta_vendas,
+            SUM(CASE WHEN tipo_meta = 'faturamento' THEN valor_meta ELSE 0 END) AS meta_faturamento,
+            SUM(CASE WHEN tipo_meta = 'taxa_conversao' THEN valor_meta ELSE 0 END) AS meta_conversao
+          FROM metas_individuais
+          WHERE data_inicio <= $2 AND data_fim >= $1
+          GROUP BY usuario_id
+        ),
+        /* Faturamento e quantidade de vendas por vendedor
+          (mesma regra do valor_fechadas_cte, mas agrupado por seller) */
+        faturamento_cte AS (
+          SELECT
+            p.seller AS usuario_id,
+            COALESCE(SUM(CAST(p.total_price AS DECIMAL)), 0) AS faturamento_total,
+            COUNT(*) AS vendas_validas
+          FROM clone_vendas_apprudnik v
+          JOIN clone_propostas_apprudnik p ON p.id = v.code
+          WHERE v.status NOT IN (
+            'contrato_assinaturas',
+            'contrato_assinaturas_pendentes',
+            'checklist',
+            'checklist_erro',
+            'conferencia_engenharia',
+            'conferencia_financeiro',
+            'conferencia_financeiro_engenharia',
+            'contrato_reprovado',
+            'contrato_preenchimento_contrato',
+            'suspenso'
+          )
+            AND p.created_at BETWEEN $1 AND $2
+          GROUP BY p.seller
+        )
+        SELECT
+          u.id,
+          u.name,
+          u.email,
+          u.role,
+          u.supervisor,
+          u.supervisor_name,
+
+          /* Telefones únicos; propostas sem telefone viram chaves únicas por ID */
+          COUNT(
+            DISTINCT COALESCE(
+              NULLIF(trim(p.lead->>'phone'), ''),
+              'sem_telefone_' || p.id::text
+            )
+          ) AS total_propostas,
+
+          /* Propostas convertidas seguindo a mesma régua dos status "bons" */
+          COALESCE(f.vendas_validas, 0) AS propostas_convertidas,
+
+          /* Faturamento total igual ao valor_fechadas_cte (por vendedor) */
+          COALESCE(f.faturamento_total, 0) AS faturamento_total,
+
+          /* Ticket médio calculado sobre as vendas válidas da mesma régua */
+          CASE
+            WHEN COALESCE(f.vendas_validas, 0) > 0
+              THEN f.faturamento_total / f.vendas_validas
+            ELSE 0
+          END AS ticket_medio,
+
+          /* Mantido: soma de todas as propostas (independe de venda) */
+          COALESCE(SUM(CAST(p.total_price AS DECIMAL)), 0) AS valor_total_propostas,
+
+          /* Canceladas (suspenso) pela tabela de vendas ligada à proposta */
+          COUNT(CASE WHEN s.status = 'suspenso' THEN 1 END) AS vendas_canceladas,
+
+          COALESCE(m.meta_propostas, 0) AS meta_propostas,
+          COALESCE(m.meta_vendas, 0) AS meta_vendas,
+          COALESCE(m.meta_faturamento, 0) AS meta_faturamento,
+          COALESCE(m.meta_conversao, 0) AS meta_conversao
+
+        FROM usuarios_com_supervisor u
+        LEFT JOIN metas_agg m
+          ON m.usuario_id = u.id
+        LEFT JOIN clone_propostas_apprudnik p
+          ON u.id = p.seller
+          AND p.created_at BETWEEN $1 AND $2
+        LEFT JOIN clone_vendas_apprudnik s
+          ON s.code = p.id
+        LEFT JOIN faturamento_cte f
+          ON f.usuario_id = u.id
+        WHERE
+          u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium')
+          AND u.is_active = true
+          ${supervisorFilter}
+        GROUP BY
+          u.id, u.name, u.email, u.role, u.supervisor, u.supervisor_name,
+          m.meta_propostas, m.meta_vendas, m.meta_faturamento, m.meta_conversao,
+          f.faturamento_total, f.vendas_validas
+        ORDER BY faturamento_total DESC;
+        `
 
       const teamMembers = await pool.query(teamMembersQuery, queryParams)
 
