@@ -102,15 +102,38 @@ function parseJsonField(field) {
   return []
 }
 
+// Simple in-memory cache for team members
+const teamCache = new Map()
+const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
+const getCachedTeam = (id) => {
+  const cached = teamCache.get(id)
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.data
+  }
+  teamCache.delete(id)
+  return null
+}
+
+const setCachedTeam = (id, data) => {
+  teamCache.set(id, { data, timestamp: Date.now() })
+}
+
 // Auxiliar para buscar os membros ativos da equipe de um líder
 async function getTeamMembers(leaderId) {
+  const cached = getCachedTeam(leaderId)
+  if (cached) return cached
+
   const leaderQuery = `
     SELECT children
     FROM clone_users_apprudnik
     WHERE id = $1 AND is_active = true
   `
   const leaderResult = await pool.query(leaderQuery, [leaderId])
-  if (leaderResult.rows.length === 0) return []
+  if (leaderResult.rows.length === 0) {
+    setCachedTeam(leaderId, [])
+    return []
+  }
 
   let children = parseJsonField(leaderResult.rows[0].children)
 
@@ -127,6 +150,7 @@ async function getTeamMembers(leaderId) {
       ORDER BY name
     `
     const result = await pool.query(fallbackQuery, [leaderId])
+    setCachedTeam(leaderId, result.rows)
     return result.rows
   }
 
@@ -139,7 +163,54 @@ async function getTeamMembers(leaderId) {
     ORDER BY name
   `
   const teamResult = await pool.query(teamQuery, [childIds])
+  setCachedTeam(leaderId, teamResult.rows)
   return teamResult.rows
+}
+
+// Busca membros de várias equipes em uma única consulta
+async function getTeamMembersBulk(leaderIds = []) {
+  if (!leaderIds || leaderIds.length === 0) return {}
+
+  const result = {}
+  const idsToQuery = []
+
+  leaderIds.forEach((id) => {
+    const cached = getCachedTeam(id)
+    if (cached) {
+      result[id] = cached
+    } else {
+      idsToQuery.push(id)
+    }
+  })
+
+  if (idsToQuery.length > 0) {
+    const query = `
+      SELECT u.id, u.name, u.email, u.role, (sup->>'id')::int AS supervisor_id
+      FROM clone_users_apprudnik u
+      JOIN LATERAL jsonb_array_elements(COALESCE(u.supervisors, '[]'::jsonb)) sup ON (sup->>'id')::int = ANY($1)
+      WHERE u.is_active = true
+      ORDER BY supervisor_id, u.name
+    `
+    const { rows } = await pool.query(query, [idsToQuery])
+    const grouped = rows.reduce((acc, row) => {
+      if (!acc[row.supervisor_id]) acc[row.supervisor_id] = []
+      acc[row.supervisor_id].push({
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        role: row.role,
+      })
+      return acc
+    }, {})
+
+    idsToQuery.forEach((id) => {
+      const members = grouped[id] || []
+      setCachedTeam(id, members)
+      result[id] = members
+    })
+  }
+
+  return result
 }
 
 // Auxiliar para buscar a equipe de um líder (incluindo o próprio líder) em todos os níveis de hierarquia
@@ -1057,21 +1128,30 @@ app.get(
     const generalResult = await pool.query(generalGoalsQuery, generalQueryParams)
     console.log("✅ Goals: Fetched", generalResult.rows.length, "general goals")
 
+    const supervisorIds = [...new Set(generalResult.rows.map((g) => g.usuario_id))]
+    const teamMembersMap = await getTeamMembersBulk(supervisorIds)
+
+    const premiumRepIds = []
+    Object.values(teamMembersMap).forEach((members) => {
+      members.forEach((m) => {
+        if (m.role === 'representante_premium') premiumRepIds.push(m.id)
+      })
+    })
+    const prepostosMap = await getTeamMembersBulk([...new Set(premiumRepIds)])
+
     const enhancedGeneral = []
     for (const goal of generalResult.rows) {
-      const teamMembers = await getTeamMembers(goal.usuario_id)
+      const teamMembers = teamMembersMap[goal.usuario_id] || []
       const memberIds = teamMembers.map((m) => m.id)
 
-      for (const member of teamMembers) {
+     teamMembers.forEach((member) => {
         if (member.role === 'representante_premium') {
-          const prepostos = await getTeamMembers(member.id)
-          if (prepostos && prepostos.length > 0) {
-            prepostos
-              .filter((p) => p.role === 'preposto')
-              .forEach((p) => memberIds.push(p.id))
-          }
+          const prepostos = prepostosMap[member.id] || []
+          prepostos
+            .filter((p) => p.role === 'preposto')
+            .forEach((p) => memberIds.push(p.id))
         }
-      }
+      })
       let childGoals = []
       if (memberIds.length > 0) {
         const childQuery = `
@@ -1106,8 +1186,8 @@ app.get(
       WHERE m.data_inicio <= $2 AND m.data_fim >= $1`
     const individualParams = [startDate, endDate]
     if (supId) {
-      individualGoalsQuery += ` AND m.supervisor_id = $${individualParams.length + 1}`
-      individualParams.push(supId)
+      individualGoalsQuery += ` AND u.supervisors::jsonb @> $${individualParams.length + 1}::jsonb`
+      individualParams.push(JSON.stringify([Number(supId)]))
     }
     if (goalType) {
       individualGoalsQuery += ` AND m.tipo_meta = $${individualParams.length + 1}`

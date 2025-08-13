@@ -2,6 +2,7 @@ const express = require("express")
 const { query } = require("../config/database")
 const { authenticateToken, authorize } = require("../middleware/auth")
 const { getDateRange } = require("../utils/dateHelpers")
+const cache = require("../utils/cache")
 
 const router = express.Router()
 
@@ -97,11 +98,18 @@ const validateDate = (dateString, fieldName) => {
 const getTeamMembers = async (leaderId) => {
   console.log("🔄 Getting team members for leader:", leaderId)
 
+  const cacheKey = `teamMembers:${leaderId}`
+  const cached = cache.get(cacheKey)
+  if (cached) {
+    console.log("♻️ Returning team members from cache")
+    return cached
+  }
+
   try {
     // Get leader's children field
     const leaderQuery = `
       SELECT children, name, role
-      FROM clone_users_apprudnik 
+      FROM clone_users_apprudnik
       WHERE id = $1 AND is_active = true
     `
 
@@ -109,6 +117,7 @@ const getTeamMembers = async (leaderId) => {
 
     if (leaderResult.rows.length === 0) {
       console.log("❌ Leader not found:", leaderId)
+      cache.set(cacheKey, [], 3600)
       return []
     }
 
@@ -125,9 +134,9 @@ const getTeamMembers = async (leaderId) => {
     // Get team members (only vendedor and representante roles)
     const teamQuery = `
       SELECT id, name, email, role
-      FROM clone_users_apprudnik 
-      WHERE id = ANY($1) 
-        AND role IN ('vendedor', 'representante') 
+      FROM clone_users_apprudnik
+      WHERE id = ANY($1)
+        AND role IN ('vendedor', 'representante')
         AND is_active = true
       ORDER BY name
     `
@@ -135,6 +144,7 @@ const getTeamMembers = async (leaderId) => {
     const teamResult = await query(teamQuery, [children])
     console.log("✅ Found", teamResult.rows.length, "team members")
 
+    cache.set(cacheKey, teamResult.rows, 3600)
     return teamResult.rows
   } catch (error) {
     console.error("❌ Error getting team members:", error)
@@ -150,6 +160,13 @@ router.get(
   async (req, res) => {
   try {
     const { period, goalType, supervisorId, startDate, endDate,  page = 1, limit = 10 } = req.query
+
+    const cacheKey = `goals:${period || ""}:${goalType || ""}:${supervisorId || ""}:${startDate || ""}:${endDate || ""}:${page}:${limit}`
+    const cached = cache.get(cacheKey)
+    if (cached) {
+      console.log("♻️ Returning goals from cache")
+      return res.json(cached)
+    }
 
     // Validate and normalize date range
     const { startDate: normalizedStart, endDate: normalizedEnd } = getDateRange(
@@ -185,6 +202,8 @@ router.get(
     if (supervisorId) {
       generalConditions.push(`g.usuario_id = $${generalParams.length + 1}`)
       generalParams.push(supervisorId)
+      individualConditions.push(`u.supervisors::jsonb @> $${individualParams.length + 1}::jsonb`)
+      individualParams.push(JSON.stringify([Number(supervisorId)]))
     }
 
     const offset = (page - 1) * limit
@@ -252,28 +271,12 @@ router.get(
       }),
     )
 
-    // Filter by supervisor if provided (extra safety)
-    if (supervisorId) {
-      const supIdNum = Number(supervisorId)
-      enhancedGeneralGoals = enhancedGeneralGoals.filter(
-        (g) => Number(g.usuario_id) === supIdNum,
-      )
-    }
-
     // Enhance individual goals with supervisor information
     let enhancedIndividualGoals = individualResult.rows.map((goal) => ({
       ...goal,
       supervisors: parseJsonField(goal.supervisors),
     }))
 
-        // Filter individual goals by supervisor if provided
-    if (supervisorId) {
-      const supIdNum = Number(supervisorId)
-      enhancedIndividualGoals = enhancedIndividualGoals.filter((g) =>
-        Array.isArray(g.supervisors) ? g.supervisors.includes(supIdNum) : false,
-      )
-    }
-    
     console.log(
       "✅ Goals API: Fetched",
       enhancedGeneralGoals.length,
@@ -282,13 +285,15 @@ router.get(
       "individual goals",
     )
 
-    res.json({
+    const responseData = {
       page: Number.parseInt(page),
       limit: Number.parseInt(limit),
       total,
       generalGoals: enhancedGeneralGoals,
       individualGoals: enhancedIndividualGoals,
-    })
+    }
+    cache.set(cacheKey, responseData, 300)
+    res.json(responseData)
   } catch (error) {
     console.error("❌ Goals API: Error fetching goals:", error.message)
     res.status(500).json({
