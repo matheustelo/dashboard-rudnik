@@ -13,10 +13,16 @@
         />
         <select
           v-model="roleFilter"
-          class="border border-gray-300 rounded-md px-3 py-2 text-sm w-full md:w-1/3"
+          class="border border-gray-300 rounded-md px-3 py-2 text-sm w-full md:w-1/3 mb-2 md:mb-0"
         >
           <option value="">Todas as Funções</option>
           <option v-for="role in roleOptions" :key="role" :value="role">{{ getRoleLabel(role) }}</option>
+        </select>
+        <select
+          v-model.number="perPage"
+          class="border border-gray-300 rounded-md px-3 py-2 text-sm w-full md:w-1/3"
+        >
+          <option v-for="opt in perPageOptions" :key="opt" :value="opt">{{ opt }} por página</option>
         </select>
       </div>
       <!-- Table layout for medium screens and up -->
@@ -188,43 +194,70 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
+import { performanceService } from '../services/api'
 
 const props = defineProps({
-  teamMembers: { type: Array, required: true },
-  title: { type: String, default: 'Performance Detalhada da Equipe' }
+  title: { type: String, default: 'Performance Detalhada da Equipe' },
+  filters: { type: Object, default: () => ({}) }
 })
 
 const emit = defineEmits(['drill-down'])
 
+const teamMembers = ref([])
+const totalMembers = ref(0)
+// local refs for filters so we always have defined reactive values
 const nameFilter = ref('')
 const roleFilter = ref('')
+// initialize local filters from incoming props if provided
+if (props.filters) {
+  nameFilter.value = props.filters.name || ''
+  roleFilter.value = props.filters.role || ''
+}
 const currentPage = ref(1)
-const perPage = 10
+const perPage = ref(10)
+const perPageOptions = [5, 10, 20, 50]
 
 const roleOptions = computed(() => {
-  const roles = props.teamMembers.map(m => m.role)
+  const roles = teamMembers.value.map(m => m.role)
   return [...new Set(roles)]
 })
 
-const filteredTeamMembers = computed(() => {
-  return props.teamMembers.filter(m => {
-    const matchesName = !nameFilter.value || m.name.toLowerCase().includes(nameFilter.value.toLowerCase())
-    const matchesRole = !roleFilter.value || m.role === roleFilter.value
-    return matchesName && matchesRole
-  })
+const fetchData = async () => {
+  const params = { ...props.filters, page: currentPage.value, limit: perPage.value }
+  if (nameFilter.value) params.name = nameFilter.value
+  if (roleFilter.value) params.role = roleFilter.value
+  try {
+    const { data } = await performanceService.getTeamPerformance(params)
+    teamMembers.value = data.teamMembers || []
+    totalMembers.value = data.teamStats?.totalMembers || 0
+  } catch (error) {
+    console.error('Erro ao carregar performance da equipe:', error)
+  }
+}
+
+watch(
+  () => props.filters,
+  newFilters => {
+    nameFilter.value = newFilters?.name || ''
+    roleFilter.value = newFilters?.role || ''
+    currentPage.value = 1
+    fetchData()
+  },
+  { deep: true }
+)
+
+watch([nameFilter, roleFilter, perPage], () => {
+  currentPage.value = 1
+  fetchData()
 })
 
-const sortedTeamMembers = computed(() =>
-  [...filteredTeamMembers.value].sort(
-    (a, b) => b.performance.faturamentoTotal - a.performance.faturamentoTotal
-  )
-)
+watch(currentPage, fetchData)
 
-const totalPages = computed(() => Math.ceil(sortedTeamMembers.value.length / perPage))
-const paginatedTeamMembers = computed(() =>
-  sortedTeamMembers.value.slice((currentPage.value - 1) * perPage, currentPage.value * perPage)
-)
+onMounted(fetchData)
+
+const totalPages = computed(() => Math.ceil(totalMembers.value / perPage.value))
+const paginatedTeamMembers = computed(() => teamMembers.value)
 
 function nextPage() {
   if (currentPage.value < totalPages.value) currentPage.value++
@@ -234,9 +267,6 @@ function prevPage() {
   if (currentPage.value > 1) currentPage.value--
 }
 
-watch([nameFilter, roleFilter], () => {
-  currentPage.value = 1
-})
 const formatCurrency = (value) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value || 0)
 const getRoleClass = (role) => ({
   vendedor: 'bg-blue-100 text-blue-800',

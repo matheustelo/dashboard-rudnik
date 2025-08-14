@@ -66,7 +66,7 @@
       >
         <!-- Total de Propostas -->
         <DashboardCard
-          title="Propostas Convertidas"
+          title="Total Propostas"
           :value="dashboardData.resumo.totalPropostas || 0"
           icon-bg="bg-blue-500"
         >
@@ -119,7 +119,7 @@
 
         <!-- Propostas Convertidas -->
         <DashboardCard
-          title="Total de Propostas"
+          title="Propostas Convertidas"
           :value="dashboardData?.resumo?.propostasConvertidas || 0"
           :sub-value="formatCurrency(dashboardData?.resumo?.faturamentoTotal || 0)"
           icon-bg="bg-green-500"

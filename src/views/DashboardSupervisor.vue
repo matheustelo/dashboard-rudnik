@@ -291,8 +291,7 @@
           </div>
         </div>
         <!-- Detailed Performance Table -->
-        <PerformanceTable v-if="teamPerformance" :team-members="teamPerformance.teamMembers"
-          @drill-down="handleDrillDown" />
+        <PerformanceTable v-if="teamPerformance" :filters="tableFilters" @drill-down="handleDrillDown" />
 
         <!-- Representative Detail Modal -->
         <RepresentativeDetailModal :is-open="showDetailModal" :representative="selectedRepresentative"
@@ -417,6 +416,8 @@ const filters = reactive({
   startDate: '',
   endDate: '',
 })
+
+const tableFilters = computed(() => ({ ...filters, supervisorId: authStore.user.id }))
 
 watch(() => filters.period, (newPeriod) => {
   if (newPeriod) {

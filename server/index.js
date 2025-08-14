@@ -650,6 +650,33 @@ app.get(
         }
       }
 
+      const page = parseInt(req.query.page) || 1
+      const limit = parseInt(req.query.limit) || 10
+      const name = req.query.name || ""
+      const role = req.query.role || ""
+
+      let nameFilter = ""
+      let roleFilter = ""
+      let paramIndex = queryParams.length + 1
+
+      if (name) {
+        nameFilter = `AND u.name ILIKE $${paramIndex}`
+        queryParams.push(`%${name}%`)
+        paramIndex++
+      }
+
+      if (role) {
+        roleFilter = `AND u.role = $${paramIndex}`
+        queryParams.push(role)
+        paramIndex++
+      }
+
+      const offset = (page - 1) * limit
+      const limitParam = paramIndex
+      queryParams.push(limit)
+      paramIndex++
+      const offsetParam = paramIndex
+      queryParams.push(offset)
       // Get all active sales representatives with targets
       const teamMembersQuery = `
         WITH usuarios_com_supervisor AS (
@@ -695,99 +722,102 @@ app.get(
           )
             AND p.created_at BETWEEN $1 AND $2
           GROUP BY p.seller
-        )
-        SELECT
-          u.id,
-          u.name,
-          u.email,
-          u.role,
-          u.supervisor,
-          u.supervisor_name,
+        ),
+        base AS (
+          SELECT
+            u.id,
+            u.name,
+            u.email,
+            u.role,
+            u.supervisor,
+            u.supervisor_name,
 
-          /* Telefones únicos; propostas sem telefone viram chaves únicas por ID */
-          COUNT(
-            DISTINCT COALESCE(
-              NULLIF(trim(p.lead->>'phone'), ''),
-              'sem_telefone_' || p.id::text
-            )
-          ) AS total_propostas,
+            /* Telefones únicos; propostas sem telefone viram chaves únicas por ID */
+            COUNT(
+              DISTINCT COALESCE(
+                NULLIF(trim(p.lead->>'phone'), ''),
+                'sem_telefone_' || p.id::text
+              )
+            ) AS total_propostas,
 
-          /* Propostas convertidas seguindo a mesma régua dos status "bons" */
-          COALESCE(f.vendas_validas, 0) AS propostas_convertidas,
+            /* Propostas convertidas seguindo a mesma régua dos status "bons" */
+            COALESCE(f.vendas_validas, 0) AS propostas_convertidas,
 
-          /* Faturamento total igual ao valor_fechadas_cte (por vendedor) */
-          COALESCE(f.faturamento_total, 0) AS faturamento_total,
+            /* Faturamento total igual ao valor_fechadas_cte (por vendedor) */
+            COALESCE(f.faturamento_total, 0) AS faturamento_total,
 
-          /* Ticket médio calculado sobre as vendas válidas da mesma régua */
-          CASE
-            WHEN COALESCE(f.vendas_validas, 0) > 0
-              THEN f.faturamento_total / f.vendas_validas
-            ELSE 0
-          END AS ticket_medio,
+            /* Ticket médio calculado sobre as vendas válidas da mesma régua */
+            CASE
+              WHEN COALESCE(f.vendas_validas, 0) > 0
+                THEN f.faturamento_total / f.vendas_validas
+              ELSE 0
+            END AS ticket_medio,
 
-          /* Mantido: soma de todas as propostas (independe de venda) */
-          COALESCE(SUM(CAST(p.total_price AS DECIMAL)), 0) AS valor_total_propostas,
+            /* Mantido: soma de todas as propostas (independe de venda) */
+            COALESCE(SUM(CAST(p.total_price AS DECIMAL)), 0) AS valor_total_propostas,
 
-          /* Canceladas (suspenso) pela tabela de vendas ligada à proposta */
-          COUNT(CASE WHEN s.status = 'suspenso' THEN 1 END) AS vendas_canceladas,
+            /* Canceladas (suspenso) pela tabela de vendas ligada à proposta */
+            COUNT(CASE WHEN s.status = 'suspenso' THEN 1 END) AS vendas_canceladas,
 
-          COALESCE(m.meta_propostas, 0) AS meta_propostas,
-          COALESCE(m.meta_vendas, 0) AS meta_vendas,
-          COALESCE(m.meta_faturamento, 0) AS meta_faturamento,
-          COALESCE(m.meta_conversao, 0) AS meta_conversao
+            COALESCE(m.meta_propostas, 0) AS meta_propostas,
+            COALESCE(m.meta_vendas, 0) AS meta_vendas,
+            COALESCE(m.meta_faturamento, 0) AS meta_faturamento,
+            COALESCE(m.meta_conversao, 0) AS meta_conversao
 
-        FROM usuarios_com_supervisor u
-        LEFT JOIN metas_agg m
-          ON m.usuario_id = u.id
-        LEFT JOIN clone_propostas_apprudnik p
-          ON u.id = p.seller
-          AND p.created_at BETWEEN $1 AND $2
-        LEFT JOIN clone_vendas_apprudnik s
-          ON s.code = p.id
-        LEFT JOIN faturamento_cte f
-          ON f.usuario_id = u.id
-        WHERE
-          u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium')
-          AND u.is_active = true
-          ${supervisorFilter}
-        GROUP BY
-          u.id, u.name, u.email, u.role, u.supervisor, u.supervisor_name,
-          m.meta_propostas, m.meta_vendas, m.meta_faturamento, m.meta_conversao,
-          f.faturamento_total, f.vendas_validas
-        ORDER BY faturamento_total DESC;
+          FROM usuarios_com_supervisor u
+          LEFT JOIN metas_agg m
+            ON m.usuario_id = u.id
+          LEFT JOIN clone_propostas_apprudnik p
+            ON u.id = p.seller
+            AND p.created_at BETWEEN $1 AND $2
+          LEFT JOIN clone_vendas_apprudnik s
+            ON s.code = p.id
+          LEFT JOIN faturamento_cte f
+            ON f.usuario_id = u.id
+          WHERE
+            u.role IN ('vendedor', 'representante', 'parceiro_comercial', 'supervisor', 'preposto', 'representante_premium')
+            AND u.is_active = true
+            ${supervisorFilter}
+            ${nameFilter}
+            ${roleFilter}
+          GROUP BY
+            u.id, u.name, u.email, u.role, u.supervisor, u.supervisor_name,
+            m.meta_propostas, m.meta_vendas, m.meta_faturamento, m.meta_conversao,
+            f.faturamento_total, f.vendas_validas
+          )
+          SELECT
+            *,
+            COUNT(*) OVER() AS total_count,
+            SUM(total_propostas) OVER() AS total_propostas_sum,
+            SUM(propostas_convertidas) OVER() AS total_convertidas_sum,
+            SUM(faturamento_total) OVER() AS total_faturamento_sum,
+            SUM(valor_total_propostas) OVER() AS total_valor_propostas_sum,
+            SUM(vendas_canceladas) OVER() AS total_canceladas_sum,
+            SUM(meta_propostas) OVER() AS total_meta_propostas_sum,
+            SUM(meta_vendas) OVER() AS total_meta_vendas_sum,
+            SUM(meta_faturamento) OVER() AS total_meta_faturamento_sum
+          FROM base
+          ORDER BY faturamento_total DESC
+          LIMIT $${limitParam} OFFSET $${offsetParam};
         `
 
       const teamMembers = await pool.query(teamMembersQuery, queryParams)
 
-      // Calculate team stats
-      const totalMembers = teamMembers.rows.length
-      const totalPropostas = teamMembers.rows.reduce((sum, member) => sum + Number.parseInt(member.total_propostas), 0)
-      const totalConvertidas = teamMembers.rows.reduce(
-        (sum, member) => sum + Number.parseInt(member.propostas_convertidas),
-        0,
-      )
-      const totalFaturamento = teamMembers.rows.reduce(
-        (sum, member) => sum + Number.parseFloat(member.faturamento_total),
-        0,
-      )
-            const totalValorPropostas = teamMembers.rows.reduce(
-        (sum, member) => sum + Number.parseFloat(member.valor_total_propostas),
-        0,
-      )
-      const totalCanceladas = teamMembers.rows.reduce(
-        (sum, member) => sum + Number.parseInt(member.vendas_canceladas),
-        0,
-      )
+      // Extract totals from window functions
+      const totalsRow = teamMembers.rows[0] || {}
+      const totalMembers = Number.parseInt(totalsRow.total_count || 0)
+      const totalPropostas = Number.parseInt(totalsRow.total_propostas_sum || 0)
+      const totalConvertidas = Number.parseInt(totalsRow.total_convertidas_sum || 0)
+      const totalFaturamento = Number.parseFloat(totalsRow.total_faturamento_sum || 0)
+      const totalValorPropostas = Number.parseFloat(totalsRow.total_valor_propostas_sum || 0)
+      const totalCanceladas = Number.parseInt(totalsRow.total_canceladas_sum || 0)
+
       const teamConversionRate = totalPropostas > 0 ? ((totalConvertidas / totalPropostas) * 100).toFixed(2) : 0
       const ticketMedio = totalConvertidas > 0 ? totalFaturamento / totalConvertidas : 0
 
-      // Calculate goal achievement rates
-      const totalMetaPropostas = teamMembers.rows.reduce((sum, member) => sum + Number.parseInt(member.meta_propostas), 0)
-      const totalMetaVendas = teamMembers.rows.reduce((sum, member) => sum + Number.parseInt(member.meta_vendas), 0)
-      const totalMetaFaturamento = teamMembers.rows.reduce(
-        (sum, member) => sum + Number.parseFloat(member.meta_faturamento),
-        0,
-      )
+      const totalMetaPropostas = Number.parseInt(totalsRow.total_meta_propostas_sum || 0)
+      const totalMetaVendas = Number.parseInt(totalsRow.total_meta_vendas_sum || 0)
+      const totalMetaFaturamento = Number.parseFloat(totalsRow.total_meta_faturamento_sum || 0)
 
       const goalAchievementRate =
         totalMetaFaturamento > 0 ? ((totalFaturamento / totalMetaFaturamento) * 100).toFixed(2) : 0

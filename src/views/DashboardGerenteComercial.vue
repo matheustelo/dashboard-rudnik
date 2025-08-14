@@ -351,7 +351,7 @@
         <!-- Tabela -->
         <PerformanceTable
           v-if="teamPerformance"
-          :team-members="teamPerformance.teamMembers"
+          :filters="filters"
           @drill-down="handleDrillDown"
         />
 
