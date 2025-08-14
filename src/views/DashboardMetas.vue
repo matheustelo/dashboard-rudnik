@@ -1754,78 +1754,37 @@ const getEnhancedHierarchicalTeamMembers = (selectedGoal) => {
     }
   })
 
-  // Include prepostos that may not be listed in team_members and map their supervisors
-  const existingIds = new Set(membersWithGoals.map(m => Number(m.id)))
-const prepostoGoals = (selectedGoal.child_goals || [])
-  .filter(goal => goal.user_role === 'preposto' && !existingIds.has(Number(goal.usuario_id)))
-  .map(goal => {
-    const userInfo = allUsersMap.value.get(Number(goal.usuario_id))
-    let parentId = null
+  // Sort to show hierarchy: representante_premium first, then their prepostos
+  const sorted = membersWithGoals.sort((a, b) => {
+    // representante_premium comes first
+    if (a.role === 'representante_premium' && b.role !== 'representante_premium') return -1
+    if (b.role === 'representante_premium' && a.role !== 'representante_premium') return 1
+
+    // Then prepostos (marked as subordinates)
+    if (a.role === 'preposto' && b.role !== 'preposto') return 1
+    if (b.role === 'preposto' && a.role !== 'preposto') return -1
+
+    // Within same category, sort by name
+    return a.name.localeCompare(b.name)
+  })
+
+  // Mark prepostos as subordinates and find their parents
+  return sorted.map(member => {
+    const isSubordinate = member.role === 'preposto'
     let parentName = null
 
-    if (userInfo) {
-      const supervisors = Array.isArray(userInfo.supervisors) ? userInfo.supervisors : []
-
-      // Normalize supervisor IDs e recupere usuários
-      const supervisorUsers = supervisors
-        .map(sup => {
-          const supId = typeof sup === 'object' ? sup.id : sup
-          return allUsersMap.value.get(Number(supId))
-        })
-        .filter(Boolean)
-
-      // 1º preferência: representante; 2º: representante_premium
-      const parentUser =
-        supervisorUsers.find(u => u.role === 'representante') ||
-        supervisorUsers.find(u => u.role === 'representante_premium') ||
-        null
-
-      if (parentUser) {
-        parentId = Number(parentUser.id)
-        parentName = parentUser.name || null
-      }
+    if (isSubordinate) {
+      // Find the representante_premium in the same team
+      const parent = sorted.find(m => m.role === 'representante_premium')
+      parentName = parent ? parent.name : 'Representante Premium'
     }
 
     return {
-      id: Number(goal.usuario_id),
-      name: goal.user_name,
-      email: goal.user_email || '',
-      role: goal.user_role,
-      goalValue: parseFloat(goal.valor_meta) || 0,
-      goalType: goal.tipo_meta || selectedGoal.tipo_meta,
-      parent_id: parentId,
-      parentName,
+      ...member,
+      isSubordinate,
+      parentName
     }
   })
-
-  const combinedMembers = [...membersWithGoals, ...prepostoGoals]
-
-  // Sort members so that prepostos appear under their supervisor
-  const byName = (a, b) => a.name.localeCompare(b.name)
-  const reps = combinedMembers
-    .filter(m => m.role === 'representante_premium')
-    .sort(byName)
-  const direct = combinedMembers
-    .filter(m => m.role !== 'representante_premium' && m.role !== 'preposto')
-    .sort(byName)
-  const prepostos = combinedMembers
-    .filter(m => m.role === 'preposto')
-    .sort(byName)
-
-  const sorted = []
-  reps.forEach(rep => {
-    sorted.push(rep)
-    sorted.push(...prepostos.filter(p => p.parent_id === rep.id))
-  })
-  sorted.push(...direct)
-  sorted.push(...prepostos.filter(p => !reps.some(r => r.id === p.parent_id)))
-
-  // Mark prepostos as subordinates (using existing parentName)
-  return sorted.map(member => ({
-    ...member,
-    isSubordinate: member.role === 'preposto',
-    parentName: member.parentName || null,
-  }))
 }
 
 const getEnhancedDetailHierarchyClasses = (member) => {
