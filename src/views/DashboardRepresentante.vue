@@ -3,7 +3,7 @@
     <!-- ================= HEADER ================= -->
     <header class="bg-white shadow">
       <div class="custom-max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between items-center py-6">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between py-6">
           <!-- Título e boas-vindas -->
           <div>
             <h1 class="text-3xl font-bold text-gray-900">
@@ -15,7 +15,7 @@
           </div>
 
           <!-- Botão de logout -->
-          <div class="flex items-center space-x-4">
+          <div class="flex flex-wrap items-center gap-2 sm:space-x-4">
             <button
               @click="logout"
               class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
@@ -30,7 +30,7 @@
     <!-- ================= MAIN ================= -->
     <main class="custom-max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <!-- ---------- FILTROS ---------- -->
-      <div class="bg-white shadow rounded-lg p-4 mb-6 flex items-center space-x-4">
+      <div class="bg-white shadow rounded-lg p-4 mb-6 flex flex-col sm:flex-row sm:items-center gap-4">
         <!-- Período -->
         <select
           v-model="selectedPeriod"
@@ -377,7 +377,7 @@
                 <option :value="50">50</option>
               </select>
             </div>
-            <div class="flex items-center space-x-2">
+            <div class="flex flex-wrap items-center gap-2">
               <button
                 @click="prevPage"
                 :disabled="currentPage === 1"

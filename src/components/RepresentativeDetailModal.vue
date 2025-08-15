@@ -208,7 +208,7 @@
                   Propostas Detalhadas ({{ filteredProposals.length }})
                 </h4>
                 <div class="mb-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-2 sm:space-y-0">
-                  <div class="flex items-center space-x-2">
+                  <div class="flex flex-wrap items-center gap-2">
                     <label class="text-sm font-medium text-gray-700">Origem:</label>
                     <select v-model="originFilter" class="border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500">
                       <option value="all">Todos</option>
@@ -217,14 +217,14 @@
                       <option value="converted">Convertida</option>
                     </select>
                   </div>
-                  <div v-if="supervisorOptions.length > 1" class="flex items-center space-x-2">
+                  <div v-if="supervisorOptions.length > 1" class="flex flex-wrap items-center gap-2">
                     <label class="text-sm font-medium text-gray-700">Supervisor:</label>
                     <select v-model="supervisorFilter" class="border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500">
                       <option value="all">Todos</option>
                       <option v-for="sup in supervisorOptions" :key="sup.id" :value="sup.id">{{ sup.name }}</option>
                     </select>
                   </div>
-                  <div class="flex items-center space-x-2">
+                  <div class="flex flex-wrap items-center gap-2">
                     <label class="text-sm font-medium text-gray-700">Pesquisar:</label>
                     <input
                       v-model="searchQuery"

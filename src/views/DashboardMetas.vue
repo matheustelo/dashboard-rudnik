@@ -2,7 +2,7 @@
   <div class="min-h-screen bg-gray-100">
     <!-- Header -->
     <header class="bg-white shadow-sm">
-      <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+      <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 class="text-2xl font-bold text-gray-900">Gerenciamento de Metas</h1>
         <router-link :to="dashboardPath"   class="text-sm text-blue-600 hover:underline">
           &larr; Voltar ao Dashboard
@@ -11,7 +11,7 @@
     </header>
 
     <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-      <div class="bg-white shadow rounded-lg p-4 mb-6 flex items-center space-x-4 flex-wrap">
+      <div class="bg-white shadow rounded-lg p-4 mb-6 flex flex-col sm:flex-row sm:items-center gap-4">
         <label class="text-sm font-medium text-gray-700">Mês:</label>
         <select v-model="selectedPeriod" @change="handlePeriodChange"
           class="border border-gray-300 rounded-md px-3 py-2 text-sm">
@@ -66,7 +66,7 @@
       <!-- Content -->
       <div class="mt-6">
        <div v-if="loading" class="space-y-6">
-          <div class="flex justify-between items-center mb-4 animate-pulse">
+         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4 animate-pulse">
             <div class="h-6 bg-gray-200 rounded w-1/3"></div>
             <div class="h-8 bg-gray-200 rounded w-32"></div>
           </div>
@@ -103,7 +103,7 @@
         <div v-else>
           <!-- Team Goals Tab -->
           <div v-if="activeTab === 'team'">
-            <div class="flex justify-between items-center mb-4">
+           <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
               <h2 class="text-xl font-semibold">Metas por Equipe</h2>
               <button @click="openGoalModal('team')"
                 class="bg-blue-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -114,7 +114,7 @@
             <div class="bg-white shadow overflow-hidden sm:rounded-lg">
               <ul role="list" class="divide-y divide-gray-200">
                 <li v-for="goal in goals.generalGoals" :key="goal.id" class="px-4 py-4 sm:px-6">
-                  <div class="flex items-center justify-between">
+                  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                     <div class="flex-1">
                       <p class="text-sm font-medium text-indigo-600 truncate">
                         {{ goal.supervisor_name }}
@@ -184,7 +184,7 @@
 
           <!-- Individual Goals Tab -->
           <div v-if="activeTab === 'individual'">
-            <div class="flex justify-between items-center mb-4">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
               <h2 class="text-xl font-semibold">Metas Individuais</h2>
               <button @click="openGoalModal('individual')"
                 class="bg-blue-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -197,7 +197,7 @@
                 <template v-for="(items, sup) in individualGoalsBySupervisor" :key="sup">
                   <li class="bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700">{{ sup }}</li>
                   <li v-for="goal in items" :key="goal.id" class="px-4 py-4 sm:px-6">
-                    <div class="flex items-center justify-between">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                       <div class="flex-1">
                         <p class="text-sm font-medium text-indigo-600 truncate">
                           {{ goal.user_name }}
@@ -321,7 +321,7 @@
                       <!-- Team Members Goal Assignment (Enhanced for representante_premium hierarchy) -->
                       <div class="space-y-2 max-h-80 overflow-y-auto">
                         <div v-for="member in sortedTeamMembers" :key="member.id"
-                          class="flex items-center justify-between p-3 bg-white rounded border"
+                          class="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-white rounded border"
                           :class="getHierarchyClasses(member)">
                           <div class="flex-1 min-w-0">
                             <div class="font-medium text-sm text-gray-900 flex items-center">
@@ -340,14 +340,14 @@
                             </div>
                             <div class="text-xs text-gray-500 truncate">{{ member.email }}</div>
                           </div>
-                          <div class="flex items-center space-x-3 flex-shrink-0">
+                          <div class="flex flex-col sm:flex-row sm:items-center gap-3 flex-shrink-0">
                             <!-- Current Goal Display -->
                             <div v-if="member.currentGoalValue" class="text-right">
                               <div class="text-xs text-gray-500">Meta Atual:</div>
                               <div class="text-sm font-medium text-blue-600">{{ formatCurrency(member.currentGoalValue) }}</div>
                             </div>
                             <!-- Goal Input -->
-                            <div class="flex items-center space-x-2">
+                            <div class="flex flex-col sm:flex-row sm:items-center gap-2">
                               <span class="text-sm text-gray-600 flex-shrink-0">
                                 {{ currentGoal.tipo_meta === 'taxa_conversao' ? 'Taxa de Conversão (%)' : 'Nova Meta:' }}
                               </span>
@@ -614,7 +614,7 @@
                   <div class="bg-gray-50 rounded-lg p-4 border">
                     <!-- Team Leader Goal -->
                     <div class="mb-4 p-3 bg-white rounded-lg border-2 border-indigo-200">
-                      <div class="flex justify-between items-center">
+                     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div class="flex items-center">
                           <div class="w-2 h-2 bg-indigo-500 rounded-full mr-3"></div>
                           <div>
@@ -641,7 +641,7 @@
                     <div class="space-y-2">
                       <div v-for="member in getEnhancedHierarchicalTeamMembers(selectedGoal)" :key="member.id"
                         class="p-3 rounded-lg border" :class="getEnhancedDetailHierarchyClasses(member)">
-                        <div class="flex justify-between items-center">
+                         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <div class="flex items-center flex-1 min-w-0">
                             <!-- Hierarchy connector -->
                             <div class="flex items-center mr-3">
@@ -691,7 +691,7 @@
 
                         <!-- Goal Progress Bar -->
                         <div v-if="getMemberGoalValue(member, selectedGoal) > 0" class="mt-2">
-                          <div class="flex justify-between text-xs text-gray-600 mb-1">
+                          <div class="flex flex-col sm:flex-row sm:justify-between text-xs text-gray-600 mb-1">
                             <span>Progresso da Meta</span>
                             <span>{{ getMemberGoalProgress(member, selectedGoal) }}%</span>
                           </div>

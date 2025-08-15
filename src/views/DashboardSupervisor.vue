@@ -2,12 +2,12 @@
   <div class="min-h-screen bg-gray-50">
     <header class="bg-white shadow">
       <div class="custom-max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between items-center py-6">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between py-6">
           <div>
             <h1 class="text-3xl font-bold text-gray-900">{{ dashboardTitle }}</h1>
             <p class="text-gray-600">Bem-vindo, {{ authStore.user?.name }}</p>
           </div>
-          <div class="flex items-center space-x-4">
+          <div class="flex flex-wrap items-center gap-2 sm:space-x-4">
             <router-link to="/dashboard/team-goals-history"
               class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm font-medium">
               Histórico de Metas
@@ -20,8 +20,8 @@
 
     <main class="custom-max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <!-- Filters -->
-      <div class="bg-white shadow rounded-lg p-4 mb-6 flex items-center justify-between space-x-4">
-        <div class="flex items-center space-x-4">
+      <div class="bg-white shadow rounded-lg p-4 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div class="flex flex-wrap items-center gap-2 sm:space-x-4">
           <h3 class="text-md font-medium text-gray-700">Filtros:</h3>
           <select v-model="filters.period" @change="applyFilters"
             class="border border-gray-300 rounded-md px-3 py-2 text-sm">
@@ -31,7 +31,7 @@
             <option value="">Período Personalizado</option>
           </select>
         </div>
-        <div class="flex items-center space-x-2">
+        <div class="flex flex-wrap items-center gap-2 sm:space-x-2">
           <input v-model="filters.startDate" type="date" @change="applyFilters" :disabled="!!filters.period"
             class="border border-gray-300 rounded-md px-3 py-2 text-sm disabled:bg-gray-100" />
           <span class="text-gray-500">até</span>

@@ -1,5 +1,5 @@
 <template>
-  <nav class="flex items-center space-x-4">
+  <nav class="flex flex-col space-y-2 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-4">
     <router-link :to="dashboardPath" class="text-blue-600 hover:underline">
       Dashboard
     </router-link>

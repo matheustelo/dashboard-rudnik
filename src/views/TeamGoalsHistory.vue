@@ -1,9 +1,9 @@
 <template>
     <div class="min-h-screen bg-gray-50">
         <header class="bg-white shadow">
-            <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <h1 class="text-xl font-semibold text-gray-900">Histórico de Metas da Equipe</h1>
-                <div class="space-x-4">
+                <div class="flex flex-wrap items-center gap-2">
                     <router-link :to="dashboardPath"
                         class="text-blue-600 hover:underline text-sm">Voltar</router-link>
                 </div>

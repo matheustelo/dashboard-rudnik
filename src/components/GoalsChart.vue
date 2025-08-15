@@ -1,6 +1,6 @@
 <template>
   <div class="bg-white p-6 rounded-lg shadow">
-    <div class="flex justify-between items-center mb-4">
+   <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
       <h3 class="text-lg font-medium text-gray-900">Metas e Progresso</h3>
       <button @click="refreshGoals" class="text-sm text-indigo-600 hover:text-indigo-800">
         Atualizar
@@ -18,7 +18,7 @@
     <div v-else class="space-y-4">
        <div v-if="showSummary && goals.length" class="space-y-4">
         <div class="border rounded-lg p-4 bg-gray-50">
-          <div class="flex justify-between items-center">
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div class="text-sm text-gray-600">Progresso Faturamento</div>
             <div class="text-right">
               <div class="text-lg font-semibold text-gray-900">{{ revenueSummary.progress.toFixed(1) }}%</div>
@@ -33,7 +33,7 @@
               :style="{ width: Math.min(revenueSummary.progress, 100) + '%' }"></div>
           </div>
         </div>
-        <div class="border rounded-lg p-4 bg-gray-50">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div class="flex justify-between items-center">
             <div class="text-sm text-gray-600">Progresso Propostas</div>
             <div class="text-right">
@@ -51,7 +51,7 @@
           </div>
         </div>
         <div class="border rounded-lg p-4 bg-gray-50">
-          <div class="flex justify-between items-center">
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div class="text-sm text-gray-600">Progresso Vendas</div>
             <div class="text-right">
               <div class="text-lg font-semibold text-gray-900">{{ salesSummary.progress.toFixed(1) }}%</div>
@@ -68,7 +68,7 @@
           </div>
         </div>
         <div class="border rounded-lg p-4 bg-gray-50">
-          <div class="flex justify-between items-center">
+           <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div class="text-sm text-gray-600">Progresso Taxa de Conversão</div>
             <div class="text-right">
               <div class="text-lg font-semibold text-gray-900">{{ conversionSummary.progress.toFixed(1) }}%</div>
@@ -86,7 +86,7 @@
         </div>
       </div>
       <div v-for="goal in goals" :key="goal.id" class="border rounded-lg p-4">
-        <div class="flex justify-between items-start mb-2">
+        <div class="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start mb-2">
           <div>
             <h4 class="font-medium text-gray-900">
               {{ goal.tipo_meta === 'faturamento'

@@ -3,7 +3,7 @@
     <!-- Header -->
     <header class="bg-white shadow">
       <div class="custom-max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between items-center py-6">
+       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between py-6">
           <!-- Título e Boas-vindas -->
           <div>
             <h1 class="text-3xl font-bold text-gray-900">
@@ -15,7 +15,7 @@
           </div>
 
           <!-- Botões de ação -->
-          <div class="flex items-center space-x-4">
+          <div class="flex flex-wrap items-center gap-2 sm:space-x-4">
             <router-link
               to="/dashboard/metas"
               class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 text-sm font-medium"
@@ -42,10 +42,8 @@
     <!-- Main -->
     <main class="custom-max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <!-- Filtros -->
-      <div
-        class="bg-white shadow rounded-lg p-4 mb-6 flex items-center justify-between space-x-4"
-      >
-        <div class="flex items-center space-x-4">
+        <div class="bg-white shadow rounded-lg p-4 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div class="flex flex-wrap items-center gap-2 sm:space-x-4">
           <h3 class="text-md font-medium text-gray-700">Filtros:</h3>
 
           <!-- Filtro de líder -->
@@ -78,7 +76,7 @@
         </div>
 
         <!-- Datas personalizadas -->
-        <div class="flex items-center space-x-2">
+        <div class="flex flex-wrap items-center gap-2 sm:space-x-2">
           <input
             v-model="filters.startDate"
             type="date"
