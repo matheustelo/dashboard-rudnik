@@ -94,7 +94,7 @@ const validateDate = (dateString, fieldName) => {
   return date.toISOString().split("T")[0]
 }
 
-// Helper function to get team members using children field
+// Helper function to get team members using supervisor relationship
 const getTeamMembers = async (leaderId) => {
   console.log("🔄 Getting team members for leader:", leaderId)
 
@@ -106,42 +106,22 @@ const getTeamMembers = async (leaderId) => {
   }
 
   try {
-    // Get leader's children field
-    const leaderQuery = `
-      SELECT children, name, role
-      FROM clone_users_apprudnik
-      WHERE id = $1 AND is_active = true
-    `
 
-    const leaderResult = await query(leaderQuery, [leaderId])
-
-    if (leaderResult.rows.length === 0) {
-      console.log("❌ Leader not found:", leaderId)
-      cache.set(cacheKey, [], 3600)
-      return []
-    }
-
-    const leader = leaderResult.rows[0]
-    const children = parseJsonField(leader.children)
-
-    console.log("👥 Leader children:", children)
-
-    if (children.length === 0) {
-      console.log("ℹ️ No children found for leader:", leaderId)
-      return []
-    }
-
-    // Get team members (only vendedor and representante roles)
     const teamQuery = `
       SELECT id, name, email, role
       FROM clone_users_apprudnik
-      WHERE id = ANY($1)
-        AND role IN ('vendedor', 'representante')
-        AND is_active = true
+      WHERE is_active = true
+        AND role IN ('vendedor', 'representante', 'representante_premium', 'preposto')
+        AND (
+          supervisor_id = $1 OR EXISTS (
+            SELECT 1 FROM jsonb_array_elements(COALESCE(supervisors, '[]'::jsonb)) sup
+            WHERE (sup->>'id')::int = $1
+          )
+        )
       ORDER BY name
     `
 
-    const teamResult = await query(teamQuery, [children])
+    const teamResult = await query(teamQuery, [leaderId])
     console.log("✅ Found", teamResult.rows.length, "team members")
 
     cache.set(cacheKey, teamResult.rows, 3600)
@@ -202,8 +182,9 @@ router.get(
     if (supervisorId) {
       generalConditions.push(`g.usuario_id = $${generalParams.length + 1}`)
       generalParams.push(supervisorId)
-      individualConditions.push(`u.supervisors::jsonb @> $${individualParams.length + 1}::jsonb`)
-      individualParams.push(JSON.stringify([Number(supervisorId)]))
+      individualConditions.push(`(u.supervisor_id = $${individualParams.length + 1} OR COALESCE(u.supervisors, '[]'::jsonb) @> $${individualParams.length + 2}::jsonb)`)
+      individualParams.push(supervisorId)
+      individualParams.push(JSON.stringify([{ id: Number(supervisorId) }]))
     }
 
     const offset = (page - 1) * limit

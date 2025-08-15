@@ -898,7 +898,8 @@ watch(allUsers, (newUsers) => {
     teamLeaders.value = newUsers.filter(u =>
       (
         u.role === "supervisor" ||
-        u.role === "parceiro_comercial"
+        u.role === "parceiro_comercial" ||
+        u.role === "representante_premium"
       ) && u.is_active
     )
   }
@@ -995,7 +996,7 @@ const fetchTeamLeaders = async () => {
     // Ensure data is an array
     if (Array.isArray(data)) {
       teamLeaders.value = data.filter(u =>
-        u.role === "supervisor" || u.role === "parceiro_comercial"
+        u.role === "supervisor" || u.role === "parceiro_comercial" || u.role === "representante_premium"
       )
     } else {
       console.warn('⚠️ Team leaders data is not an array:', data)
@@ -1742,49 +1743,64 @@ const getEnhancedHierarchicalTeamMembers = (selectedGoal) => {
   if (!selectedGoal.team_members || !Array.isArray(selectedGoal.team_members)) return []
 
   // Combine team members with their goal values
-  const membersWithGoals = selectedGoal.team_members.map(member => {
+  const membersWithGoals = selectedGoal.team_members.map((member) => {
     const memberId = Number(member.id)
     const memberGoal = selectedGoal.child_goals?.find(
-      goal => Number(goal.usuario_id) === memberId && goal.tipo_meta === selectedGoal.tipo_meta,
+      (goal) => Number(goal.usuario_id) === memberId && goal.tipo_meta === selectedGoal.tipo_meta,
     )
+    const isSubordinate = member.role === 'preposto'
+    const parentName = member.parent_name ||
+      (isSubordinate
+        ? selectedGoal.team_members.find((m) => m.id === member.parent_id)?.name || selectedGoal.supervisor_name || 'Representante Premium'
+        : null)
     return {
       ...member,
       goalValue: memberGoal ? parseFloat(memberGoal.valor_meta) : 0,
-      goalType: memberGoal ? memberGoal.tipo_meta : selectedGoal.tipo_meta
-    }
-  })
-
-  // Sort to show hierarchy: representante_premium first, then their prepostos
-  const sorted = membersWithGoals.sort((a, b) => {
-    // representante_premium comes first
-    if (a.role === 'representante_premium' && b.role !== 'representante_premium') return -1
-    if (b.role === 'representante_premium' && a.role !== 'representante_premium') return 1
-
-    // Then prepostos (marked as subordinates)
-    if (a.role === 'preposto' && b.role !== 'preposto') return 1
-    if (b.role === 'preposto' && a.role !== 'preposto') return -1
-
-    // Within same category, sort by name
-    return a.name.localeCompare(b.name)
-  })
-
-  // Mark prepostos as subordinates and find their parents
-  return sorted.map(member => {
-    const isSubordinate = member.role === 'preposto'
-    let parentName = null
-
-    if (isSubordinate) {
-      // Find the representante_premium in the same team
-      const parent = sorted.find(m => m.role === 'representante_premium')
-      parentName = parent ? parent.name : 'Representante Premium'
-    }
-
-    return {
-      ...member,
+      goalType: memberGoal ? memberGoal.tipo_meta : selectedGoal.tipo_meta,
       isSubordinate,
-      parentName
+      parentName,
     }
   })
+
+  const reps = membersWithGoals
+    .filter((m) => m.role === 'representante_premium')
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const prepostos = membersWithGoals
+    .filter((m) => m.role === 'preposto')
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const others = membersWithGoals
+    .filter((m) => m.role !== 'representante_premium' && m.role !== 'preposto')
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const result = []
+  const handledPrepostos = new Set()
+
+  reps.forEach((rep) => {
+    result.push(rep)
+    prepostos
+      .filter((p) => p.parent_id === rep.id)
+      .forEach((p) => {
+        result.push(p)
+        handledPrepostos.add(p.id)
+      })
+  })
+
+  // Prepostos directly under the selected goal's leader (when leader is representante_premium)
+  prepostos
+    .filter((p) => p.parent_id === selectedGoal.usuario_id && !handledPrepostos.has(p.id))
+    .forEach((p) => {
+      result.push(p)
+      handledPrepostos.add(p.id)
+    })
+    
+  result.push(...others)
+
+  // Any remaining prepostos without a matched parent
+  prepostos
+    .filter((p) => !handledPrepostos.has(p.id))
+    .forEach((p) => result.push(p))
+
+  return result
 }
 
 const getEnhancedDetailHierarchyClasses = (member) => {
