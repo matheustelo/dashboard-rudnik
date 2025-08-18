@@ -215,7 +215,6 @@ async function getTeamHierarchyIds(leaderId) {
             SELECT 1 FROM jsonb_array_elements(COALESCE(h.children, '[]'::jsonb)) c
             WHERE (c->>'id')::bigint = u.id
           )
-          OR u.supervisor_id = h.id
           OR EXISTS (
             SELECT 1 FROM jsonb_array_elements(COALESCE(u.supervisors, '[]'::jsonb)) s
             WHERE (s->>'id')::bigint = h.id
@@ -227,6 +226,7 @@ async function getTeamHierarchyIds(leaderId) {
   const { rows } = await pool.query(query, [leaderId])
   return rows.map((r) => r.id)
 }
+
 
 // API Endpoints
 
@@ -338,26 +338,37 @@ app.get(
       );
 
       const query = `
-      SELECT
-          sup.name AS supervisor_name,
-          COALESCE(SUM(CASE WHEN s.status <> 'suspenso' THEN p.total_price::DECIMAL END), 0) AS total_revenue
-      FROM clone_users_apprudnik sup
-      LEFT JOIN clone_users_apprudnik u
-        ON (
-            u.supervisor_id = sup.id OR EXISTS (
+        SELECT
+            sup.name AS supervisor_name,
+            COALESCE(
+              SUM(
+                CASE WHEN s.status <> 'suspenso' THEN p.total_price::DECIMAL END
+              ),
+              0
+            ) AS total_revenue
+        FROM clone_users_apprudnik sup
+        LEFT JOIN clone_users_apprudnik u
+          ON u.is_active = true
+        AND (
+              -- inclui o próprio supervisor
+              u.id = sup.id
+              -- inclui subordinados que tenham "sup" nos seus supervisors (JSON)
+              OR EXISTS (
                 SELECT 1
-            FROM jsonb_array_elements(COALESCE(u.supervisors, '[]'::jsonb)) AS elem
+                FROM jsonb_array_elements(COALESCE(u.supervisors, '[]'::jsonb)) AS elem
                 WHERE (elem->>'id')::bigint = sup.id
-            )
+              )
         )
-      LEFT JOIN clone_propostas_apprudnik p
-        ON u.id = p.seller
-       AND p.created_at BETWEEN $1 AND $2
-      LEFT JOIN clone_vendas_apprudnik s ON s.code = p.id AND p.has_generated_sale = true
-       WHERE sup.role IN ('supervisor', 'parceiro_comercial', 'representante_premium')
-        AND sup.is_active = true
-      GROUP BY sup.id, sup.name
-      ORDER BY total_revenue DESC;
+        LEFT JOIN clone_propostas_apprudnik p
+          ON u.id = p.seller
+        AND p.created_at BETWEEN $1 AND $2
+        LEFT JOIN clone_vendas_apprudnik s
+          ON s.code = p.id
+        AND p.has_generated_sale = true
+        WHERE sup.role IN ('supervisor', 'parceiro_comercial', 'representante_premium')
+          AND sup.is_active = true
+        GROUP BY sup.id, sup.name
+        ORDER BY total_revenue DESC;
       `;
 
       const { rows } = await pool.query(query, [dateStart, dateEnd]);
