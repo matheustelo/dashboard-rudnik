@@ -416,8 +416,15 @@ app.get(
           supervisorFilter = "AND u.id = ANY($3)";
           queryParams.push(teamIds);
         } else {
-          supervisorFilter =
-            "AND (u.supervisor_id = $3 OR EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(u.supervisors, '[]'::jsonb)) elem WHERE (elem->>'id')::bigint = $3))";
+            supervisorFilter = `
+            AND (
+              u.id = $3
+              OR EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements(COALESCE(u.supervisors, '[]'::jsonb)) AS elem
+                WHERE (elem->>'id')::bigint = $3
+              )
+            )`;
           queryParams.push(leader);
         }
       }
@@ -642,8 +649,15 @@ app.get(
           supervisorFilter = "AND u.id = ANY($3)"
           queryParams.push(teamIds)
         } else {
-          supervisorFilter =
-            "AND (u.id = $3 OR u.supervisor_id = $3 OR EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(u.supervisors, '[]'::jsonb)) elem WHERE (elem->>'id')::bigint = $3))"
+          supervisorFilter = `
+            AND (
+              u.id = $3
+              OR EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements(COALESCE(u.supervisors, '[]'::jsonb)) AS elem
+                WHERE (elem->>'id')::bigint = $3
+              )
+            )`;
           queryParams.push(supervisorIdNum)
         }
       }
@@ -1230,7 +1244,12 @@ app.get(
       WHERE m.data_inicio <= $2 AND m.data_fim >= $1`
     const individualParams = [startDate, endDate]
     if (supId) {
-      individualGoalsQuery += ` AND (u.supervisor_id = $${individualParams.length + 1} OR COALESCE(u.supervisors, '[]'::jsonb) @> $${individualParams.length + 2}::jsonb)`
+      individualGoalsQuery += `
+        AND (
+          u.id = $${individualParams.length + 1}::bigint
+          OR COALESCE(u.supervisors, '[]'::jsonb) @> $${individualParams.length + 2}::jsonb
+        )
+      `;
       individualParams.push(supId)
       individualParams.push(JSON.stringify([{ id: supId }]))
     }
@@ -2353,7 +2372,10 @@ app.get("/api/dashboard/gerente_comercial", authenticateToken, async (req, res) 
         params.push(teamIds)
       } else {
         const existsClause =
-           "AND (u.supervisor_id = $3 OR EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(u.supervisors, '[]'::jsonb)) elem WHERE (elem->>'id')::bigint = $3))"
+          "AND (u.id = $3::bigint OR EXISTS (" +
+          "  SELECT 1 FROM jsonb_array_elements(COALESCE(u.supervisors, '[]'::jsonb)) elem" +
+          "  WHERE (elem->>'id')::bigint = $3::bigint" +
+          "))";
         sellerFilter = existsClause
         userFilter = existsClause
         params.push(supervisorId)
