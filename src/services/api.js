@@ -85,7 +85,8 @@ getGoals: (period, startDate, endDate, supervisorId, goalType, page, limit) =>
 
 // Performance service
 export const performanceService = {
-  getTeamPerformance: (filters) => api.get("/performance/team", { params: filters }),
+  getTeamPerformance: (filters = {}) =>
+    api.get("/performance/team", { params: { supervisorId: 'all', ...filters } }),
   getRepresentativeDetails: (id, filters) => api.get(`/performance/representative/${id}`, { params: filters }),
 }
 
