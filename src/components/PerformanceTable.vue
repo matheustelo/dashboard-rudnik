@@ -224,7 +224,7 @@ const roleOptions = computed(() => {
 })
 
 const fetchData = async () => {
-  const params = { ...props.filters, page: currentPage.value, limit: perPage.value }
+  const params = { supervisorId: 'all', ...props.filters, page: currentPage.value, limit: perPage.value }
   if (nameFilter.value) params.name = nameFilter.value
   if (roleFilter.value) params.role = roleFilter.value
   try {
@@ -241,15 +241,21 @@ watch(
   newFilters => {
     nameFilter.value = newFilters?.name || ''
     roleFilter.value = newFilters?.role || ''
-    currentPage.value = 1
-    fetchData()
+    if (currentPage.value !== 1) {
+      currentPage.value = 1
+    } else {
+      fetchData()
+    }
   },
   { deep: true }
 )
 
 watch([nameFilter, roleFilter, perPage], () => {
-  currentPage.value = 1
-  fetchData()
+  if (currentPage.value !== 1) {
+    currentPage.value = 1
+  } else {
+    fetchData()
+  }
 })
 
 watch(currentPage, fetchData)
